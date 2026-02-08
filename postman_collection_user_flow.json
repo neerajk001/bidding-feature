@@ -1,0 +1,148 @@
+{
+    "info": {
+        "_postman_id": "bidding-feature-end-user",
+        "name": "Bidding Feature - End User Flow",
+        "description": "End-to-end user flow for registering and bidding on auctions.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Get Live Auctions",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/auctions",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "auctions"
+                    ]
+                },
+                "description": "Fetch all currently live auctions."
+            },
+            "response": []
+        },
+        {
+            "name": "2. Get Auction Details (by Product ID)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "var jsonData = pm.response.json();",
+                            "if (jsonData.id) {",
+                            "    pm.environment.set(\"auction_id\", jsonData.id);",
+                            "    console.log(\"Auction ID set to: \" + jsonData.id);",
+                            "}"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/api/auction/product/{{product_id}}",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "auction",
+                        "product",
+                        "{{product_id}}"
+                    ]
+                },
+                "description": "Get details of a specific auction using its Product ID. Can be found from 'Get Live Auctions'."
+            },
+            "response": []
+        },
+        {
+            "name": "3. Register Bidder",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "var jsonData = pm.response.json();",
+                            "if (jsonData.success && jsonData.bidder_id) {",
+                            "    pm.environment.set(\"bidder_id\", jsonData.bidder_id);",
+                            "    console.log(\"Bidder ID set to: \" + jsonData.bidder_id);",
+                            "}"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\r\n  \"auction_id\": {{auction_id}},\r\n  \"name\": \"Test User\",\r\n  \"phone\": \"+1234567890\",\r\n  \"email\": \"testuser@example.com\"\r\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/register-bidder",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "register-bidder"
+                    ]
+                },
+                "description": "Register a user for a specific auction. Returns a `bidder_id` needed to place bids."
+            },
+            "response": []
+        },
+        {
+            "name": "4. Place Bid",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\r\n  \"auction_id\": {{auction_id}},\r\n  \"bidder_id\": {{bidder_id}},\r\n  \"amount\": 150.00\r\n}"
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/place-bid",
+                    "host": [
+                        "{{base_url}}"
+                    ],
+                    "path": [
+                        "api",
+                        "place-bid"
+                    ]
+                },
+                "description": "Place a bid on an auction. Requires `bidder_id` from registration."
+            },
+            "response": []
+        }
+    ],
+    "variable": [
+        {
+            "key": "product_id",
+            "value": "shopify-product-12345"
+        },
+        {
+            "key": "base_url",
+            "value": "http://localhost:3000"
+        }
+    ]
+}
