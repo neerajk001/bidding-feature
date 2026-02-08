@@ -13,8 +13,8 @@ import { supabase } from '@/lib/supabase/client'
  */
 export async function GET() {
   try {
-    // Get current server time
-    const now = new Date()
+    // Get current server time in UTC (ISO string format for consistent comparison)
+    const now = new Date().toISOString()
 
     // Query all published auctions with time fields
     const { data: auctions, error } = await supabase
@@ -36,10 +36,9 @@ export async function GET() {
     }
 
     // Find live auction (highest priority)
+    // Compare ISO strings directly (UTC timestamps from database)
     const liveAuction = auctions.find(auction => {
-      const biddingStart = new Date(auction.bidding_start_time)
-      const biddingEnd = new Date(auction.bidding_end_time)
-      return now >= biddingStart && now <= biddingEnd
+      return now >= auction.bidding_start_time && now <= auction.bidding_end_time
     })
 
     if (liveAuction) {
@@ -52,10 +51,9 @@ export async function GET() {
     }
 
     // Find registration-open auction (lower priority)
+    // Extra condition (now < bidding_start) prevents showing registration after it closes
     const registrationAuction = auctions.find(auction => {
-      const registrationEnd = new Date(auction.registration_end_time)
-      const biddingStart = new Date(auction.bidding_start_time)
-      return now < registrationEnd && now < biddingStart
+      return now < auction.registration_end_time && now < auction.bidding_start_time
     })
 
     if (registrationAuction) {
