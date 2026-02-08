@@ -38,15 +38,19 @@ export async function GET(
 
     const highestBid = bids && bids.length > 0 ? bids[0] : null
 
+    // Handle bidder relation - typically single object but sometimes returned as array by Supabase types
+    const rawBidder = highestBid?.bidders as any
+    const bidder = rawBidder ? (Array.isArray(rawBidder) ? rawBidder[0] : rawBidder) : null
+
     return NextResponse.json({
       success: true,
       auction: {
         ...auction,
         highest_bid: highestBid?.amount || null,
         total_bids: totalBids || 0,
-        highest_bidder: highestBid?.bidders ? {
-          id: highestBid.bidders.id,
-          name: highestBid.bidders.name
+        highest_bidder: bidder ? {
+          id: bidder.id,
+          name: bidder.name
         } : null
       }
     })
