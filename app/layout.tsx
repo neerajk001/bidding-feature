@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Auction System Admin',
-  description: 'Admin panel for auction management',
+  title: 'Indu Heritage Auctions',
+  description: 'Cozy, premium womenswear auctions with OTP verified bidding',
 }
 
 export default function RootLayout({

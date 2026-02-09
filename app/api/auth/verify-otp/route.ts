@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { auth } from '@/lib/firebase/admin'
+import twilio from 'twilio'
 
 /**
  * API to verify OTP and create/update user
- * Receives Firebase ID token after client-side OTP verification
+ * Uses Twilio Verify to validate OTP
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { idToken, name, email, phone } = body
+    const { code, name, email, phone } = body
 
     // Validate required fields
-    if (!idToken) {
+    if (!code) {
       return NextResponse.json(
-        { error: 'Firebase ID token is required' },
+        { error: 'OTP code is required' },
         { status: 400 }
       )
     }
@@ -26,36 +26,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the Firebase ID token
-    let decodedToken
-    try {
-      decodedToken = await auth.verifyIdToken(idToken)
-    } catch (error) {
-      console.error('Token verification failed:', error)
+    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID
+    const authToken = process.env.TWILIO_AUTH_TOKEN
+    const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID
+
+    if (!accountSid || !authToken || !verifyServiceSid) {
       return NextResponse.json(
-        { error: 'Invalid or expired token' },
+        { error: 'Twilio credentials are not configured' },
+        { status: 500 }
+      )
+    }
+
+    const client = twilio(accountSid, authToken)
+
+    const verification = await client.verify.v2
+      .services(verifyServiceSid)
+      .verificationChecks.create({ to: normalizedPhone, code })
+
+    if (verification.status !== 'approved') {
+      return NextResponse.json(
+        { error: 'Invalid or expired OTP' },
         { status: 401 }
-      )
-    }
-
-    // Extract phone number from token
-    const verifiedPhone = decodedToken.phone_number
-
-    if (!verifiedPhone) {
-      return NextResponse.json(
-        { error: 'Phone number not found in token' },
-        { status: 400 }
-      )
-    }
-
-    // Normalize phone numbers for comparison
-    const normalizedInputPhone = phone.startsWith('+') ? phone : `+${phone}`
-    
-    // Verify that the token's phone matches the provided phone
-    if (verifiedPhone !== normalizedInputPhone) {
-      return NextResponse.json(
-        { error: 'Phone number mismatch' },
-        { status: 400 }
       )
     }
 
@@ -72,7 +65,7 @@ export async function POST(request: NextRequest) {
     const { data: existingUser } = await supabaseAdmin
       .from('users')
       .select('id, phone_verified')
-      .eq('phone', verifiedPhone)
+      .eq('phone', normalizedPhone)
       .maybeSingle()
 
     let userId
@@ -107,7 +100,7 @@ export async function POST(request: NextRequest) {
         .insert({
           name,
           email,
-          phone: verifiedPhone,
+          phone: normalizedPhone,
           phone_verified: true,
           otp_verified_at: new Date().toISOString()
         })

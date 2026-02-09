@@ -32,7 +32,13 @@ export default function AuctionRegistrationPage({
   /**
    * Called when user successfully verifies their phone via OTP
    */
-  const handleVerificationSuccess = async (userId: string, idToken: string) => {
+  const handleVerificationSuccess = async (payload: {
+    userId: string
+    idToken: string
+    name: string
+    email: string
+    phone: string
+  }) => {
     try {
       // OTP verified! Now check if already registered for this auction
       // If not, we'll need their info to register
@@ -42,7 +48,7 @@ export default function AuctionRegistrationPage({
       setStep('success')
       
       // Example: Auto-register for auction
-      // await registerForAuction(userId)
+      // await registerForAuction(payload.userId)
       
     } catch (error) {
       console.error('Post-verification error:', error)

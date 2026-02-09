@@ -11,6 +11,8 @@ interface Auction {
   bidding_start_time: string
   bidding_end_time: string
   min_increment: number
+  banner_image?: string | null
+  reel_url?: string | null
 }
 
 export default function AdminAuctionsPage() {
@@ -20,6 +22,7 @@ export default function AdminAuctionsPage() {
     title: '',
     product_id: '',
     min_increment: '',
+    banner_image: '',
     registration_end_time: '',
     bidding_start_time: '',
     bidding_end_time: '',
@@ -27,6 +30,8 @@ export default function AdminAuctionsPage() {
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [reelFile, setReelFile] = useState<File | null>(null)
+  const [reelPreview, setReelPreview] = useState<string>('')
 
   useEffect(() => {
     fetchAuctions()
@@ -50,15 +55,26 @@ export default function AdminAuctionsPage() {
     setMessage(null)
 
     try {
+      const body = new FormData()
+      body.append('title', formData.title)
+      body.append('product_id', formData.product_id)
+      body.append('min_increment', formData.min_increment)
+      body.append('registration_end_time', formData.registration_end_time)
+      body.append('bidding_start_time', formData.bidding_start_time)
+      body.append('bidding_end_time', formData.bidding_end_time)
+      body.append('status', formData.status)
+
+      if (formData.banner_image) {
+        body.append('banner_image', formData.banner_image)
+      }
+
+      if (reelFile) {
+        body.append('reel', reelFile)
+      }
+
       const response = await fetch('/api/admin/auctions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          min_increment: parseFloat(formData.min_increment),
-        }),
+        body
       })
 
       const data = await response.json()
@@ -73,11 +89,17 @@ export default function AdminAuctionsPage() {
         title: '',
         product_id: '',
         min_increment: '',
+        banner_image: '',
         registration_end_time: '',
         bidding_start_time: '',
         bidding_end_time: '',
         status: 'draft'
       })
+      setReelFile(null)
+      if (reelPreview) {
+        URL.revokeObjectURL(reelPreview)
+        setReelPreview('')
+      }
       setShowForm(false)
       fetchAuctions() // Refresh the list
     } catch (error) {
@@ -97,6 +119,61 @@ export default function AdminAuctionsPage() {
     })
   }
 
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: 'Please select a valid image file.' })
+      return
+    }
+
+    const maxSizeMb = 2
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setMessage({ type: 'error', text: `Image must be under ${maxSizeMb}MB.` })
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      if (!result) {
+        setMessage({ type: 'error', text: 'Failed to read image file.' })
+        return
+      }
+      setFormData((prev) => ({ ...prev, banner_image: result }))
+      setMessage({ type: 'success', text: 'Banner image loaded from device.' })
+    }
+    reader.onerror = () => {
+      setMessage({ type: 'error', text: 'Failed to read image file.' })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleReelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('video/')) {
+      setMessage({ type: 'error', text: 'Please select a valid video file.' })
+      return
+    }
+
+    const maxSizeMb = 50
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setMessage({ type: 'error', text: `Video must be under ${maxSizeMb}MB.` })
+      return
+    }
+
+    if (reelPreview) {
+      URL.revokeObjectURL(reelPreview)
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setReelFile(file)
+    setReelPreview(previewUrl)
+    setMessage({ type: 'success', text: 'Reel video ready to upload.' })
+  }
 
   return (
     <div>
@@ -146,6 +223,39 @@ export default function AdminAuctionsPage() {
                         {auction.status.toUpperCase()}
                       </span>
                     </div>
+
+                    {auction.banner_image && (
+                      <div style={{ margin: '0.75rem 0 0.5rem' }}>
+                        <img
+                          src={auction.banner_image}
+                          alt={auction.title}
+                          style={{
+                            width: '100%',
+                            maxWidth: '320px',
+                            height: '120px',
+                            objectFit: 'cover',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--color-border)'
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {auction.reel_url && (
+                      <div style={{ margin: '0.5rem 0 0.5rem' }}>
+                        <video
+                          src={auction.reel_url}
+                          controls
+                          style={{
+                            width: '100%',
+                            maxWidth: '320px',
+                            height: '180px',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--color-border)'
+                          }}
+                        />
+                      </div>
+                    )}
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
                       <div>
@@ -223,6 +333,82 @@ export default function AdminAuctionsPage() {
                   min="0"
                   placeholder="5.00"
                 />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label htmlFor="banner_image">Banner Image (optional)</label>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                <input
+                  type="url"
+                  id="banner_image"
+                  name="banner_image"
+                  value={formData.banner_image}
+                  onChange={handleChange}
+                  placeholder="https://cdn.example.com/banner.jpg"
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBannerFileChange}
+                  />
+                  {formData.banner_image && (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => setFormData((prev) => ({ ...prev, banner_image: '' }))}
+                    >
+                      Clear image
+                    </button>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                  Paste a URL or select from your device gallery. Max 2MB.
+                </span>
+                {formData.banner_image && (
+                  <img
+                    src={formData.banner_image}
+                    alt="Banner preview"
+                    style={{
+                      width: '100%',
+                      maxWidth: '520px',
+                      height: '160px',
+                      objectFit: 'cover',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--color-border)'
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label htmlFor="reel_upload">Reel Video (optional)</label>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                <input
+                  id="reel_upload"
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  onChange={handleReelFileChange}
+                />
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                  Upload a short reel (MP4/WebM/MOV). Max 50MB.
+                </span>
+                {reelPreview && (
+                  <video
+                    src={reelPreview}
+                    controls
+                    style={{
+                      width: '100%',
+                      maxWidth: '520px',
+                      height: '220px',
+                      objectFit: 'cover',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--color-border)'
+                    }}
+                  />
+                )}
               </div>
             </div>
 

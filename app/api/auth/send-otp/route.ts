@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
+import twilio from 'twilio'
 
 /**
  * API to initiate OTP verification for a phone number
- * This uses Firebase Phone Auth on the client side
- * This endpoint just checks if user needs verification
+ * Uses Twilio Verify to send SMS OTP
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { phone, name, email } = body
+    const { phone } = body
 
     // Validate required fields
     if (!phone) {
@@ -39,6 +39,23 @@ export async function POST(request: NextRequest) {
     }
 
     // If user exists but not verified, or doesn't exist, they need OTP
+    const accountSid = process.env.TWILIO_ACCOUNT_SID
+    const authToken = process.env.TWILIO_AUTH_TOKEN
+    const verifyServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID
+
+    if (!accountSid || !authToken || !verifyServiceSid) {
+      return NextResponse.json(
+        { error: 'Twilio credentials are not configured' },
+        { status: 500 }
+      )
+    }
+
+    const client = twilio(accountSid, authToken)
+
+    await client.verify.v2
+      .services(verifyServiceSid)
+      .verifications.create({ to: normalizedPhone, channel: 'sms' })
+
     return NextResponse.json({
       success: true,
       verified: false,

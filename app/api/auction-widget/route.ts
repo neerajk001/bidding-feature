@@ -10,22 +10,11 @@ export async function GET() {
   const API_BASE = '${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}';
   const SUPABASE_URL = '${process.env.NEXT_PUBLIC_SUPABASE_URL}';
   const SUPABASE_ANON_KEY = '${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}';
-  const FIREBASE_CONFIG = {
-    apiKey: '${process.env.NEXT_PUBLIC_FIREBASE_API_KEY}',
-    authDomain: '${process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}',
-    projectId: '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}',
-    appId: '${process.env.NEXT_PUBLIC_FIREBASE_APP_ID}'
-  };
-  
-  let firebaseApp = null;
-  let firebaseAuth = null;
   let currentProductId = null;
   let widgetState = 'loading'; // loading | otp | verifyOtp | register | bid
-  let confirmationResult = null;
   let verifiedPhone = null;
   let verifiedEmail = null;
   let verifiedName = null;
-  let firebaseIdToken = null;
   
   // Get product ID from merchant injection
   currentProductId = window.AUCTION_PRODUCT_ID;
@@ -34,30 +23,15 @@ export async function GET() {
     return;
   }
   
-  // Load Firebase
-  const firebaseScript = document.createElement('script');
-  firebaseScript.src = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js';
-  firebaseScript.onload = () => {
-    const authScript = document.createElement('script');
-    authScript.src = 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js';
-    authScript.onload = () => {
-      firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
-      firebaseAuth = firebase.auth();
-      firebaseAuth.useDeviceLanguage();
-      
-      // Check if auction exists for this product
-      fetch(API_BASE + '/api/auction/product/' + currentProductId)
-        .then(res => res.json())
-        .then(auction => {
-          if (auction.id && auction.status === 'live') {
-            initAuctionWidget(auction);
-          }
-        })
-        .catch(err => console.log('Auction widget: No auction found'));
-    };
-    document.head.appendChild(authScript);
-  };
-  document.head.appendChild(firebaseScript);
+  // Check if auction exists for this product
+  fetch(API_BASE + '/api/auction/product/' + currentProductId)
+    .then(res => res.json())
+    .then(auction => {
+      if (auction.id && auction.status === 'live') {
+        initAuctionWidget(auction);
+      }
+    })
+    .catch(err => console.log('Auction widget: No auction found'));
   
   function initAuctionWidget(auction) {
     // Check if registration window is closed
@@ -104,8 +78,9 @@ export async function GET() {
       '</div>' +
       '<div id="auction-register-section"><button class="auction-btn auction-btn-primary" id="register-btn">Register to Bid</button></div>' +
       '<div id="auction-otp-form" style="display: none;">' +
+      '<input type="text" class="auction-input" id="otp-name" placeholder="Full Name" required>' +
+      '<input type="email" class="auction-input" id="otp-email" placeholder="Email Address" required>' +
       '<input type="tel" class="auction-input" id="phone-number" placeholder="+1234567890" required>' +
-      '<div id="recaptcha-container"></div>' +
       '<button class="auction-btn auction-btn-primary" id="send-otp">Send OTP</button>' +
       '</div>' +
       '<div id="auction-verify-form" style="display: none;">' +
@@ -263,30 +238,28 @@ function setupEventHandlers(auction, isRegistrationClosed) {
       }
       
       transitionToState('otp');
-      
-      // Initialize reCAPTCHA (clear previous instance if exists)
-      setTimeout(() => {
-        if (window.recaptchaVerifier) {
-          window.recaptchaVerifier.clear();
-        }
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-          size: 'normal',
-          callback: () => {}
-        });
-        window.recaptchaVerifier.render();
-      }, 100);
+
+      // Prefill OTP form with any saved details
+      const otpNameInput = document.getElementById('otp-name');
+      const otpEmailInput = document.getElementById('otp-email');
+      if (otpNameInput && verifiedName) otpNameInput.value = verifiedName;
+      if (otpEmailInput && verifiedEmail) otpEmailInput.value = verifiedEmail;
     };
   }
 
   // Step 2: Send OTP (backend + Firebase)
   if (sendOtpBtn) {
     sendOtpBtn.onclick = async () => {
+      const nameInput = document.getElementById('otp-name');
+      const emailInput = document.getElementById('otp-email');
       const phoneInput = document.getElementById('phone-number');
-      if (!phoneInput) return;
+      if (!nameInput || !emailInput || !phoneInput) return;
       
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim();
       const phone = phoneInput.value.trim();
-      if (!phone) {
-        showMessage('Please enter phone number', 'error');
+      if (!name || !email || !phone) {
+        showMessage('Please fill name, email, and phone number', 'error');
         return;
       }
 
@@ -298,7 +271,7 @@ function setupEventHandlers(auction, isRegistrationClosed) {
         const backendRes = await fetch(API_BASE + '/api/auth/send-otp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone })
+          body: JSON.stringify({ phone, name, email })
         });
         
         const backendData = await backendRes.json();
@@ -306,9 +279,9 @@ function setupEventHandlers(auction, isRegistrationClosed) {
           throw new Error(backendData.error || 'Backend OTP send failed');
         }
         
-        // Then send Firebase OTP
-        confirmationResult = await firebaseAuth.signInWithPhoneNumber(phone, window.recaptchaVerifier);
         verifiedPhone = phone;
+        verifiedName = name;
+        verifiedEmail = email;
         
         transitionToState('verifyOtp');
         showMessage('✅ OTP sent to ' + phone, 'success');
@@ -332,24 +305,21 @@ function setupEventHandlers(auction, isRegistrationClosed) {
         return;
       }
 
+      if (!verifiedName || !verifiedEmail || !verifiedPhone) {
+        showMessage('Name, email, and phone are required before verification', 'error');
+        return;
+      }
+
       try {
         verifyOtpBtn.disabled = true;
         verifyOtpBtn.textContent = 'Verifying...';
         
-        // Verify with Firebase first
-        const userCredential = await confirmationResult.confirm(otp);
-        firebaseIdToken = await userCredential.user.getIdToken();
-        
-        // Ensure name and email are set (use empty string if not available)
-        if (!verifiedName) verifiedName = '';
-        if (!verifiedEmail) verifiedEmail = '';
-        
-        // Then verify with backend (REQUIRED) - send idToken, phone, name, email only
+        // Verify with backend (REQUIRED) - send code, phone, name, email only
         const backendRes = await fetch(API_BASE + '/api/auth/verify-otp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            idToken: firebaseIdToken,
+            code: otp,
             phone: verifiedPhone,
             name: verifiedName,
             email: verifiedEmail
@@ -366,6 +336,10 @@ function setupEventHandlers(auction, isRegistrationClosed) {
         if (verifiedName) localStorage.setItem('auction_user_name', verifiedName);
         if (verifiedEmail) localStorage.setItem('auction_user_email', verifiedEmail);
         
+        const registerNameInput = document.getElementById('bidder-name');
+        const registerEmailInput = document.getElementById('bidder-email');
+        if (registerNameInput && verifiedName) registerNameInput.value = verifiedName;
+        if (registerEmailInput && verifiedEmail) registerEmailInput.value = verifiedEmail;
         transitionToState('register');
         showMessage('✅ Phone verified! Complete your registration.', 'success');
       } catch (err) {

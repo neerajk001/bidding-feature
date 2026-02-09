@@ -1,13 +1,19 @@
-import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase/client'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
+import { finalizeEndedAuctions } from '@/lib/auctions/finalizeEndedAuctions'
 
 // Public API - Lists only live auctions for end users
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { data: auctions, error } = await supabase
+    await finalizeEndedAuctions()
+
+    const includeEnded = request.nextUrl.searchParams.get('includeEnded') === 'true'
+    const statuses = includeEnded ? ['live', 'ended'] : ['live']
+
+    const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, product_id, status, bidding_start_time, bidding_end_time, banner_image, min_increment')
-      .eq('status', 'live')
+      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment')
+      .in('status', statuses)
       .order('bidding_start_time', { ascending: false })
 
     if (error) {
@@ -21,21 +27,46 @@ export async function GET() {
     // For each auction, get the current highest bid
     const auctionsWithBids = await Promise.all(
       (auctions || []).map(async (auction) => {
-        const { data: bids } = await supabase
+        const { data: highestBid } = await supabaseAdmin
           .from('bids')
-          .select('amount')
+          .select('amount, bidder:bidder_id(name)')
           .eq('auction_id', auction.id)
           .order('amount', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1)
+          .maybeSingle()
+
+        const { count } = await supabaseAdmin
+          .from('bids')
+          .select('id', { count: 'exact', head: true })
+          .eq('auction_id', auction.id)
+
+        const { data: winner } = auction.status === 'ended'
+          ? await supabaseAdmin
+            .from('winners')
+            .select('winning_amount, declared_at, bidder:bidder_id(name)')
+            .eq('auction_id', auction.id)
+            .maybeSingle()
+          : { data: null }
+
+        const winningAmount = winner?.winning_amount ?? null
+        const winnerName = winner?.bidder?.name ?? null
+        const displayAmount = winningAmount ?? highestBid?.amount ?? null
+        const displayName = winnerName ?? highestBid?.bidder?.name ?? null
 
         return {
           ...auction,
-          current_highest_bid: bids && bids.length > 0 ? bids[0].amount : null
+          current_highest_bid: displayAmount,
+          highest_bidder_name: displayName,
+          total_bids: count ?? 0,
+          winner_name: winnerName,
+          winning_amount: winningAmount,
+          winner_declared_at: winner?.declared_at ?? null
         }
       })
     )
 
-    return NextResponse.json({ auctions: auctionsWithBids })
+    return NextResponse.json({ success: true, auctions: auctionsWithBids })
   } catch (error) {
     console.error('API error:', error)
     return NextResponse.json(

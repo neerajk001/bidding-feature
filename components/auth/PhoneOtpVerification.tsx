@@ -1,21 +1,26 @@
 'use client'
 
 import { useState } from 'react'
-import { auth } from '@/lib/firebase/client'
-import { 
-  RecaptchaVerifier, 
-  signInWithPhoneNumber, 
-  ConfirmationResult 
-} from 'firebase/auth'
+import { useEffect } from 'react'
 
 interface PhoneOtpVerificationProps {
-  onVerificationSuccess: (userId: string, idToken: string) => void
+  onVerificationSuccess: (payload: {
+    userId: string
+    idToken: string
+    name: string
+    email: string
+    phone: string
+  }) => void
   onVerificationError?: (error: string) => void
+  headline?: string
+  supportingText?: string
 }
 
 export default function PhoneOtpVerification({
   onVerificationSuccess,
-  onVerificationError
+  onVerificationError,
+  headline,
+  supportingText
 }: PhoneOtpVerificationProps) {
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
@@ -24,26 +29,15 @@ export default function PhoneOtpVerification({
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
+  const [cooldown, setCooldown] = useState(0)
 
-  // Initialize reCAPTCHA
-  const setupRecaptcha = () => {
-    if (!(window as any).recaptchaVerifier) {
-      (window as any).recaptchaVerifier = new RecaptchaVerifier(
-        auth,
-        'recaptcha-container',
-        {
-          size: 'invisible',
-          callback: () => {
-            // reCAPTCHA solved
-          },
-          'expired-callback': () => {
-            setError('reCAPTCHA expired. Please try again.')
-          }
-        }
-      )
-    }
-  }
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [cooldown])
 
   const sendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,17 +64,22 @@ export default function PhoneOtpVerification({
 
       if (checkData.verified) {
         // User already verified
-        onVerificationSuccess(checkData.user_id, '')
+        onVerificationSuccess({
+          userId: checkData.user_id || '',
+          idToken: '',
+          name,
+          email,
+          phone: normalizedPhone
+        })
         return
       }
 
-      // Setup reCAPTCHA and send OTP
-      setupRecaptcha()
-      const appVerifier = (window as any).recaptchaVerifier
-      
-      const result = await signInWithPhoneNumber(auth, normalizedPhone, appVerifier)
-      setConfirmationResult(result)
+      if (!checkResponse.ok) {
+        throw new Error(checkData.error || 'Failed to send OTP')
+      }
+
       setStep('otp')
+      setCooldown(30)
       
     } catch (err: any) {
       console.error('Error sending OTP:', err)
@@ -88,12 +87,6 @@ export default function PhoneOtpVerification({
       setError(errorMessage)
       if (onVerificationError) {
         onVerificationError(errorMessage)
-      }
-      
-      // Reset reCAPTCHA on error
-      if ((window as any).recaptchaVerifier) {
-        (window as any).recaptchaVerifier.clear()
-        ;(window as any).recaptchaVerifier = null
       }
     } finally {
       setLoading(false)
@@ -106,19 +99,9 @@ export default function PhoneOtpVerification({
     setLoading(true)
 
     try {
-      if (!confirmationResult) {
-        throw new Error('Please request OTP first')
-      }
-
       if (!otp || otp.length !== 6) {
         throw new Error('Please enter a valid 6-digit OTP')
       }
-
-      // Verify OTP with Firebase
-      const result = await confirmationResult.confirm(otp)
-      
-      // Get ID token
-      const idToken = await result.user.getIdToken()
 
       // Normalize phone number
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
@@ -128,7 +111,7 @@ export default function PhoneOtpVerification({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          idToken,
+          code: otp,
           name,
           email,
           phone: normalizedPhone
@@ -142,7 +125,13 @@ export default function PhoneOtpVerification({
       }
 
       // Success!
-      onVerificationSuccess(data.user_id, idToken)
+      onVerificationSuccess({
+        userId: data.user_id || '',
+        idToken: '',
+        name,
+        email,
+        phone: normalizedPhone
+      })
 
     } catch (err: any) {
       console.error('Error verifying OTP:', err)
@@ -160,91 +149,64 @@ export default function PhoneOtpVerification({
     setOtp('')
     setError('')
     setStep('phone')
-    setConfirmationResult(null)
-    
-    // Reset reCAPTCHA
-    if ((window as any).recaptchaVerifier) {
-      (window as any).recaptchaVerifier.clear()
-      ;(window as any).recaptchaVerifier = null
-    }
   }
 
   return (
-    <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center">
-        Verify Your Phone Number
-      </h2>
+    <div className="card otp-card">
+      <div className="otp-header">
+        <h3>{headline || 'Verify your phone number'}</h3>
+        <p>{supportingText || 'A one-time OTP keeps every bid verified and fair.'}</p>
+      </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
-      )}
+      {error && <div className="notice notice-error">{error}</div>}
 
       {step === 'phone' ? (
-        <form onSubmit={sendOtp} className="space-y-4">
+        <form onSubmit={sendOtp} className="stack">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium mb-1">
-              Full Name
-            </label>
+            <label htmlFor="name">Full name</label>
             <input
               id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="John Doe"
             />
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
-            </label>
+            <label htmlFor="email">Email</label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="john@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium mb-1">
-              Phone Number
-            </label>
+            <label htmlFor="phone">Phone number</label>
             <input
               id="phone"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="+919999999999"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Include country code (e.g., +91 for India)
-            </p>
+            <span className="helper-text">Include country code (e.g., +91 for India)</span>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-          >
+          <button type="submit" disabled={loading} className="btn btn-primary">
             {loading ? 'Sending...' : 'Send OTP'}
           </button>
         </form>
       ) : (
-        <form onSubmit={verifyOtp} className="space-y-4">
+        <form onSubmit={verifyOtp} className="stack">
           <div>
-            <label htmlFor="otp" className="block text-sm font-medium mb-1">
-              Enter OTP
-            </label>
+            <label htmlFor="otp">Enter OTP</label>
             <input
               id="otp"
               type="text"
@@ -252,39 +214,28 @@ export default function PhoneOtpVerification({
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               required
               maxLength={6}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="otp-input"
               placeholder="000000"
             />
-            <p className="text-xs text-gray-500 mt-1 text-center">
-              Enter the 6-digit code sent to {phone}
-            </p>
+            <span className="helper-text">Enter the 6-digit code sent to {phone}</span>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-          >
+          <button type="submit" disabled={loading} className="btn btn-primary">
             {loading ? 'Verifying...' : 'Verify OTP'}
           </button>
 
-          <button
-            type="button"
-            onClick={resendOtp}
-            disabled={loading}
-            className="w-full py-2 px-4 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed transition"
-          >
+          <button type="button" onClick={resendOtp} disabled={loading} className="btn btn-outline">
             Resend OTP
           </button>
         </form>
       )}
+      {cooldown > 0 && (
+        <div className="helper-text">You can request a new OTP in {cooldown}s.</div>
+      )}
 
-      {/* reCAPTCHA container */}
-      <div id="recaptcha-container"></div>
-
-      <div className="mt-6 text-xs text-gray-500 text-center">
+      <div className="otp-footer">
         <p>By verifying, you agree to receive SMS messages.</p>
-        <p className="mt-1">Standard rates may apply.</p>
+        <p>Standard rates may apply.</p>
       </div>
     </div>
   )

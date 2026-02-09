@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/admin'
+import { finalizeEndedAuctions } from '@/lib/auctions/finalizeEndedAuctions'
 
 /**
  * GET /api/auction/active
@@ -13,11 +14,13 @@ import { supabase } from '@/lib/supabase/client'
  */
 export async function GET() {
   try {
+    await finalizeEndedAuctions()
+
     // Get current server time in UTC (ISO string format for consistent comparison)
     const now = new Date().toISOString()
 
     // Query all published auctions with time fields
-    const { data: auctions, error } = await supabase
+    const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
       .select('id, registration_end_time, bidding_start_time, bidding_end_time')
       .eq('status', 'live')

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function GET() {
   try {
@@ -30,17 +31,52 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const contentType = request.headers.get('content-type') || ''
+    const ALLOWED_REEL_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
+    const MAX_REEL_MB = 50
+    const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media'
+
+    let body: Record<string, any> = {}
+    let reelFile: File | null = null
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData()
+      const getString = (key: string) => {
+        const value = formData.get(key)
+        return typeof value === 'string' ? value : ''
+      }
+
+      body = {
+        title: getString('title'),
+        product_id: getString('product_id'),
+        min_increment: getString('min_increment'),
+        banner_image: getString('banner_image'),
+        registration_end_time: getString('registration_end_time'),
+        bidding_start_time: getString('bidding_start_time'),
+        bidding_end_time: getString('bidding_end_time'),
+        status: getString('status'),
+        reel_url: getString('reel_url')
+      }
+
+      const maybeReel = formData.get('reel')
+      if (maybeReel && typeof maybeReel !== 'string') {
+        reelFile = maybeReel
+      }
+    } else {
+      body = await request.json()
+    }
 
     // Validate required fields
     const {
       title,
       product_id,
       min_increment,
+      banner_image,
       registration_end_time,
       bidding_start_time,
       bidding_end_time,
-      status
+      status,
+      reel_url
     } = body
 
     if (!title || !product_id || !min_increment || !registration_end_time ||
@@ -61,7 +97,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate min_increment is a positive number
-    if (typeof min_increment !== 'number' || min_increment <= 0) {
+    const minIncrementValue = typeof min_increment === 'number'
+      ? min_increment
+      : parseFloat(min_increment)
+
+    if (!Number.isFinite(minIncrementValue) || minIncrementValue <= 0) {
       return NextResponse.json(
         { error: 'Minimum increment must be a positive number' },
         { status: 400 }
@@ -92,13 +132,56 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    let reelPublicUrl: string | null = reel_url || null
+
+    if (reelFile) {
+      if (!ALLOWED_REEL_TYPES.includes(reelFile.type)) {
+        return NextResponse.json(
+          { error: 'Reel must be MP4, WebM, or MOV' },
+          { status: 400 }
+        )
+      }
+
+      const maxBytes = MAX_REEL_MB * 1024 * 1024
+      if (reelFile.size > maxBytes) {
+        return NextResponse.json(
+          { error: `Reel must be under ${MAX_REEL_MB}MB` },
+          { status: 400 }
+        )
+      }
+
+      const extension = reelFile.name.split('.').pop() || 'mp4'
+      const reelPath = `reels/${crypto.randomUUID()}.${extension}`
+      const buffer = Buffer.from(await reelFile.arrayBuffer())
+
+      const { error: uploadError } = await supabaseAdmin
+        .storage
+        .from(bucket)
+        .upload(reelPath, buffer, {
+          contentType: reelFile.type,
+          upsert: false
+        })
+
+      if (uploadError) {
+        return NextResponse.json(
+          { error: 'Failed to upload reel', details: uploadError.message },
+          { status: 500 }
+        )
+      }
+
+      const { data: publicData } = supabaseAdmin.storage.from(bucket).getPublicUrl(reelPath)
+      reelPublicUrl = publicData.publicUrl
+    }
+
     // Insert into Supabase using admin client
     const { data, error } = await supabaseAdmin
       .from('auctions')
       .insert({
         title,
         product_id,
-        min_increment,
+        min_increment: minIncrementValue,
+        banner_image: banner_image || null,
+        reel_url: reelPublicUrl,
         registration_end_time: registrationEndUTC,
         bidding_start_time: biddingStartUTC,
         bidding_end_time: biddingEndUTC,

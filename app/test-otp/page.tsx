@@ -7,11 +7,20 @@ export default function OTPTestPage() {
   const [verificationResult, setVerificationResult] = useState<{
     userId: string
     idToken: string
+    name: string
+    email: string
+    phone: string
   } | null>(null)
 
-  const handleVerificationSuccess = (userId: string, idToken: string) => {
-    setVerificationResult({ userId, idToken })
-    alert(`✅ Success! User ID: ${userId}`)
+  const handleVerificationSuccess = (payload: {
+    userId: string
+    idToken: string
+    name: string
+    email: string
+    phone: string
+  }) => {
+    setVerificationResult(payload)
+    alert(`✅ Success! User ID: ${payload.userId}`)
   }
 
   const handleVerificationError = (error: string) => {
@@ -72,6 +81,33 @@ export default function OTPTestPage() {
                   wordBreak: 'break-all'
                 }}>
                   {verificationResult.userId}
+                </div>
+              </div>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <strong>Name:</strong>
+                <div style={{ 
+                  marginTop: '0.25rem',
+                  color: 'var(--color-text-secondary)'
+                }}>
+                  {verificationResult.name}
+                </div>
+              </div>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <strong>Email:</strong>
+                <div style={{ 
+                  marginTop: '0.25rem',
+                  color: 'var(--color-text-secondary)'
+                }}>
+                  {verificationResult.email}
+                </div>
+              </div>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <strong>Phone:</strong>
+                <div style={{ 
+                  marginTop: '0.25rem',
+                  color: 'var(--color-text-secondary)'
+                }}>
+                  {verificationResult.phone}
                 </div>
               </div>
               <div>

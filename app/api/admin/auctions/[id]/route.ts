@@ -192,6 +192,48 @@ export async function PUT(
       )
     }
 
+    if (status === 'ended') {
+      const { data: highestBid, error: highestBidError } = await supabaseAdmin
+        .from('bids')
+        .select('amount, bidder_id')
+        .eq('auction_id', auctionId)
+        .order('amount', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (highestBidError) {
+        console.error('Failed to calculate winner:', highestBidError)
+        return NextResponse.json(
+          { error: 'Failed to calculate winner', details: highestBidError.message },
+          { status: 500 }
+        )
+      }
+
+      const winningAmount = Number(highestBid?.amount ?? 0)
+      if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
+        const { error: winnerError } = await supabaseAdmin
+          .from('winners')
+          .upsert(
+            {
+              auction_id: auctionId,
+              bidder_id: highestBid.bidder_id,
+              winning_amount: winningAmount,
+              declared_at: new Date().toISOString()
+            },
+            { onConflict: 'auction_id' }
+          )
+
+        if (winnerError) {
+          console.error('Failed to save winner:', winnerError)
+          return NextResponse.json(
+            { error: 'Failed to save winner', details: winnerError.message },
+            { status: 500 }
+          )
+        }
+      }
+    }
+
     return NextResponse.json({ success: true, auction: updatedAuction })
 
   } catch (error) {
