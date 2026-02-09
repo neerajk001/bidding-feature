@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
+import logo from './logo.png'
 
 export default function PublicShell({ children }: { children: ReactNode }) {
   return (
@@ -7,8 +9,10 @@ export default function PublicShell({ children }: { children: ReactNode }) {
       <header className="public-header">
         <div className="container public-header-inner">
           <Link href="/" className="brand">
-            <span className="brand-mark">Indu Heritage</span>
-            <span className="brand-subtitle">Premium womenswear auctions</span>
+            <span className="brand-mark">
+              <Image src={logo} alt="Indu Heritage" className="brand-logo" priority />
+              <span className="sr-only">Indu Heritage</span>
+            </span>
           </Link>
           <nav className="public-nav">
             <Link href="/auctions" className="nav-link">
@@ -27,7 +31,10 @@ export default function PublicShell({ children }: { children: ReactNode }) {
       <footer className="public-footer">
         <div className="container public-footer-inner">
           <div>
-            <div className="brand-mark">Indu Heritage</div>
+            <div className="brand-mark">
+              <Image src={logo} alt="Indu Heritage" className="brand-logo brand-logo-footer" />
+              <span className="sr-only">Indu Heritage</span>
+            </div>
             <p className="footer-note">
               Cozy, premium womenswear auctions with verified, real-time bidding.
             </p>

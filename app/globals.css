@@ -371,9 +371,14 @@ tr:hover td {
   flex-direction: column;
   gap: 0.2rem;
   color: var(--color-text-primary);
+  position: static;
+  align-items: flex-start;
 }
 
 .brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   font-weight: 700;
   font-size: 1.1rem;
   letter-spacing: -0.02em;
@@ -382,6 +387,27 @@ tr:hover td {
 .brand-subtitle {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
+}
+
+.brand-logo {
+  height: 48px;
+  width: auto;
+}
+
+.brand-logo-footer {
+  height: 34px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .public-nav {
@@ -1486,6 +1512,12 @@ tr:hover td {
   .public-header-inner {
     width: calc(100% - 2rem);
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .brand {
+    position: static;
+    transform: none;
     align-items: flex-start;
   }
 
