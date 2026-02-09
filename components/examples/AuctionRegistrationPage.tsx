@@ -9,10 +9,10 @@ interface AuctionRegistrationPageProps {
 }
 
 /**
- * Example page showing how to integrate OTP verification with auction registration
+ * Example page showing how to integrate Clerk phone verification with auction registration
  * 
  * Flow:
- * 1. User verifies phone with OTP (if not already verified)
+ * 1. User verifies phone with Clerk (if not already verified)
  * 2. User is registered for the auction automatically
  * 3. User can proceed to place bids
  */
@@ -30,7 +30,7 @@ export default function AuctionRegistrationPage({
   } | null>(null)
 
   /**
-   * Called when user successfully verifies their phone via OTP
+ * Called when user successfully verifies their phone via Clerk
    */
   const handleVerificationSuccess = async (payload: {
     userId: string
@@ -40,7 +40,7 @@ export default function AuctionRegistrationPage({
     phone: string
   }) => {
     try {
-      // OTP verified! Now check if already registered for this auction
+      // Phone verified! Now check if already registered for this auction
       // If not, we'll need their info to register
 
       // For demo purposes, we'll show success
@@ -196,14 +196,14 @@ export default function AuctionRegistrationPage({
             📱 One-Time Phone Verification
           </h3>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Verify your phone number once with OTP</li>
+            <li>• Verify your phone number once with Clerk</li>
             <li>• No need to verify again for future auctions</li>
             <li>• You'll receive SMS confirmation when you win</li>
             <li>• Your information is kept secure</li>
           </ul>
         </div>
 
-        {/* OTP Verification Component */}
+        {/* Clerk Phone Verification Component */}
         <PhoneOtpVerification
           onVerificationSuccess={handleVerificationSuccess}
           onVerificationError={handleVerificationError}

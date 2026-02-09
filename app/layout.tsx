@@ -1,9 +1,10 @@
 import './globals.css'
+import { ClerkProvider } from '@clerk/nextjs'
 import AuthProvider from '@/components/providers/AuthProvider'
 
 export const metadata = {
   title: 'Indu Heritage Auctions',
-  description: 'Cozy, premium womenswear auctions with OTP verified bidding',
+  description: 'Cozy, premium womenswear auctions with verified bidding',
 }
 
 export default function RootLayout({
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ClerkProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ClerkProvider>
       </body>
     </html>
   )

@@ -43,10 +43,10 @@ export default function OTPTestPage() {
           border: '1px solid var(--color-border)'
         }}>
           <h1 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
-            🔥 Firebase OTP Test Page
+            🔐 Clerk Phone Verification
           </h1>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            Test phone verification with Firebase OTP
+            Test phone verification with Clerk authentication.
           </p>
         </div>
 
@@ -135,7 +135,7 @@ export default function OTPTestPage() {
               </p>
               <ol style={{ marginLeft: '1.5rem', color: 'var(--color-text-secondary)' }}>
                 <li>User is now verified in the database</li>
-                <li>You can register for auctions without OTP again</li>
+                <li>You can register for auctions without re-verifying</li>
                 <li>Test with: POST /api/register-bidder</li>
               </ol>
             </div>
@@ -157,8 +157,8 @@ export default function OTPTestPage() {
             lineHeight: '1.6'
           }}>
             <li><strong>Phone Format:</strong> Include country code (e.g., +919876543210)</li>
-            <li><strong>Test Numbers:</strong> Add test numbers in Firebase Console to skip real SMS</li>
-            <li><strong>Real SMS:</strong> Use your real phone number to receive actual OTP</li>
+            <li><strong>Test Numbers:</strong> Configure test numbers in Clerk to skip real SMS</li>
+            <li><strong>Real SMS:</strong> Use your real phone number to receive the OTP</li>
             <li><strong>Errors:</strong> Check browser console for detailed error messages</li>
           </ul>
 
@@ -169,15 +169,13 @@ export default function OTPTestPage() {
             borderRadius: 'var(--radius-sm)',
             border: '1px solid rgba(249, 115, 22, 0.3)'
           }}>
-            <strong style={{ color: 'var(--color-primary)' }}>⚠️ Firebase Test Numbers:</strong>
+            <strong style={{ color: 'var(--color-primary)' }}>⚠️ Clerk Test Numbers:</strong>
             <p style={{ 
               marginTop: '0.5rem',
               color: 'var(--color-text-secondary)',
               fontSize: '0.85rem'
             }}>
-              Add in Firebase Console → Authentication → Settings → Phone numbers for testing
-              <br />
-              Example: +1 650-555-3434 → OTP: 123456
+              Configure test numbers in the Clerk dashboard to avoid real SMS charges.
             </p>
           </div>
         </div>
