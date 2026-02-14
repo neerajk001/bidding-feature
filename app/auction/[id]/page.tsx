@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import PublicShell from '@/components/public/PublicShell'
-import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification'
+import EmailOtpVerification from '@/components/auth/EmailOtpVerification'
 
 interface AuctionDetail {
   id: string
@@ -215,14 +215,20 @@ export default function AuctionDetailPage() {
     return current + auction.min_increment
   }, [auction])
 
-  const handleVerificationSuccess = (payload: VerificationProfile) => {
+  const handleVerificationSuccess = (userId: string, userInfo: { name: string; email: string; phone?: string }) => {
+    const payload: VerificationProfile = {
+      userId,
+      name: userInfo.name,
+      email: userInfo.email,
+      phone: userInfo.phone || ''
+    }
     setProfile(payload)
     setRegistrationForm({
       name: payload.name,
       email: payload.email,
       phone: payload.phone
     })
-    setMessage({ type: 'success', text: 'Phone verified. Complete registration to bid.' })
+    setMessage({ type: 'success', text: 'Email verified. Complete registration to bid.' })
 
     localStorage.setItem('auction_user_phone', payload.phone)
     localStorage.setItem('auction_user_email', payload.email)
@@ -468,11 +474,10 @@ export default function AuctionDetailPage() {
 
                   {showRegistration && !bidderId && !profile && (
                     <div className="stack">
-                      <PhoneOtpVerification
-                        onVerificationSuccess={handleVerificationSuccess}
-                        onVerificationError={handleVerificationError}
-                        headline="Verify to join"
-                        supportingText="You only need to verify once per device."
+                      <EmailOtpVerification
+                        auctionId={auction.id}
+                        onVerificationComplete={handleVerificationSuccess}
+                        onError={handleVerificationError}
                       />
                     </div>
                   )}

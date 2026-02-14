@@ -48,42 +48,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // --- UNIFIED USER LOGIC WITH OTP VERIFICATION ---
+    // --- UNIFIED USER LOGIC WITH EMAIL VERIFICATION ---
     let userId = null
     let userVerified = false
 
-    // Normalize phone number
-    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim()
 
-    // Attempt to find existing user by email or phone
+    // Attempt to find existing user by email
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id, phone_verified')
-      .or(`email.eq.${email},phone.eq.${normalizedPhone}`)
+      .select('id, email_verified')
+      .eq('email', normalizedEmail)
       .maybeSingle()
 
     if (existingUser) {
       userId = existingUser.id
-      userVerified = existingUser.phone_verified || false
+      userVerified = existingUser.email_verified || false
 
       // Check if user is verified
       if (!userVerified) {
         return NextResponse.json(
           {
-            error: 'Phone number not verified',
+            error: 'Email not verified',
             requires_verification: true,
-            message: 'Please verify your phone number with OTP before registering'
+            message: 'Please verify your email address before registering for auctions'
           },
           { status: 403 }
         )
       }
     } else {
-      // New user must verify phone first
+      // New user must verify email first
       return NextResponse.json(
         {
-          error: 'Phone number not verified',
+          error: 'Email not verified',
           requires_verification: true,
-          message: 'Please verify your phone number with OTP before registering'
+          message: 'Please verify your email address before registering for auctions'
         },
         { status: 403 }
       )

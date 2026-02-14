@@ -1,26 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification'
+import EmailOtpVerification from '@/components/auth/EmailOtpVerification'
 
 export default function OTPTestPage() {
   const [verificationResult, setVerificationResult] = useState<{
     userId: string
-    idToken: string
     name: string
     email: string
-    phone: string
+    phone?: string
   } | null>(null)
 
-  const handleVerificationSuccess = (payload: {
-    userId: string
-    idToken: string
-    name: string
-    email: string
-    phone: string
-  }) => {
-    setVerificationResult(payload)
-    alert(`✅ Success! User ID: ${payload.userId}`)
+  const handleVerificationSuccess = (userId: string, userInfo: { name: string; email: string; phone?: string }) => {
+    const result = {
+      userId,
+      ...userInfo
+    }
+    setVerificationResult(result)
+    alert(`✅ Success! User ID: ${userId}`)
   }
 
   const handleVerificationError = (error: string) => {
@@ -43,16 +40,17 @@ export default function OTPTestPage() {
           border: '1px solid var(--color-border)'
         }}>
           <h1 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
-            🔐 Clerk Phone Verification
+            � Email Verification Test
           </h1>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            Test phone verification with Clerk authentication.
+            Test email verification with Resend OTP.
           </p>
         </div>
 
-        <PhoneOtpVerification
-          onVerificationSuccess={handleVerificationSuccess}
-          onVerificationError={handleVerificationError}
+        <EmailOtpVerification
+          auctionId="test-auction"
+          onVerificationComplete={handleVerificationSuccess}
+          onError={handleVerificationError}
         />
 
         {verificationResult && (
@@ -101,27 +99,17 @@ export default function OTPTestPage() {
                   {verificationResult.email}
                 </div>
               </div>
-              <div style={{ marginBottom: '0.5rem' }}>
-                <strong>Phone:</strong>
-                <div style={{ 
-                  marginTop: '0.25rem',
-                  color: 'var(--color-text-secondary)'
-                }}>
-                  {verificationResult.phone}
+              {verificationResult.phone && (
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Phone:</strong>
+                  <div style={{ 
+                    marginTop: '0.25rem',
+                    color: 'var(--color-text-secondary)'
+                  }}>
+                    {verificationResult.phone}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <strong>ID Token:</strong>
-                <div style={{ 
-                  marginTop: '0.25rem',
-                  color: 'var(--color-text-secondary)',
-                  wordBreak: 'break-all',
-                  maxHeight: '100px',
-                  overflow: 'auto'
-                }}>
-                  {verificationResult.idToken}
-                </div>
-              </div>
+              )}
             </div>
             <div style={{ 
               marginTop: '1rem',
@@ -134,8 +122,8 @@ export default function OTPTestPage() {
                 <strong>✅ Next Steps:</strong>
               </p>
               <ol style={{ marginLeft: '1.5rem', color: 'var(--color-text-secondary)' }}>
-                <li>User is now verified in the database</li>
-                <li>You can register for auctions without re-verifying</li>
+                <li>User is now verified in the database (email verified)</li>
+                <li>You can register for any auction without re-verifying</li>
                 <li>Test with: POST /api/register-bidder</li>
               </ol>
             </div>

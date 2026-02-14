@@ -14,7 +14,12 @@ export async function getAuctions(includeEnded: boolean = false) {
             .order('bidding_start_time', { ascending: false })
 
         if (error) {
-            console.error('Supabase error:', error)
+            console.error('Supabase error fetching auctions:', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+            })
             return []
         }
 
@@ -67,8 +72,14 @@ export async function getAuctions(includeEnded: boolean = false) {
         )
 
         return auctionsWithBids
-    } catch (error) {
-        console.error('getAuctions error:', error)
+    } catch (error: any) {
+        console.error('getAuctions error:', {
+            message: error?.message || 'Unknown error',
+            details: error?.details || error?.toString(),
+            hint: error?.hint || '',
+            code: error?.code || error?.cause?.code || ''
+        })
+        // Return empty array to allow page to render gracefully
         return []
     }
 }
@@ -119,8 +130,12 @@ export async function getActiveAuctionState() {
         }
 
         return { exists: false }
-    } catch (error) {
-        console.error('getActiveAuctionState error:', error)
+    } catch (error: any) {
+        console.error('getActiveAuctionState error:', {
+            message: error?.message || 'Unknown error',
+            details: error?.details || error?.toString(),
+            code: error?.code || error?.cause?.code || ''
+        })
         return { exists: false }
     }
 }
@@ -174,8 +189,12 @@ export async function getAuctionDetail(id: string) {
             min_increment: auction.min_increment ?? 0
         }
 
-    } catch (e) {
-        console.error('getAuctionDetail error', e)
+    } catch (error: any) {
+        console.error('getAuctionDetail error:', {
+            message: error?.message || 'Unknown error',
+            details: error?.details || error?.toString(),
+            code: error?.code || error?.cause?.code || ''
+        })
         return null
     }
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import logo from './logo.png'
+import shopify from './shopify.png'
 
 export default function PublicShell({ children }: { children: ReactNode }) {
   return (
@@ -18,12 +19,10 @@ export default function PublicShell({ children }: { children: ReactNode }) {
             <Link href="/auctions" className="nav-link">
               Auctions
             </Link>
-            <a href="https://induheritage.com" className="nav-link" target="_blank" rel="noreferrer">
-              Shop
+            <a href="https://induheritage.com" className="nav-link" target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid #8B4513', padding: '0.5rem 1rem', borderRadius: '6px' }}>
+              My Store
+              <Image src={shopify} alt="Shopify" width={20} height={20} />
             </a>
-            <Link href="/admin/auctions" className="nav-link nav-cta">
-              Admin Panel
-            </Link>
           </nav>
         </div>
       </header>

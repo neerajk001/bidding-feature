@@ -3,32 +3,12 @@ import PublicShell from '@/components/public/PublicShell'
 import LandingHero from '@/components/landing/LandingHero'
 import AuctionGrid from '@/components/landing/AuctionGrid'
 import { getAuctions, getActiveAuctionState, getAuctionDetail } from '@/lib/auctions/queries'
+import { supabaseAdmin } from '@/lib/supabase/admin'
 
 const shopifyStoreUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || 'https://induheritage.com'
 const shopifyLinkProps = shopifyStoreUrl.startsWith('http')
   ? { target: '_blank', rel: 'noreferrer' }
   : {}
-
-const shopifyDrops = [
-  {
-    title: 'Banarasi Brocade Edit',
-    description: 'Handwoven silks with gold zari work, curated for collectors.',
-    price: 'From INR 12,900',
-    tone: 'ochre',
-  },
-  {
-    title: 'Heritage Bridal Looms',
-    description: 'Archive-inspired bridal sets with couture finishing.',
-    price: 'From INR 22,500',
-    tone: 'rose',
-  },
-  {
-    title: 'Festive Heirloom Capsule',
-    description: 'Limited drop of richly detailed ensembles for gala nights.',
-    price: 'From INR 9,800',
-    tone: 'forest',
-  },
-] as const
 
 const heritagePillars = [
   {
@@ -45,10 +25,31 @@ const heritagePillars = [
   },
 ] as const
 
+async function getShopifyDrops() {
+  try {
+    const { data: drops, error } = await supabaseAdmin
+      .from('shopify_drops')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching shopify drops:', error)
+      return []
+    }
+
+    return drops || []
+  } catch (error) {
+    console.error('Error fetching shopify drops:', error)
+    return []
+  }
+}
+
 export default async function HomePage() {
-  const [activeState, allAuctionsRaw] = await Promise.all([
+  const [activeState, allAuctionsRaw, shopifyDrops] = await Promise.all([
     getActiveAuctionState(),
-    getAuctions(true)
+    getAuctions(true),
+    getShopifyDrops()
   ])
 
   // Ensure allAuctions is an array
@@ -123,19 +124,34 @@ export default async function HomePage() {
           </div>
 
           <div className="landing-drops-grid">
-            {shopifyDrops.map((drop) => (
-              <div className={`drop-card drop-card-${drop.tone}`} key={drop.title}>
-                <div className="drop-card-top">
-                  <span className="pill pill-neutral">Shopify drop</span>
-                  <span className="drop-card-price">{drop.price}</span>
+            {shopifyDrops.length > 0 ? (
+              shopifyDrops.map((drop: any) => (
+                <div className={`drop-card drop-card-${drop.tone}`} key={drop.id}>
+                  {drop.image_url && (
+                    <div style={{ marginBottom: '1rem', borderRadius: '12px', overflow: 'hidden', height: '180px', position: 'relative' }}>
+                      <img 
+                        src={drop.image_url} 
+                        alt={drop.title} 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </div>
+                  )}
+                  <div className="drop-card-top">
+                    <span className="pill pill-neutral">Shopify drop</span>
+                    <span className="drop-card-price">{drop.price}</span>
+                  </div>
+                  <h3>{drop.title}</h3>
+                  <p>{drop.description}</p>
+                  <a href={drop.link_url} className="drop-card-link" target="_blank" rel="noreferrer">
+                    Check it out and buy
+                  </a>
                 </div>
-                <h3>{drop.title}</h3>
-                <p>{drop.description}</p>
-                <a href={shopifyStoreUrl} className="drop-card-link" {...shopifyLinkProps}>
-                  Check it out and buy
-                </a>
+              ))
+            ) : (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+                <p>No drops available at the moment. Check back soon!</p>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </section>

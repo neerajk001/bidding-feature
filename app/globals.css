@@ -2055,3 +2055,478 @@ tr:hover td {
     gap: 0.5rem;
   }
 }
+
+/* ============================================
+   ADMIN PANEL STYLES - White & Orange Theme
+   ============================================ */
+
+.admin-panel {
+  min-height: 100vh;
+  background-color: #ffffff;
+}
+
+.admin-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #000000;
+  padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.admin-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-logo {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.admin-title {
+  margin: 0;
+  fontSize: 1.5rem;
+  font-weight: 800;
+  color: #FF6B35;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-nav-link {
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  border: 1px solid #000000;
+  background: transparent;
+  color: #000000;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.admin-nav-link:hover {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+.admin-content {
+  padding: 2.5rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.admin-container {
+  min-height: 100vh;
+  background-color: #ffffff;
+  padding: 2rem;
+}
+
+/* Admin Cards */
+.admin-card {
+  background-color: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.admin-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.admin-card-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.admin-section-title {
+  font-size: 2rem;
+  color: #000000;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* Admin Buttons */
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+.admin-btn-primary {
+  background-color: #FF6B35;
+  color: #ffffff;
+  border: 1px solid #FF6B35;
+}
+
+.admin-btn-primary:hover:not(:disabled) {
+  background-color: #FF5722;
+  border-color: #FF5722;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(255, 107, 53, 0.3);
+}
+
+.admin-btn-secondary {
+  background-color: #ffffff;
+  color: #FF6B35;
+  border: 1px solid #FF6B35;
+}
+
+.admin-btn-secondary:hover:not(:disabled) {
+  background-color: #FF6B35;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(255, 107, 53, 0.2);
+}
+
+.admin-btn-outline {
+  background-color: #ffffff;
+  border: 1px solid #000000;
+  color: #000000;
+}
+
+.admin-btn-outline:hover:not(:disabled) {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+.admin-btn-danger {
+  background-color: #ffffff;
+  color: #dc2626;
+  border: 1px solid #dc2626;
+}
+
+.admin-btn-danger:hover:not(:disabled) {
+  background-color: #dc2626;
+  color: #ffffff;
+}
+
+.admin-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Admin Form Elements */
+.admin-form-group {
+  margin-bottom: 1.5rem;
+}
+
+.admin-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #000000;
+  font-size: 0.95rem;
+}
+
+.admin-input,
+.admin-select,
+.admin-textarea {
+  width: 100%;
+  padding: 0.875rem;
+  background-color: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 6px;
+  color: #000000;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.admin-input:focus,
+.admin-select:focus,
+.admin-textarea:focus {
+  outline: none;
+  border-color: #FF6B35;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+}
+
+.admin-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Admin datetime picker */
+.admin-input[type="datetime-local"] {
+  color-scheme: light;
+  cursor: pointer;
+}
+
+.admin-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.admin-input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Admin Badge/Status */
+.admin-badge {
+  display: inline-block;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-badge-draft {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.admin-badge-live {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.admin-badge-ended {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+/* Admin Alert Messages */
+.admin-alert {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid;
+  font-weight: 500;
+}
+
+.admin-alert-success {
+  background-color: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.admin-alert-error {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+/* Admin Table/Grid */
+.admin-auction-list {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.admin-auction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.admin-auction-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.admin-auction-info {
+  flex: 1;
+}
+
+.admin-auction-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #000000;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-auction-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.admin-meta-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-meta-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.admin-meta-value {
+  font-weight: 600;
+  color: #000000;
+}
+
+/* Admin Empty State */
+.admin-empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: #fafafa;
+  border: 1px dashed #000000;
+  border-radius: 8px;
+}
+
+.admin-empty-state p {
+  color: #6b7280;
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Admin Image Preview */
+.admin-image-preview {
+  width: 100%;
+  max-width: 320px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #000000;
+  margin-top: 0.75rem;
+}
+
+.admin-video-preview {
+  width: 100%;
+  max-width: 320px;
+  height: 180px;
+  border-radius: 6px;
+  border: 1px solid #000000;
+  margin-top: 0.75rem;
+}
+
+/* Admin Form Actions */
+.admin-form-actions {
+  display: flex;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e5e5;
+  margin-top: 1.5rem;
+}
+
+.admin-form-actions .admin-btn {
+  flex: 1;
+}
+
+.admin-form-actions .admin-btn-primary {
+  flex: 2;
+}
+
+/* Admin File Input */
+.admin-file-input {
+  display: block;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #000000;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-file-input:hover {
+  border-color: #FF6B35;
+}
+
+/* Admin Helper Text */
+.admin-helper-text {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+  display: block;
+}
+
+/* Admin Table */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  margin-top: 1rem;
+}
+
+.admin-table thead {
+  background-color: #f9fafb;
+  border-bottom: 2px solid #000000;
+}
+
+.admin-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 700;
+  color: #000000;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #000000;
+}
+
+.admin-table tbody tr {
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.admin-table td {
+  padding: 1rem;
+  color: #333333;
+  font-size: 0.95rem;
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:hover td {
+  background-color: #ffffff !important;
+}
+
+.admin-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-header-content {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .admin-logo {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .admin-auction-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .admin-auction-item .admin-btn {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+}

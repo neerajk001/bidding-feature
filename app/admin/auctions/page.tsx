@@ -178,97 +178,77 @@ export default function AdminAuctionsPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', background: 'linear-gradient(to right, #fff, #999)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+        <h1 className="admin-section-title">
           Auction Management
         </h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className={`btn ${showForm ? 'btn-outline' : 'btn-primary'}`}
+          className={`admin-btn ${showForm ? 'admin-btn-outline' : 'admin-btn-primary'}`}
         >
           {showForm ? 'View All Auctions' : '+ Create New Auction'}
         </button>
       </div>
 
       {message && (
-        <div style={{
-          padding: '1rem',
-          marginBottom: '1.5rem',
-          borderRadius: 'var(--radius-sm)',
-          backgroundColor: message?.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: message?.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          border: `1px solid ${message?.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
-        }}>
-          {message?.text}
+        <div className={`admin-alert ${message.type === 'success' ? 'admin-alert-success' : 'admin-alert-error'}`}>
+          {message.text}
         </div>
       )}
 
       {!showForm ? (
         <div>
-          <h2 style={{ marginBottom: '1.5rem', color: 'var(--color-text-secondary)', fontSize: '1.25rem' }}>All Auctions</h2>
+          <h2 style={{ marginBottom: '1.5rem', color: '#6b7280', fontSize: '1.25rem', fontWeight: 600 }}>All Auctions</h2>
           {auctions.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '1.1rem', marginBottom: '1.5rem' }}>No auctions created yet.</p>
-              <button onClick={() => setShowForm(true)} className="btn btn-primary">
+            <div className="admin-empty-state">
+              <p>No auctions created yet.</p>
+              <button onClick={() => setShowForm(true)} className="admin-btn admin-btn-primary">
                 Create Your First Auction
               </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gap: '1.5rem' }}>
+            <div className="admin-auction-list">
               {auctions.map((auction) => (
-                <div key={auction.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                      <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{auction.title}</h3>
-                      <span className={`badge badge-${auction.status}`}>
-                        {auction.status.toUpperCase()}
+                <div key={auction.id} className="admin-auction-item">
+                  <div className="admin-auction-info">
+                    <h3 className="admin-auction-title">
+                      {auction.title}
+                      <span className={`admin-badge admin-badge-${auction.status}`}>
+                        {auction.status}
                       </span>
-                    </div>
+                    </h3>
 
                     {auction.banner_image && (
-                      <div style={{ margin: '0.75rem 0 0.5rem' }}>
+                      <div style={{ margin: '0.75rem 0' }}>
                         <img
                           src={auction.banner_image}
                           alt={auction.title}
-                          style={{
-                            width: '100%',
-                            maxWidth: '320px',
-                            height: '120px',
-                            objectFit: 'cover',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--color-border)'
-                          }}
+                          className="admin-image-preview"
                         />
                       </div>
                     )}
 
                     {auction.reel_url && (
-                      <div style={{ margin: '0.5rem 0 0.5rem' }}>
+                      <div style={{ margin: '0.75rem 0' }}>
                         <video
                           src={auction.reel_url}
                           controls
-                          style={{
-                            width: '100%',
-                            maxWidth: '320px',
-                            height: '180px',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--color-border)'
-                          }}
+                          className="admin-video-preview"
                         />
                       </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                      <div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block' }}>Product ID</span>
-                        <span style={{ fontFamily: 'monospace' }}>{auction.product_id}</span>
+                    <div className="admin-auction-meta">
+                      <div className="admin-meta-item">
+                        <span className="admin-meta-label">Product ID</span>
+                        <span className="admin-meta-value" style={{ fontFamily: 'monospace' }}>{auction.product_id}</span>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block' }}>Min Increment</span>
-                        <span>${auction.min_increment}</span>
+                      <div className="admin-meta-item">
+                        <span className="admin-meta-label">Min Increment</span>
+                        <span className="admin-meta-value">₹{auction.min_increment}</span>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', display: 'block' }}>Bidding Window</span>
-                        <span style={{ fontSize: '0.9rem' }}>
+                      <div className="admin-meta-item">
+                        <span className="admin-meta-label">Bidding Window</span>
+                        <span className="admin-meta-value">
                           {new Date(auction.bidding_start_time).toLocaleDateString()}
                         </span>
                       </div>
@@ -277,7 +257,7 @@ export default function AdminAuctionsPage() {
 
                   <Link
                     href={`/admin/auctions/${auction.id}`}
-                    className="btn btn-outline"
+                    className="admin-btn admin-btn-primary"
                     style={{ marginLeft: '2rem' }}
                   >
                     Manage Auction
@@ -288,13 +268,15 @@ export default function AdminAuctionsPage() {
           )}
         </div>
       ) : (
-        <div className="card" style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <h2 style={{ marginBottom: '2rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
-            Create New Auction
-          </h2>
+        <div className="admin-card" style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <div className="admin-card-header">
+            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>
+              Create New Auction
+            </h2>
+          </div>
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="title">Auction Title</label>
+            <div className="admin-form-group">
+              <label htmlFor="title" className="admin-label">Auction Title</label>
               <input
                 type="text"
                 id="title"
@@ -302,13 +284,14 @@ export default function AdminAuctionsPage() {
                 value={formData.title}
                 onChange={handleChange}
                 required
-                placeholder="e.g., Premium Wireless Headphones"
+                placeholder="e.g., Premium Heritage Kurti"
+                className="admin-input"
               />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              <div>
-                <label htmlFor="product_id">Product ID (Shopify)</label>
+              <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                <label htmlFor="product_id" className="admin-label">Product ID (Shopify)</label>
                 <input
                   type="text"
                   id="product_id"
@@ -317,11 +300,12 @@ export default function AdminAuctionsPage() {
                   onChange={handleChange}
                   required
                   placeholder="123456789"
+                  className="admin-input"
                 />
               </div>
 
-              <div>
-                <label htmlFor="min_increment">Minimum Increment ($)</label>
+              <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                <label htmlFor="min_increment" className="admin-label">Minimum Increment (₹)</label>
                 <input
                   type="number"
                   id="min_increment"
@@ -329,15 +313,16 @@ export default function AdminAuctionsPage() {
                   value={formData.min_increment}
                   onChange={handleChange}
                   required
-                  step="0.01"
+                  step="1"
                   min="0"
-                  placeholder="5.00"
+                  placeholder="50"
+                  className="admin-input"
                 />
               </div>
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="banner_image">Banner Image (optional)</label>
+            <div className="admin-form-group">
+              <label htmlFor="banner_image" className="admin-label">Banner Image (optional)</label>
               <div style={{ display: 'grid', gap: '0.75rem' }}>
                 <input
                   type="url"
@@ -346,78 +331,66 @@ export default function AdminAuctionsPage() {
                   value={formData.banner_image}
                   onChange={handleChange}
                   placeholder="https://cdn.example.com/banner.jpg"
+                  className="admin-input"
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleBannerFileChange}
+                    className="admin-file-input"
                   />
                   {formData.banner_image && (
                     <button
                       type="button"
-                      className="btn btn-outline"
+                      className="admin-btn admin-btn-outline"
                       onClick={() => setFormData((prev) => ({ ...prev, banner_image: '' }))}
                     >
                       Clear image
                     </button>
                   )}
                 </div>
-                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                <span className="admin-helper-text">
                   Paste a URL or select from your device gallery. Max 2MB.
                 </span>
                 {formData.banner_image && (
                   <img
                     src={formData.banner_image}
                     alt="Banner preview"
-                    style={{
-                      width: '100%',
-                      maxWidth: '520px',
-                      height: '160px',
-                      objectFit: 'cover',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--color-border)'
-                    }}
+                    className="admin-image-preview"
+                    style={{ maxWidth: '520px', height: '160px' }}
                   />
                 )}
               </div>
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="reel_upload">Reel Video (optional)</label>
+            <div className="admin-form-group">
+              <label htmlFor="reel_upload" className="admin-label">Reel Video (optional)</label>
               <div style={{ display: 'grid', gap: '0.75rem' }}>
                 <input
                   id="reel_upload"
                   type="file"
                   accept="video/mp4,video/webm,video/quicktime"
                   onChange={handleReelFileChange}
+                  className="admin-file-input"
                 />
-                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                <span className="admin-helper-text">
                   Upload a short reel (MP4/WebM/MOV). Max 50MB.
                 </span>
                 {reelPreview && (
                   <video
                     src={reelPreview}
                     controls
-                    style={{
-                      width: '100%',
-                      maxWidth: '520px',
-                      height: '220px',
-                      objectFit: 'cover',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--color-border)'
-                    }}
+                    className="admin-video-preview"
+                    style={{ maxWidth: '520px', height: '220px' }}
                   />
                 )}
               </div>
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="registration_end_time" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="admin-form-group">
+              <label htmlFor="registration_end_time" className="admin-label">
                 Registration Deadline
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>
-                  (Click to select date & time)
-                </span>
               </label>
               <input
                 type="datetime-local"
@@ -427,23 +400,17 @@ export default function AdminAuctionsPage() {
                 onChange={handleChange}
                 required
                 min={new Date().toISOString().slice(0, 16)}
-                style={{ 
-                  backgroundColor: 'var(--color-surface)',
-                  border: '2px solid var(--color-border)'
-                }}
+                className="admin-input"
               />
-              <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '0.25rem', display: 'block' }}>
+              <span className="admin-helper-text">
                 Users must register before this time to participate.
               </span>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-              <div>
-                <label htmlFor="bidding_start_time" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                <label htmlFor="bidding_start_time" className="admin-label">
                   Bidding Start Time
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>
-                    (Click to select)
-                  </span>
                 </label>
                 <input
                   type="datetime-local"
@@ -453,19 +420,13 @@ export default function AdminAuctionsPage() {
                   onChange={handleChange}
                   required
                   min={new Date().toISOString().slice(0, 16)}
-                  style={{ 
-                    backgroundColor: 'var(--color-surface)',
-                    border: '2px solid var(--color-border)'
-                  }}
+                  className="admin-input"
                 />
               </div>
 
-              <div>
-                <label htmlFor="bidding_end_time" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="admin-form-group" style={{ marginBottom: 0 }}>
+                <label htmlFor="bidding_end_time" className="admin-label">
                   Bidding End Time
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>
-                    (Click to select)
-                  </span>
                 </label>
                 <input
                   type="datetime-local"
@@ -475,22 +436,20 @@ export default function AdminAuctionsPage() {
                   onChange={handleChange}
                   required
                   min={new Date().toISOString().slice(0, 16)}
-                  style={{ 
-                    backgroundColor: 'var(--color-surface)',
-                    border: '2px solid var(--color-border)'
-                  }}
+                  className="admin-input"
                 />
               </div>
             </div>
 
-            <div style={{ marginBottom: '2rem' }}>
-              <label htmlFor="status">Initial Status</label>
+            <div className="admin-form-group">
+              <label htmlFor="status" className="admin-label">Initial Status</label>
               <select
                 id="status"
                 name="status"
                 value={formData.status}
                 onChange={handleChange}
                 required
+                className="admin-select"
               >
                 <option value="draft">Draft (Hidden)</option>
                 <option value="live">Live (Active)</option>
@@ -498,20 +457,18 @@ export default function AdminAuctionsPage() {
               </select>
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+            <div className="admin-form-actions">
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="btn btn-outline"
-                style={{ flex: 1 }}
+                className="admin-btn admin-btn-outline"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="btn btn-primary"
-                style={{ flex: 2 }}
+                className="admin-btn admin-btn-primary"
               >
                 {isSubmitting ? 'Creating...' : 'Create Auction'}
               </button>
