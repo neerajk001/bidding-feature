@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     // Send email via Resend
     try {
-      await resend.emails.send({
+      const emailResult = await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
         to: normalizedEmail,
         subject: 'Your Verification Code - Indu Heritage Auctions',
@@ -172,8 +172,13 @@ export async function POST(request: NextRequest) {
           </html>
         `,
       })
+      
+      console.log('Resend API response:', emailResult)
+      console.log('Email sent successfully to:', normalizedEmail)
+      
     } catch (resendError: any) {
       console.error('Resend error:', resendError)
+      console.error('Resend error details:', JSON.stringify(resendError, null, 2))
       return NextResponse.json(
         { error: 'Failed to send verification email. Please check your email address.' },
         { status: 500 }
