@@ -317,15 +317,14 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                 ) : (
                                     <>
                                         {renderCta(primaryCta, 'btn btn-primary')}
+                                        {heroVariant !== 'empty' && (
+                                            <Link href="/auctions" className="hero-card-link">
+                                                View all auctions
+                                            </Link>
+                                        )}
                                     </>
                                 )}
                             </div>
-
-                            {heroVariant !== 'empty' && (
-                                <Link href="/auctions" className="hero-card-link">
-                                    View all auctions
-                                </Link>
-                            )}
                         </div>
 
                         <div className="hero-auction-media">
