@@ -48,13 +48,18 @@ export async function GET(
       .maybeSingle()
 
     const winningAmount = winner?.winning_amount ?? null
-    const winnerName = winner?.bidder?.name ?? null
+    const winnerBidder = winner?.bidder
+    const winnerName = Array.isArray(winnerBidder) ? winnerBidder[0]?.name ?? null : (winnerBidder as any)?.name ?? null
+    
+    const highestBidder = highestBid?.bidder
+    const highestBidderName = Array.isArray(highestBidder) ? highestBidder[0]?.name ?? null : (highestBidder as any)?.name ?? null
+    
     const useWinner = auction.status === 'ended' && winningAmount !== null
 
     return NextResponse.json({
       ...auction,
       current_highest_bid: useWinner ? winningAmount : highestBid?.amount ?? null,
-      highest_bidder_name: useWinner ? winnerName : highestBid?.bidder?.name ?? null,
+      highest_bidder_name: useWinner ? winnerName : highestBidderName,
       total_bids: count ?? 0,
       winner_name: winnerName,
       winning_amount: winningAmount,

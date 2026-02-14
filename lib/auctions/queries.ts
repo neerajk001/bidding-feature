@@ -49,9 +49,9 @@ export async function getAuctions(includeEnded: boolean = false) {
                     : { data: null }
 
                 const winningAmount = winner?.winning_amount ?? null
-                const winnerName = winner?.bidder?.name ?? null
+                const winnerName = Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name
                 const displayAmount = winningAmount ?? highestBid?.amount ?? null
-                const displayName = winnerName ?? highestBid?.bidder?.name ?? null
+                const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null
 
                 const now = new Date().toISOString()
                 const isExpired = auction.status === 'live' && auction.bidding_end_time < now
@@ -181,9 +181,9 @@ export async function getAuctionDetail(id: string) {
         return {
             ...auction,
             current_highest_bid: winner?.winning_amount ?? highestBid?.amount ?? null,
-            highest_bidder_name: winner?.bidder?.name ?? highestBid?.bidder?.name ?? null,
+            highest_bidder_name: (Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name) ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null,
             total_bids: count ?? 0,
-            winner_name: winner?.bidder?.name ?? null,
+            winner_name: Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name,
             winning_amount: winner?.winning_amount ?? null,
             winner_declared_at: winner?.declared_at ?? null,
             min_increment: auction.min_increment ?? 0

@@ -37,12 +37,12 @@ export async function GET(
       .eq('auction_id', auction.id)
       .order('amount', { ascending: false })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle() as { data: { amount: number; bidder: { name: string } | { name: string }[] | null } | null }
 
     return NextResponse.json({
       ...auction,
       current_highest_bid: highestBid?.amount ?? null,
-      highest_bidder_name: highestBid?.bidder?.name ?? null
+      highest_bidder_name: Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name ?? null
     })
   } catch (error) {
     console.error('API error:', error)

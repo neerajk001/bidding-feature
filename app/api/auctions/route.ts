@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
           : { data: null }
 
         const winningAmount = winner?.winning_amount ?? null
-        const winnerName = winner?.bidder?.name ?? null
+        const winnerName = Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name ?? null
         const displayAmount = winningAmount ?? highestBid?.amount ?? null
-        const displayName = winnerName ?? highestBid?.bidder?.name ?? null
+        const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null
 
         return {
           ...auction,
