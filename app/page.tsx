@@ -2,6 +2,7 @@
 import PublicShell from '@/components/public/PublicShell'
 import LandingHero from '@/components/landing/LandingHero'
 import AuctionGrid from '@/components/landing/AuctionGrid'
+import ShopifyDrops from '@/components/landing/ShopifyDrops'
 import { getAuctions, getActiveAuctionState, getAuctionDetail } from '@/lib/auctions/queries'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
@@ -111,53 +112,11 @@ export default async function HomePage() {
         activeDetail={activeDetail}
       />
 
-      <section className="landing-section landing-section-alt" id="shopify-drops">
-        <div className="container">
-          <div className="landing-section-header">
-            <div className="section-heading">
-              <span className="eyebrow">Shopify Drops</span>
-              <h2 className="landing-section-title">New drops to check out and buy.</h2>
-              <p className="landing-section-subtitle">
-                Limited-run collections curated for direct purchase while the auction house prepares the next lot.
-              </p>
-            </div>
-            <a href={shopifyStoreUrl} className="btn btn-primary" {...shopifyLinkProps}>
-              Check it out and buy
-            </a>
-          </div>
-
-          <div className="landing-drops-grid">
-            {shopifyDrops.length > 0 ? (
-              shopifyDrops.map((drop: any) => (
-                <div className={`drop-card drop-card-${drop.tone}`} key={drop.id}>
-                  {drop.image_url && (
-                    <div style={{ marginBottom: '1rem', borderRadius: '12px', overflow: 'hidden', height: '180px', position: 'relative' }}>
-                      <img 
-                        src={drop.image_url} 
-                        alt={drop.title} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </div>
-                  )}
-                  <div className="drop-card-top">
-                    <span className="pill pill-neutral">Shopify drop</span>
-                    <span className="drop-card-price">{drop.price}</span>
-                  </div>
-                  <h3>{drop.title}</h3>
-                  <p>{drop.description}</p>
-                  <a href={drop.link_url} className="drop-card-link" target="_blank" rel="noreferrer">
-                    Check it out and buy
-                  </a>
-                </div>
-              ))
-            ) : (
-              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
-                <p>No drops available at the moment. Check back soon!</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+      <ShopifyDrops
+        shopifyDrops={shopifyDrops}
+        shopifyStoreUrl={shopifyStoreUrl}
+        shopifyLinkProps={shopifyLinkProps}
+      />
 
       <section className="landing-section">
         <div className="container">
