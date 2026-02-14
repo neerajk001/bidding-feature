@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useUser } from '@clerk/nextjs'
 import { supabase } from '@/lib/supabase/client'
 import PublicShell from '@/components/public/PublicShell'
 import PhoneOtpVerification from '@/components/auth/PhoneOtpVerification'
@@ -55,7 +54,7 @@ export default function AuctionDetailPage() {
   const [registrationSubmitting, setRegistrationSubmitting] = useState(false)
   const [bidSubmitting, setBidSubmitting] = useState(false)
   const [now, setNow] = useState(new Date())
-  const { isLoaded: clerkLoaded, isSignedIn, user } = useUser()
+  const [checkingUser, setCheckingUser] = useState(false)
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -107,38 +106,45 @@ export default function AuctionDetailPage() {
     if (savedBidderId) {
       setBidderId(savedBidderId)
     }
-  }, [auction])
 
-  useEffect(() => {
-    if (!auction || !clerkLoaded || !isSignedIn || !user) return
-    const verifiedPhone =
-      user.primaryPhoneNumber?.verification?.status === 'verified'
-        ? user.primaryPhoneNumber
-        : user.phoneNumbers.find((phoneNumber) => phoneNumber.verification?.status === 'verified') ||
-          null
+    const savedPhone = localStorage.getItem('auction_user_phone') || ''
+    const savedEmail = localStorage.getItem('auction_user_email') || ''
+    const savedName = localStorage.getItem('auction_user_name') || ''
 
-    if (!verifiedPhone) return
+    if (!savedPhone && !savedEmail) return
 
-    const name =
-      user.fullName ||
-      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-      'Verified bidder'
-    const email = user.primaryEmailAddress?.emailAddress || ''
-    const phone = verifiedPhone.phoneNumber
-
-    const verifiedProfile: VerificationProfile = {
-      userId: user.id,
-      name,
-      email,
-      phone
+    const verifySavedUser = async () => {
+      setCheckingUser(true)
+      try {
+        const res = await fetch('/api/auth/check-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: savedPhone, email: savedEmail })
+        })
+        const data = await res.json()
+        if (data.verified && data.user) {
+          const verifiedProfile: VerificationProfile = {
+            userId: data.user_id || '',
+            name: data.user.name || savedName,
+            email: data.user.email || savedEmail,
+            phone: data.user.phone || savedPhone
+          }
+          setProfile(verifiedProfile)
+          setRegistrationForm({
+            name: verifiedProfile.name,
+            email: verifiedProfile.email,
+            phone: verifiedProfile.phone
+          })
+        }
+      } catch {
+        // Ignore check errors and fall back to OTP flow
+      } finally {
+        setCheckingUser(false)
+      }
     }
-    setProfile(verifiedProfile)
-    setRegistrationForm({
-      name,
-      email,
-      phone
-    })
-  }, [auction, clerkLoaded, isSignedIn, user])
+
+    verifySavedUser()
+  }, [auction])
 
   useEffect(() => {
     if (!auction) return

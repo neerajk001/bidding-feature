@@ -4,12 +4,12 @@ import { finalizeEndedAuctions } from '@/lib/auctions/finalizeEndedAuctions'
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await finalizeEndedAuctions()
 
-    const { id } = params
+    const { id } = await params
 
     if (!id) {
       return NextResponse.json({ error: 'Auction ID is required' }, { status: 400 })

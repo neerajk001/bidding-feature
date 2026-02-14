@@ -1,68 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth, currentUser } from '@clerk/nextjs/server'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = auth()
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Authentication required', requires_verification: true },
-        { status: 401 }
-      )
-    }
-
-    const clerkUser = await currentUser()
-    if (!clerkUser) {
-      return NextResponse.json(
-        { error: 'Authentication required', requires_verification: true },
-        { status: 401 }
-      )
-    }
-
-    const verifiedPhone =
-      clerkUser.primaryPhoneNumber?.verification?.status === 'verified'
-        ? clerkUser.primaryPhoneNumber
-        : clerkUser.phoneNumbers.find((phoneNumber) => phoneNumber.verification?.status === 'verified') ||
-          null
-
-    if (!verifiedPhone) {
-      return NextResponse.json(
-        {
-          error: 'Phone number not verified',
-          requires_verification: true,
-          message: 'Please verify your phone number with Clerk before registering'
-        },
-        { status: 403 }
-      )
-    }
-
     const body = await request.json()
-    const { auction_id, name: bodyName, email: bodyEmail } = body
-
-    const name =
-      clerkUser.fullName ||
-      [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') ||
-      bodyName ||
-      ''
-    const email =
-      clerkUser.primaryEmailAddress?.emailAddress ||
-      clerkUser.emailAddresses[0]?.emailAddress ||
-      bodyEmail ||
-      ''
-    const phone = verifiedPhone.phoneNumber
+    const { auction_id, name, phone, email } = body
 
     // Validate required fields
-    if (!auction_id) {
+    if (!auction_id || !name || !phone || !email) {
       return NextResponse.json(
-        { error: 'Auction ID is required' },
+        { error: 'All fields are required: auction_id, name, phone, email' },
         { status: 400 }
       )
     }
 
-    if (!name || !email || !phone) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { error: 'Complete your Clerk profile (name, email, and verified phone)' },
+        { error: 'Invalid email format' },
         { status: 400 }
       )
     }
@@ -92,49 +48,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // --- CLERK VERIFIED USER LOGIC ---
-    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
-    let userRecordId: string | null = null
+    // --- UNIFIED USER LOGIC WITH OTP VERIFICATION ---
+    let userId = null
+    let userVerified = false
 
+    // Normalize phone number
+    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
+
+    // Attempt to find existing user by email or phone
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, phone_verified')
       .or(`email.eq.${email},phone.eq.${normalizedPhone}`)
       .maybeSingle()
 
-    if (existingUser?.id) {
-      userRecordId = existingUser.id
-      await supabaseAdmin
-        .from('users')
-        .update({
-          name,
-          email,
-          phone: normalizedPhone,
-          phone_verified: true,
-          otp_verified_at: new Date().toISOString()
-        })
-        .eq('id', existingUser.id)
-    } else {
-      const { data: newUser, error: insertUserError } = await supabaseAdmin
-        .from('users')
-        .insert({
-          name,
-          email,
-          phone: normalizedPhone,
-          phone_verified: true,
-          otp_verified_at: new Date().toISOString()
-        })
-        .select('id')
-        .single()
+    if (existingUser) {
+      userId = existingUser.id
+      userVerified = existingUser.phone_verified || false
 
-      if (insertUserError) {
+      // Check if user is verified
+      if (!userVerified) {
         return NextResponse.json(
-          { error: 'Failed to create user record', details: insertUserError.message },
-          { status: 500 }
+          {
+            error: 'Phone number not verified',
+            requires_verification: true,
+            message: 'Please verify your phone number with OTP before registering'
+          },
+          { status: 403 }
         )
       }
-
-      userRecordId = newUser.id
+    } else {
+      // New user must verify phone first
+      return NextResponse.json(
+        {
+          error: 'Phone number not verified',
+          requires_verification: true,
+          message: 'Please verify your phone number with OTP before registering'
+        },
+        { status: 403 }
+      )
     }
     // --------------------------
 
@@ -145,10 +97,10 @@ export async function POST(request: NextRequest) {
       .eq('auction_id', auction_id)
 
     // Check by user_id OR phone to prevent duplicates
-    if (userRecordId) {
-      query = query.or(`phone.eq.${normalizedPhone},user_id.eq.${userRecordId}`)
+    if (userId) {
+      query = query.or(`phone.eq.${phone},user_id.eq.${userId}`)
     } else {
-      query = query.eq('phone', normalizedPhone)
+      query = query.eq('phone', phone)
     }
 
     const { data: existingBidder } = await query.maybeSingle()
@@ -164,12 +116,12 @@ export async function POST(request: NextRequest) {
     const bidderData: any = {
       auction_id,
       name,
-      phone: normalizedPhone,
+      phone,
       email
     }
 
-    if (userRecordId) {
-      bidderData.user_id = userRecordId
+    if (userId) {
+      bidderData.user_id = userId
     }
 
     const { data: newBidder, error: insertError } = await supabaseAdmin
