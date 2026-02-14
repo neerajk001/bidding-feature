@@ -91,6 +91,12 @@ export default function EmailOtpVerification({
       setSuccess(`Verification code sent to ${email.trim()}. Please check your inbox.`)
       setCooldown(60) // 60 second cooldown before resend
       
+      // Development mode: show OTP in console and alert
+      if (checkData.dev_otp) {
+        console.log('🔑 DEV MODE - OTP Code:', checkData.dev_otp)
+        alert(`DEV MODE - Your OTP: ${checkData.dev_otp}\n\nThis will be removed once email domain is configured.`)
+      }
+      
     } catch (err: any) {
       console.error('Error sending OTP:', err)
       const errorMessage = err.message || 'Failed to send verification code'
