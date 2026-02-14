@@ -317,7 +317,6 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                 ) : (
                                     <>
                                         {renderCta(primaryCta, 'btn btn-primary')}
-                                        {renderCta(secondaryCta, 'btn btn-outline')}
                                     </>
                                 )}
                             </div>
