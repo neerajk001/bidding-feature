@@ -878,7 +878,7 @@ tr:hover td {
 /* Landing Page */
 .landing-hero {
   position: relative;
-  padding: 3.75rem 0 4rem;
+  padding: 2.5rem 0 3rem;
   overflow: hidden;
   --hero-parallax: 0px;
   background: radial-gradient(circle at top left, rgba(210, 180, 140, 0.25), transparent 60%),
@@ -917,8 +917,19 @@ tr:hover td {
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 3rem;
+  gap: 2rem;
   align-items: center;
+}
+
+@media (min-width: 900px) {
+  .landing-hero-inner {
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 2.5rem;
+  }
+  
+  .landing-hero-card {
+    max-width: 100%;
+  }
 }
 
 .landing-hero-inner>* {
@@ -973,13 +984,14 @@ tr:hover td {
 
 .landing-hero-card {
   position: relative;
-  padding: 1.5rem;
-  border-radius: 26px;
+  padding: 1rem;
+  border-radius: 24px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  max-width: 520px;
+  max-width: 100%;
+  width: 100%;
   justify-self: center;
 }
 
@@ -1773,19 +1785,19 @@ tr:hover td {
 .hero-card-horizontal .hero-auction-media {
   position: relative;
   width: 100%;
-  height: 320px;
-  /* Increased mobile height */
+  height: 240px;
+  /* Reduced mobile height */
   background: rgba(255, 255, 255, 0.7);
   z-index: 1;
 }
 
 .hero-card-horizontal .hero-auction-body {
   position: relative;
-  padding: 2.5rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1rem;
   z-index: 1;
 }
 
@@ -1824,22 +1836,23 @@ tr:hover td {
 
 .hero-card-title {
   font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3.2vw, 2.6rem);
-  line-height: 1.15;
+  font-size: clamp(1.4rem, 2.5vw, 2rem);
+  line-height: 1.2;
   color: var(--hero-ink, #2a1a12);
 }
 
 .hero-card-summary {
   color: var(--hero-muted, #6b4b3f);
-  line-height: 1.6;
+  line-height: 1.5;
+  font-size: 0.9rem;
 }
 
 .hero-card-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
-  padding: 1.25rem;
-  border-radius: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(120, 93, 72, 0.16);
 }
@@ -1970,28 +1983,64 @@ tr:hover td {
   .hero-card-horizontal {
     flex-direction: row;
     /* Content | Image */
-    min-height: 550px;
-    /* Increased height for breathing room */
+    min-height: 320px;
+    max-height: 400px;
+    /* Compact height for better viewport fit */
     align-items: stretch;
   }
 
   .hero-card-horizontal .hero-auction-body {
-    flex: 1;
-    padding: 4rem 3rem;
-    /* More generous padding */
-    padding-right: 1.5rem;
-    max-width: 50%;
+    flex: 1.2;
+    padding: 2rem 1.5rem;
+    /* More compact padding */
+    padding-right: 1rem;
+    max-width: 55%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }
 
   .hero-card-horizontal .hero-auction-media {
     flex: 1;
     height: auto;
     min-height: 100%;
-    /* No cropping container */
+    max-height: 400px;
+    /* Match max height */
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
-    /* Add padding so image floats nicely inside */
+    padding: 1rem;
+    /* Reduced padding */
+  }
+}
+
+/* Optimize for smaller laptops (14-inch screens ~1366px wide) */
+@media (min-width: 900px) and (max-width: 1440px) {
+  .landing-hero {
+    padding: 2rem 0 2.5rem;
+  }
+  
+  .hero-card-horizontal {
+    min-height: 300px;
+    max-height: 360px;
+  }
+  
+  .hero-card-horizontal .hero-auction-body {
+    padding: 1.5rem 1.25rem;
+    gap: 0.875rem;
+  }
+  
+  .hero-card-horizontal .hero-auction-media {
+    max-height: 360px;
+    padding: 0.75rem;
+  }
+  
+  .hero-card-title {
+    font-size: clamp(1.3rem, 2.2vw, 1.75rem);
+  }
+  
+  .hero-card-metrics {
+    padding: 0.875rem;
+    gap: 0.625rem;
   }
 }
