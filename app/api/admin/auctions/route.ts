@@ -108,10 +108,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Convert datetime-local strings to ISO format for Supabase
-    const registrationEndUTC = new Date(registration_end_time).toISOString()
-    const biddingStartUTC = new Date(bidding_start_time).toISOString()
-    const biddingEndUTC = new Date(bidding_end_time).toISOString()
+    // Convert datetime-local strings (treated as IST) to ISO format for Supabase
+    // We append the IST offset (+05:30) so that the input time "22:00" is treated as "22:00 IST"
+    // instead of "22:00 UTC". This ensures it displays as "22:00" for users in India.
+    const toIST = (dateStr: string) => {
+      // If it already has an offset or Z, leave it, otherwise assume IST
+      if (dateStr.includes('Z') || dateStr.includes('+')) return new Date(dateStr)
+      return new Date(`${dateStr}+05:30`)
+    }
+
+    const registrationEndUTC = toIST(registration_end_time).toISOString()
+    const biddingStartUTC = toIST(bidding_start_time).toISOString()
+    const biddingEndUTC = toIST(bidding_end_time).toISOString()
 
     // Validate time logic
     const regEnd = new Date(registrationEndUTC)
