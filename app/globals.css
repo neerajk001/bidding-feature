@@ -2602,27 +2602,41 @@ tr:hover td {
     letter-spacing: 0.12em;
   }
   
-  /* Hero Section */
+  /* Hero Section - CRITICAL MOBILE FIXES */
   .landing-hero {
-    padding: 2.5rem 0 2rem !important;
+    padding: 2rem 0 2rem !important;
     min-height: auto !important;
   }
   
   .landing-hero-inner {
+    grid-template-columns: 1fr !important;
     gap: 1.5rem !important;
+  }
+  
+  .landing-hero-copy {
+    order: 1;
+    gap: 1rem !important;
+  }
+  
+  .landing-hero-card {
+    order: 2;
+    padding: 0.75rem !important;
   }
   
   .eyebrow {
     font-size: 0.7rem !important;
   }
   
-  .hero-headline {
-    font-size: 2rem !important;
-    line-height: 1.1 !important;
+  .hero-headline,
+  .landing-hero-title {
+    font-size: 1.75rem !important;
+    line-height: 1.15 !important;
   }
   
-  .heroDescription {
+  .heroDescription,
+  .landing-hero-subtitle {
     font-size: 0.95rem !important;
+    line-height: 1.5 !important;
   }
   
   .landing-hero-actions {
@@ -2633,6 +2647,97 @@ tr:hover td {
   
   .landing-hero-actions .btn {
     width: 100%;
+  }
+  
+  .landing-hero-badges {
+    gap: 0.5rem;
+  }
+  
+  .landing-badge {
+    font-size: 0.65rem;
+    padding: 0.35rem 0.75rem;
+  }
+  
+  /* Hero Card - Force Column Layout on Mobile */
+  .hero-card-horizontal,
+  .hero-auction {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    min-height: auto !important;
+    max-height: none !important;
+  }
+  
+  .hero-card-horizontal .hero-auction-body {
+    order: 2;
+    padding: 1.25rem !important;
+    max-width: 100% !important;
+    flex: none !important;
+  }
+  
+  .hero-card-horizontal .hero-auction-media {
+    order: 1;
+    height: 220px !important;
+    min-height: 220px !important;
+    max-height: 220px !important;
+    width: 100% !important;
+    flex: none !important;
+    padding: 0 !important;
+  }
+  
+  .hero-card-status {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .hero-status-pill {
+    font-size: 0.6rem;
+    padding: 0.3rem 0.7rem;
+  }
+  
+  .hero-status-time {
+    font-size: 0.75rem;
+  }
+  
+  .hero-card-title {
+    font-size: 1.25rem !important;
+    margin-bottom: 0.5rem;
+  }
+  
+  .hero-card-summary {
+    font-size: 0.9rem;
+  }
+  
+  .hero-card-metrics {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+    padding: 1rem !important;
+  }
+  
+  .hero-card-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .hero-card-actions .btn {
+    width: 100%;
+  }
+  
+  .hero-bid-row {
+    flex-direction: column !important;
+    gap: 0.75rem;
+  }
+  
+  .hero-bid-input {
+    width: 100% !important;
+  }
+  
+  .hero-bid-button {
+    width: 100% !important;
+  }
+  
+  .hero-card-art {
+    height: 220px;
   }
   
   /* Hero Auction Card */
