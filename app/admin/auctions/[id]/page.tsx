@@ -271,10 +271,6 @@ export default function AuctionDetailPage() {
         </div>
 
         <div className="card" style={{
-          background: auction.status === 'ended'
-            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)'
-            : 'linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.05) 100%)',
-          borderColor: auction.status === 'ended' ? 'var(--color-success)' : 'var(--color-primary)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',

@@ -8,7 +8,7 @@ function LoginForm() {
   const { status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/admin/auctions'
+  const callbackUrl = searchParams.get('callbackUrl') || '/admin'
 
   useEffect(() => {
     if (status === 'authenticated') {

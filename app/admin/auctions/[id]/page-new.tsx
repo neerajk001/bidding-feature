@@ -271,8 +271,6 @@ export default function AuctionDetailPage() {
         </div>
 
         <div className="admin-card" style={{
-          background: auction.status === 'ended' ? '#dcfce7' : '#fff5ed',
-          borderColor: auction.status === 'ended' ? '#166534' : '#FF6B35',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',

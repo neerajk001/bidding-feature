@@ -15,10 +15,10 @@ export default function AdminLayout({
               🔧 Admin Panel
             </h1>
             <Link
-              href="/admin/auctions"
+              href="/admin"
               className="admin-nav-link"
             >
-              Manage Auctions
+              Dashboard
             </Link>
           </div>
           <Link
