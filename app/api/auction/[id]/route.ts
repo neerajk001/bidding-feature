@@ -56,15 +56,24 @@ export async function GET(
     
     const useWinner = auction.status === 'ended' && winningAmount !== null
 
-    return NextResponse.json({
-      ...auction,
-      current_highest_bid: useWinner ? winningAmount : highestBid?.amount ?? null,
-      highest_bidder_name: useWinner ? winnerName : highestBidderName,
-      total_bids: count ?? 0,
-      winner_name: winnerName,
-      winning_amount: winningAmount,
-      winner_declared_at: winner?.declared_at ?? null
-    })
+    return NextResponse.json(
+      {
+        ...auction,
+        current_highest_bid: useWinner ? winningAmount : highestBid?.amount ?? null,
+        highest_bidder_name: useWinner ? winnerName : highestBidderName,
+        total_bids: count ?? 0,
+        winner_name: winnerName,
+        winning_amount: winningAmount,
+        winner_declared_at: winner?.declared_at ?? null
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    )
   } catch (error) {
     console.error('API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

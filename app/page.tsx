@@ -6,8 +6,9 @@ import ShopifyDrops from '@/components/landing/ShopifyDrops'
 import { getAuctions, getActiveAuctionState, getAuctionDetail } from '@/lib/auctions/queries'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-// Revalidate page every 30 seconds to show new auctions
-export const revalidate = 30
+// Disable caching for real-time auction updates
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const shopifyStoreUrl = process.env.NEXT_PUBLIC_SHOPIFY_STORE_URL || 'https://induheritage.com'
 const shopifyLinkProps = shopifyStoreUrl.startsWith('http')

@@ -35,7 +35,16 @@ export async function GET() {
     }
 
     if (!auctions || auctions.length === 0) {
-      return NextResponse.json({ exists: false })
+      return NextResponse.json(
+        { exists: false },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }
+      )
     }
 
     // Find live auction (highest priority)
@@ -45,12 +54,21 @@ export async function GET() {
     })
 
     if (liveAuction) {
-      return NextResponse.json({
-        exists: true,
-        auction_id: liveAuction.id,
-        phase: 'live',
-        cta: 'Place Bid'
-      })
+      return NextResponse.json(
+        {
+          exists: true,
+          auction_id: liveAuction.id,
+          phase: 'live',
+          cta: 'Place Bid'
+        },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }
+      )
     }
 
     // Find registration-open auction (lower priority)
@@ -60,16 +78,34 @@ export async function GET() {
     })
 
     if (registrationAuction) {
-      return NextResponse.json({
-        exists: true,
-        auction_id: registrationAuction.id,
-        phase: 'registration',
-        cta: 'Register Now'
-      })
+      return NextResponse.json(
+        {
+          exists: true,
+          auction_id: registrationAuction.id,
+          phase: 'registration',
+          cta: 'Register Now'
+        },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        }
+      )
     }
 
     // No active auction found
-    return NextResponse.json({ exists: false })
+    return NextResponse.json(
+      { exists: false },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      }
+    )
 
   } catch (error) {
     console.error('API error:', error)
