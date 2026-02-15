@@ -203,12 +203,14 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
             ? [
                 { label: 'Registration ends', value: formatDateTime(activeDetail?.registration_end_time) },
                 { label: 'Auction starts', value: formatDateTime(activeDetail?.bidding_start_time) },
+                ...(activeDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(activeDetail?.base_price) }] : []),
                 { label: 'Bid increment', value: formatCurrency(activeDetail?.min_increment) },
             ]
             : heroVariant === 'upcoming'
                 ? [
                     { label: 'Auction starts', value: formatDateTime(activeDetail?.bidding_start_time) },
                     { label: 'Registration closes', value: formatDateTime(activeDetail?.registration_end_time) },
+                    ...(activeDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(activeDetail?.base_price) }] : []),
                     { label: 'Bid increment', value: formatCurrency(activeDetail?.min_increment) },
                 ]
                 : heroVariant === 'closed'
@@ -307,7 +309,11 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                         <input
                                             type="text"
                                             disabled
-                                            placeholder={`Next bid: ${formatCurrency((activeDetail.current_highest_bid || 0) + (activeDetail.min_increment || 0))}`}
+                                            placeholder={`Next bid: ${formatCurrency(
+                                                (activeDetail.current_highest_bid || 0) > 0 
+                                                    ? (activeDetail.current_highest_bid || 0) + (activeDetail.min_increment || 0)
+                                                    : (activeDetail.base_price || activeDetail.min_increment || 0)
+                                            )}`}
                                             className="hero-bid-input"
                                         />
                                         <Link href={`/auction/${activeDetail.id}`} className="btn hero-bid-button">

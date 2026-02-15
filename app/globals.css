@@ -171,15 +171,16 @@ textarea {
 
 /* Enhanced datetime-local input styling */
 input[type="datetime-local"] {
-  color-scheme: light;
+  color-scheme: dark;
   cursor: pointer;
-  color: #000000 !important;
+  color: var(--color-text-primary);
 }
 
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
   opacity: 0.8;
   transition: var(--transition);
+  filter: brightness(0.9);
 }
 
 input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
@@ -189,7 +190,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
 
 /* Ensure date input text is visible */
 input[type="datetime-local"]::-webkit-datetime-edit {
-  color: #000000 !important;
+  color: var(--color-text-primary);
 }
 
 input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
@@ -197,7 +198,7 @@ input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
 }
 
 input[type="datetime-local"]::-webkit-datetime-edit-text {
-  color: #666666 !important;
+  color: var(--color-text-secondary);
   padding: 0 0.2em;
 }
 
@@ -207,7 +208,7 @@ input[type="datetime-local"]::-webkit-datetime-edit-year-field,
 input[type="datetime-local"]::-webkit-datetime-edit-hour-field,
 input[type="datetime-local"]::-webkit-datetime-edit-minute-field,
 input[type="datetime-local"]::-webkit-datetime-edit-ampm-field {
-  color: #000000 !important;
+  color: var(--color-text-primary);
   padding: 0 0.2em;
 }
 
@@ -581,6 +582,13 @@ tr:hover td {
   color: var(--color-text-secondary);
 }
 
+.pill-live {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-weight: 700;
+}
+
 .grid {
   display: grid;
   gap: 2rem;
@@ -624,7 +632,7 @@ tr:hover td {
 .auction-card-image img,
 .auction-detail-image img {
   width: 100%;
-  aspect-ratio: 3/4;
+  aspect-ratio: 2/3;
   height: auto;
   object-fit: cover;
   display: block;
@@ -1492,6 +1500,26 @@ tr:hover td {
     position: static;
   }
 
+  .auction-detail-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .auction-detail-header > div:last-child {
+    width: 100%;
+    align-items: flex-start !important;
+  }
+
+  .auction-detail-header form {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .auction-detail-header form input {
+    flex: 1;
+    min-width: 120px;
+  }
+
   .hero-mini-card {
     grid-template-columns: 1fr;
   }
@@ -2213,6 +2241,24 @@ tr:hover td {
 .admin-input[type="datetime-local"] {
   color-scheme: light;
   cursor: pointer;
+  color: #000000 !important;
+}
+
+.admin-input[type="datetime-local"]::-webkit-datetime-edit {
+  color: #000000 !important;
+}
+
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-text {
+  color: #666666 !important;
+}
+
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-month-field,
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-day-field,
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-year-field,
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-hour-field,
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-minute-field,
+.admin-input[type="datetime-local"]::-webkit-datetime-edit-ampm-field {
+  color: #000000 !important;
 }
 
 .admin-input[type="datetime-local"]::-webkit-calendar-picker-indicator {

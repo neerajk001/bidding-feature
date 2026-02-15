@@ -7,6 +7,7 @@ export interface AuctionSummary {
     bidding_start_time: string
     bidding_end_time: string
     min_increment: number
+    base_price?: number | null
     banner_image?: string | null
     current_highest_bid?: number | null
     total_bids?: number | null

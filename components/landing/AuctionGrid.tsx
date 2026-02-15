@@ -161,7 +161,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                         {upcomingAuctions.length > 0 ? (
                             upcomingAuctions.map((auction) => {
                                 const startAt = auction.bidding_start_time || auction.bidding_end_time
-                                const startingBid = auction.min_increment ?? auction.current_highest_bid ?? 0
+                                const startingBid = auction.base_price ?? auction.min_increment ?? auction.current_highest_bid ?? 0
 
                                 return (
                                     <Link href={`/auction/${auction.id}`} key={auction.id} className="auction-tile glass-tile">

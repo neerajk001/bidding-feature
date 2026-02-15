@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Get auction details
     const { data: auction, error: auctionError } = await supabaseAdmin
       .from('auctions')
-      .select('id, status, min_increment, bidding_start_time, bidding_end_time')
+      .select('id, status, min_increment, base_price, bidding_start_time, bidding_end_time')
       .eq('id', auction_id)
       .single()
 
@@ -89,15 +89,34 @@ export async function POST(request: NextRequest) {
 
     const currentHighestBid = highestBidData ? highestBidData.amount : 0
 
-    // Validate bid amount meets minimum increment requirement
-    const minimumBid = currentHighestBid + auction.min_increment
+    // Validate bid amount
+    // If there are no bids yet (currentHighestBid = 0), check against base_price
+    // If there are existing bids, check against min_increment
+    let minimumBid: number
+    let errorMessage: string
+
+    if (currentHighestBid === 0) {
+      // First bid: must meet base_price if set, otherwise any positive amount
+      if (auction.base_price && auction.base_price > 0) {
+        minimumBid = auction.base_price
+        errorMessage = `First bid must be at least ₹${minimumBid.toFixed(2)} (base price)`
+      } else {
+        minimumBid = auction.min_increment
+        errorMessage = `First bid must be at least ₹${minimumBid.toFixed(2)}`
+      }
+    } else {
+      // Subsequent bids: must be current highest + min_increment
+      minimumBid = currentHighestBid + auction.min_increment
+      errorMessage = `Bid must be at least ₹${minimumBid.toFixed(2)}`
+    }
 
     if (amount < minimumBid) {
       return NextResponse.json(
         {
-          error: `Bid must be at least ${minimumBid.toFixed(2)}`,
+          error: errorMessage,
           current_highest_bid: currentHighestBid,
           min_increment: auction.min_increment,
+          base_price: auction.base_price,
           minimum_required_bid: minimumBid
         },
         { status: 400 }

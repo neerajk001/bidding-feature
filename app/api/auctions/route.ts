@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment')
+      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price')
       .in('status', statuses)
       .order('bidding_start_time', { ascending: false })
 

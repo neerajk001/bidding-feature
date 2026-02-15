@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Build query
     let query = supabaseAdmin
       .from('users')
-      .select('id, phone_verified, name, email, phone')
+      .select('id, phone_verified, email_verified, name, email, phone')
 
     if (normalizedPhone && email) {
       query = query.or(`phone.eq.${normalizedPhone},email.eq.${email}`)
@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await query.maybeSingle()
 
-    if (user && user.phone_verified) {
+    // Check if user is verified (either phone or email)
+    if (user && (user.phone_verified || user.email_verified)) {
       return NextResponse.json({
         success: true,
         verified: true,

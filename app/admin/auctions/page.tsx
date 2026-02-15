@@ -11,6 +11,7 @@ interface Auction {
   bidding_start_time: string
   bidding_end_time: string
   min_increment: number
+  base_price?: number | null
   banner_image?: string | null
   reel_url?: string | null
 }
@@ -22,6 +23,7 @@ export default function AdminAuctionsPage() {
     title: '',
     product_id: '',
     min_increment: '',
+    base_price: '',
     banner_image: '',
     registration_end_time: '',
     bidding_start_time: '',
@@ -59,6 +61,9 @@ export default function AdminAuctionsPage() {
       body.append('title', formData.title)
       body.append('product_id', formData.product_id)
       body.append('min_increment', formData.min_increment)
+      if (formData.base_price) {
+        body.append('base_price', formData.base_price)
+      }
       body.append('registration_end_time', formData.registration_end_time)
       body.append('bidding_start_time', formData.bidding_start_time)
       body.append('bidding_end_time', formData.bidding_end_time)
@@ -89,6 +94,7 @@ export default function AdminAuctionsPage() {
         title: '',
         product_id: '',
         min_increment: '',
+        base_price: '',
         banner_image: '',
         registration_end_time: '',
         bidding_start_time: '',
@@ -246,6 +252,12 @@ export default function AdminAuctionsPage() {
                         <span className="admin-meta-label">Min Increment</span>
                         <span className="admin-meta-value">₹{auction.min_increment}</span>
                       </div>
+                      {auction.base_price && (
+                        <div className="admin-meta-item">
+                          <span className="admin-meta-label">Base Price</span>
+                          <span className="admin-meta-value">₹{auction.base_price}</span>
+                        </div>
+                      )}
                       <div className="admin-meta-item">
                         <span className="admin-meta-label">Bidding Window</span>
                         <span className="admin-meta-value">
@@ -319,6 +331,24 @@ export default function AdminAuctionsPage() {
                   className="admin-input"
                 />
               </div>
+            </div>
+
+            <div className="admin-form-group">
+              <label htmlFor="base_price" className="admin-label">Base Price (₹) - Optional</label>
+              <input
+                type="number"
+                id="base_price"
+                name="base_price"
+                value={formData.base_price}
+                onChange={handleChange}
+                step="1"
+                min="0"
+                placeholder="Leave empty to start from ₹0"
+                className="admin-input"
+              />
+              <span className="admin-helper-text">
+                If set, the first bid must be at least this amount. If left empty, auction starts from ₹0.
+              </span>
             </div>
 
             <div className="admin-form-group">

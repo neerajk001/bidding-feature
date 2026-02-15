@@ -18,7 +18,7 @@ export async function GET(
     const { data: auction, error } = await supabaseAdmin
       .from('auctions')
       .select(
-        'id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment'
+        'id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price'
       )
       .eq('id', id)
       .single()

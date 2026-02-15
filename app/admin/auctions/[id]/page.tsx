@@ -232,15 +232,15 @@ export default function AuctionDetailPage() {
               </div>
               <div>
                 <label>Registration End</label>
-                <input type="datetime-local" name="registration_end_time" value={formData.registration_end_time || ''} onChange={handleChange} required />
+                <input type="datetime-local" name="registration_end_time" value={formData.registration_end_time || ''} onChange={handleChange} required style={{ colorScheme: 'dark', color: '#fff' }} />
               </div>
               <div>
                 <label>Bidding Start</label>
-                <input type="datetime-local" name="bidding_start_time" value={formData.bidding_start_time || ''} onChange={handleChange} required />
+                <input type="datetime-local" name="bidding_start_time" value={formData.bidding_start_time || ''} onChange={handleChange} required style={{ colorScheme: 'dark', color: '#fff' }} />
               </div>
               <div>
                 <label>Bidding End</label>
-                <input type="datetime-local" name="bidding_end_time" value={formData.bidding_end_time || ''} onChange={handleChange} required />
+                <input type="datetime-local" name="bidding_end_time" value={formData.bidding_end_time || ''} onChange={handleChange} required style={{ colorScheme: 'dark', color: '#fff' }} />
               </div>
             </div>
             <button type="submit" className="btn btn-primary" style={{ marginTop: '1.5rem', backgroundColor: 'var(--color-success)', border: 'none' }}>
@@ -260,7 +260,7 @@ export default function AuctionDetailPage() {
             </div>
             <div>
               <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Min Increment:</span>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>${auction.min_increment}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>₹{auction.min_increment}</div>
             </div>
             <div>
               <span className={`badge badge-${auction.status}`}>
@@ -305,7 +305,7 @@ export default function AuctionDetailPage() {
                 color: 'var(--color-text-primary)',
                 marginBottom: '0.5rem'
               }}>
-                ${bids[0].amount.toFixed(2)}
+                ₹{bids[0].amount.toFixed(2)}
               </div>
               <div style={{ color: 'var(--color-text-secondary)' }}>
                 {bids.length} total bids
@@ -359,7 +359,7 @@ export default function AuctionDetailPage() {
                         <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
                           {bidder.highest_bid !== null ? (
                             <span style={{ color: isHighestBidder ? 'var(--color-primary)' : 'inherit' }}>
-                              ${bidder.highest_bid.toFixed(2)}
+                              ₹{bidder.highest_bid.toFixed(2)}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>No bid</span>
@@ -409,7 +409,7 @@ export default function AuctionDetailPage() {
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-success)' }}>📞 {bid.bidders.phone}</div>
                       </td>
                       <td style={{ fontWeight: 'bold', fontSize: '1.1rem', color: index === 0 ? 'var(--color-primary)' : 'inherit' }}>
-                        ${bid.amount.toFixed(2)}
+                        ₹{bid.amount.toFixed(2)}
                       </td>
                       <td style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
                         {new Date(bid.created_at).toLocaleTimeString()}

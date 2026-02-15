@@ -30,10 +30,12 @@ create table public.auctions (
   registration_end_time timestamp with time zone null,
   status text not null default '''upcoming'''::text,
   min_increment numeric not null default '50'::numeric,
+  base_price numeric null,
   banner_image text null,
   reel_url text null,
   constraint auctions_pkey primary key (id),
   constraint check_auctions_min_increment_positive check ((min_increment > (0)::numeric)),
+  constraint check_auctions_base_price_positive check ((base_price IS NULL OR base_price > (0)::numeric)),
   constraint check_auctions_status_valid check (
     (
       status = any (array['draft'::text, 'live'::text, 'ended'::text])

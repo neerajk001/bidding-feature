@@ -127,6 +127,14 @@ ALTER TABLE auctions
 ADD CONSTRAINT check_auctions_min_increment_positive 
 CHECK (min_increment > 0);
 
+-- Ensure positive base_price when set in auctions
+ALTER TABLE auctions 
+DROP CONSTRAINT IF EXISTS check_auctions_base_price_positive;
+
+ALTER TABLE auctions 
+ADD CONSTRAINT check_auctions_base_price_positive 
+CHECK (base_price IS NULL OR base_price > 0);
+
 -- Ensure valid auction status
 ALTER TABLE auctions 
 DROP CONSTRAINT IF EXISTS check_auctions_status_valid;

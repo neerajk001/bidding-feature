@@ -16,6 +16,7 @@ interface AuctionDetail {
   bidding_start_time: string
   bidding_end_time: string
   min_increment: number
+  base_price?: number | null
   banner_image?: string | null
   reel_url?: string | null
   current_highest_bid?: number | null
@@ -178,6 +179,7 @@ export default function AuctionDetailPage() {
     }
   }
 
+
   const phase = useMemo(() => {
     if (!auction) return 'loading'
     if (auction.status === 'ended') return 'ended'
@@ -196,9 +198,14 @@ export default function AuctionDetailPage() {
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'
     if (phase === 'upcoming') return 'Bidding soon'
-    if (phase === 'live') return 'Live bidding'
+    if (phase === 'live') return 'Auction live'
     if (phase === 'ended') return 'Auction ended'
     return 'Loading'
+  }, [phase])
+
+  const pillClass = useMemo(() => {
+    if (phase === 'live') return 'pill pill-live'
+    return 'pill pill-neutral'
   }, [phase])
 
   const countdownTarget = useMemo(() => {
@@ -212,6 +219,11 @@ export default function AuctionDetailPage() {
   const minimumBid = useMemo(() => {
     if (!auction) return 0
     const current = auction.current_highest_bid || 0
+    // If no bids yet (current = 0), use base_price if set, otherwise use min_increment
+    if (current === 0) {
+      return auction.base_price || auction.min_increment
+    }
+    // If there are bids, next bid must be current + min_increment
     return current + auction.min_increment
   }, [auction])
 
@@ -228,11 +240,14 @@ export default function AuctionDetailPage() {
       email: payload.email,
       phone: payload.phone
     })
-    setMessage({ type: 'success', text: 'Email verified. Complete registration to bid.' })
 
+    // Store verification details in localStorage
+    localStorage.setItem('auction_user_id', userId)
     localStorage.setItem('auction_user_phone', payload.phone)
     localStorage.setItem('auction_user_email', payload.email)
     localStorage.setItem('auction_user_name', payload.name)
+    
+    setMessage({ type: 'success', text: 'Email verified. Complete registration to bid.' })
   }
 
   const handleVerificationError = (errorText: string) => {
@@ -368,11 +383,58 @@ export default function AuctionDetailPage() {
                         <span className="eyebrow">Auction</span>
                         <h1>{auction.title}</h1>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <span className={`badge badge-${auction.status}`}>{auction.status}</span>
-                        <span className="pill pill-neutral">{phaseLabel}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <span className={`badge badge-${auction.status}`}>{auction.status}</span>
+                          <span className={pillClass}>{phaseLabel}</span>
+                        </div>
+                        
+                        {/* Bid form in header when auction is live and user is registered */}
+                        {showLiveBid && bidderId && (
+                          <form onSubmit={handleBidSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                            <input
+                              id="bid-amount"
+                              name="bid-amount"
+                              type="number"
+                              min={minimumBid}
+                              step="0.01"
+                              value={bidAmount}
+                              onChange={(event) => setBidAmount(event.target.value)}
+                              placeholder={`₹${minimumBid}`}
+                              required
+                              style={{ 
+                                width: '140px',
+                                padding: '0.5rem 0.75rem',
+                                fontSize: '0.95rem',
+                                border: '2px solid var(--color-primary)',
+                                borderRadius: 'var(--radius-sm)',
+                                background: 'var(--color-surface)',
+                                color: 'var(--color-text-primary)'
+                              }}
+                            />
+                            <button 
+                              type="submit" 
+                              className="btn btn-primary" 
+                              disabled={bidSubmitting} 
+                              style={{ 
+                                whiteSpace: 'nowrap',
+                                padding: '0.5rem 1rem',
+                                fontSize: '0.95rem'
+                              }}
+                            >
+                              {bidSubmitting ? 'Placing...' : 'Place Bid'}
+                            </button>
+                          </form>
+                        )}
                       </div>
                     </div>
+
+                    {/* Show message if bid was placed */}
+                    {message && showLiveBid && (
+                      <div className={`notice notice-${message.type}`} style={{ marginTop: '1rem' }}>
+                        {message.text}
+                      </div>
+                    )}
 
                     <div className="auction-detail-stats">
                       <div>
@@ -386,6 +448,17 @@ export default function AuctionDetailPage() {
                             : 'Be the first bidder'}
                         </span>
                       </div>
+                      {auction.base_price && (
+                        <div>
+                          <span className="metric-label">Base price</span>
+                          <span className="metric-value">
+                            {formatCurrency(auction.base_price)}
+                          </span>
+                          <span className="metric-caption">
+                            Starting price
+                          </span>
+                        </div>
+                      )}
                       <div>
                         <span className="metric-label">Minimum increment</span>
                         <span className="metric-value">
@@ -420,7 +493,7 @@ export default function AuctionDetailPage() {
 
                     {countdownTarget && (
                       <div className="countdown-banner">
-                        <span className="pill pill-neutral">
+                        <span className={pillClass}>
                           {phase === 'registration'
                             ? 'Registration closes in'
                             : phase === 'upcoming'
@@ -439,7 +512,7 @@ export default function AuctionDetailPage() {
                   <div className="auction-action-header">
                     <h2>
                       {phase === 'live'
-                        ? 'Place a bid'
+                        ? 'Auction Status'
                         : phase === 'ended'
                           ? 'Auction ended'
                           : 'Register to bid'}
@@ -450,12 +523,12 @@ export default function AuctionDetailPage() {
                         : phase === 'upcoming'
                           ? 'Registration is closed. Bidding opens soon.'
                           : phase === 'live'
-                            ? 'Bidding is live for registered bidders.'
+                            ? 'Live bidding is in progress. Place your bid at the top.'
                             : 'Check back for future auctions.'}
                     </p>
                   </div>
 
-                  {message && (
+                  {message && !showLiveBid && (
                     <div className={`notice notice-${message.type}`}>{message.text}</div>
                   )}
 
@@ -472,7 +545,13 @@ export default function AuctionDetailPage() {
                     </div>
                   )}
 
-                  {showRegistration && !bidderId && !profile && (
+                  {showRegistration && !bidderId && checkingUser && (
+                    <div className="empty-state">
+                      <p>Checking your verification status...</p>
+                    </div>
+                  )}
+
+                  {showRegistration && !bidderId && !checkingUser && !profile && (
                     <div className="stack">
                       <EmailOtpVerification
                         auctionId={auction.id}
@@ -482,7 +561,7 @@ export default function AuctionDetailPage() {
                     </div>
                   )}
 
-                  {showRegistration && !bidderId && profile && (
+                  {showRegistration && !bidderId && !checkingUser && profile && (
                     <form onSubmit={handleRegister} className="stack">
                       <div>
                         <label htmlFor="name">Full name</label>
@@ -540,28 +619,16 @@ export default function AuctionDetailPage() {
                   )}
 
                   {showLiveBid && bidderId && (
-                    <form onSubmit={handleBidSubmit} className="stack">
-                      <div>
-                        <label htmlFor="bid-amount">Your bid</label>
-                        <input
-                          id="bid-amount"
-                          name="bid-amount"
-                          type="number"
-                          min={minimumBid}
-                          step="0.01"
-                          value={bidAmount}
-                          onChange={(event) => setBidAmount(event.target.value)}
-                          placeholder={`Minimum ${formatCurrency(minimumBid)}`}
-                          required
-                        />
+                    <div className="empty-state">
+                      <h3>Bidding is active</h3>
+                      <p>
+                        Current lead: {formatCurrency(auction.current_highest_bid)}.
+                        Next bid must be at least {formatCurrency(minimumBid)}.
+                      </p>
+                      <div className="metric-caption" style={{ marginTop: '1rem' }}>
+                        💡 Use the bid form at the top to place your bid. Auction extends automatically on last-minute bids.
                       </div>
-                      <button type="submit" className="btn btn-primary" disabled={bidSubmitting}>
-                        {bidSubmitting ? 'Placing bid...' : 'Place bid'}
-                      </button>
-                      <div className="metric-caption">
-                        Minimum bid: {formatCurrency(minimumBid)}. Bidding extends automatically on last-minute bids.
-                      </div>
-                    </form>
+                    </div>
                   )}
 
                   {showLiveBid && !bidderId && (
@@ -581,8 +648,8 @@ export default function AuctionDetailPage() {
 }
 
 function formatCurrency(value: number | null | undefined) {
-  if (!value && value !== 0) return '$0.00'
-  return `$${Number(value).toFixed(2)}`
+  if (!value && value !== 0) return '₹0.00'
+  return `₹${Number(value).toFixed(2)}`
 }
 
 function formatDateTime(value: string) {

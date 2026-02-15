@@ -9,7 +9,7 @@ export async function getAuctions(includeEnded: boolean = false) {
 
         const { data: auctions, error } = await supabaseAdmin
             .from('auctions')
-            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment')
+            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price')
             .in('status', statuses)
             .order('bidding_start_time', { ascending: false })
 
@@ -66,7 +66,8 @@ export async function getAuctions(includeEnded: boolean = false) {
                     winner_name: winnerName,
                     winning_amount: winningAmount,
                     winner_declared_at: winner?.declared_at ?? null,
-                    min_increment: auction.min_increment ?? 0
+                    min_increment: auction.min_increment ?? 0,
+                    base_price: auction.base_price ?? null
                 }
             })
         )
@@ -144,7 +145,7 @@ export async function getAuctionDetail(id: string) {
     try {
         const { data: auction, error } = await supabaseAdmin
             .from('auctions')
-            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment')
+            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment, base_price')
             .eq('id', id)
             .single()
 
@@ -186,7 +187,8 @@ export async function getAuctionDetail(id: string) {
             winner_name: Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name,
             winning_amount: winner?.winning_amount ?? null,
             winner_declared_at: winner?.declared_at ?? null,
-            min_increment: auction.min_increment ?? 0
+            min_increment: auction.min_increment ?? 0,
+            base_price: auction.base_price ?? null
         }
 
     } catch (error: any) {

@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
         title: getString('title'),
         product_id: getString('product_id'),
         min_increment: getString('min_increment'),
+        base_price: getString('base_price'),
         banner_image: getString('banner_image'),
         registration_end_time: getString('registration_end_time'),
         bidding_start_time: getString('bidding_start_time'),
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       title,
       product_id,
       min_increment,
+      base_price,
       banner_image,
       registration_end_time,
       bidding_start_time,
@@ -106,6 +108,19 @@ export async function POST(request: NextRequest) {
         { error: 'Minimum increment must be a positive number' },
         { status: 400 }
       )
+    }
+
+    // Validate base_price if provided
+    let basePriceValue: number | null = null
+    if (base_price && base_price !== '') {
+      basePriceValue = typeof base_price === 'number' ? base_price : parseFloat(base_price)
+      
+      if (!Number.isFinite(basePriceValue) || basePriceValue <= 0) {
+        return NextResponse.json(
+          { error: 'Base price must be a positive number' },
+          { status: 400 }
+        )
+      }
     }
 
     // Convert datetime-local strings (treated as IST) to ISO format for Supabase
@@ -188,6 +203,7 @@ export async function POST(request: NextRequest) {
         title,
         product_id,
         min_increment: minIncrementValue,
+        base_price: basePriceValue,
         banner_image: banner_image || null,
         reel_url: reelPublicUrl,
         registration_end_time: registrationEndUTC,
