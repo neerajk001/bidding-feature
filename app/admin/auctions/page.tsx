@@ -31,7 +31,7 @@ export default function AdminAuctionsPage() {
     status: 'draft',
     available_sizes: ''
   })
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [reelFile, setReelFile] = useState<File | null>(null)
   const [reelPreview, setReelPreview] = useState<string>('')
@@ -302,7 +302,7 @@ export default function AdminAuctionsPage() {
       </div>
 
       {message && (
-        <div className={`admin-alert ${message.type === 'success' ? 'admin-alert-success' : 'admin-alert-error'}`}>
+        <div className={`admin-alert ${message.type === 'success' ? 'admin-alert-success' : message.type === 'info' ? 'admin-alert-info' : 'admin-alert-error'}`}>
           {message.text}
         </div>
       )}

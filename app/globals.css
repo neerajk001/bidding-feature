@@ -2320,6 +2320,12 @@ tr:hover td {
   border-color: #fca5a5;
 }
 
+.admin-alert-info {
+  background-color: #dbEafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
 /* Admin Table/Grid */
 .admin-auction-list {
   display: grid;
