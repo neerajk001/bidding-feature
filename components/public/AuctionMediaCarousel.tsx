@@ -50,20 +50,25 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
         setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length)
     }
 
-    // Effect to reset video when slide changes
+    // Effect to handle video playback when slide changes
     useEffect(() => {
+        const currentSlide = slides[currentIndex]
+        
         if (videoRef.current) {
-            videoRef.current.pause()
-            videoRef.current.currentTime = 0
-            // Optionally try to auto-play if it's the current slide
-            if (slides[currentIndex].type === 'video') {
+            // If current slide is a video, ensure it's ready to play from start
+            if (currentSlide?.type === 'video') {
+                videoRef.current.currentTime = 0
                 const playPromise = videoRef.current.play()
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
                         // Auto-play was prevented
-                        console.log('Autoplay prevented', error)
+                        console.log('Autoplay prevented:', error)
                     })
                 }
+            } else {
+                // If switching away from video, pause it
+                videoRef.current.pause()
+                videoRef.current.currentTime = 0
             }
         }
     }, [currentIndex, slides])
@@ -90,22 +95,32 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
 
                 {currentSlide.type === 'image' ? (
                     <img
+                        key={currentSlide.id}
                         src={currentSlide.src}
                         alt={`${title} - view ${currentIndex + 1}`}
-                        style={{ width: '100%', height: 'auto', maxHeight: '600px', objectFit: 'contain' }}
+                        style={{ width: '100%', height: '100%', maxHeight: '600px', objectFit: 'contain' }}
                     />
                 ) : (
-                    <video
-                        ref={videoRef}
-                        src={currentSlide.src}
-                        controls
-                        playsInline
-                        muted
-                        autoPlay
-                        preload="metadata"
-                        onEnded={handleVideoEnded}
-                        style={{ width: '100%', height: 'auto', maxHeight: '600px', maxWidth: '100%' }}
-                    />
+                    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <video
+                            key={currentSlide.id}
+                            ref={videoRef}
+                            src={currentSlide.src}
+                            controls
+                            playsInline
+                            preload="metadata"
+                            className="active-video-slide"
+                            style={{ width: '100%', height: '100%', maxHeight: '600px', objectFit: 'contain' }}
+                            onEnded={() => {
+                                console.log('Video ended, advancing slide')
+                                nextSlide()
+                            }}
+                            onError={(e) => {
+                                console.error('Video error:', e)
+                                // Do not auto-advance on error to let user see the issue
+                            }}
+                        />
+                    </div>
                 )}
             </div>
 
@@ -186,10 +201,10 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
                         </svg>
                     </button>
 
-                    {/* Indicators */}
+                    {/* Indicators - Moved to top to avoid blocking video controls */}
                     <div style={{
                         position: 'absolute',
-                        bottom: '15px',
+                        top: '15px',
                         left: '50%',
                         transform: 'translateX(-50%)',
                         display: 'flex',
@@ -220,7 +235,8 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
                         ))}
                     </div>
                 </>
-            )}
-        </div>
+            )
+            }
+        </div >
     )
 }

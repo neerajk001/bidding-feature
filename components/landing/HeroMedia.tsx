@@ -35,22 +35,36 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
     // State for slideshow
     const [currentIndex, setCurrentIndex] = useState(0)
     const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const videoRef = useRef<HTMLVideoElement>(null)
+
+    const nextSlide = () => {
+        setCurrentIndex((prev) => (prev + 1) % totalItems)
+    }
 
     useEffect(() => {
         if (!shouldScroll) return
 
-        const nextSlide = () => {
-            setCurrentIndex((prev) => (prev + 1) % totalItems)
+        // Clear any existing timeout
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
         }
 
-        // Slide every 3 seconds (1s pause + transition time approx)
-        // User requested "stayed for 1 sec", so 2000-3000ms total cycle is appropriate
+        const currentItem = items[currentIndex]
+        
+        // If current item is a video, don't set auto-advance timer
+        // The video's onEnded event will handle advancing
+        if (currentItem?.type === 'video') {
+            return
+        }
+
+        // For images, auto-advance after 3.5 seconds
         timeoutRef.current = setTimeout(nextSlide, 3500)
 
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
         }
-    }, [currentIndex, shouldScroll, totalItems])
+    }, [currentIndex, shouldScroll, totalItems, items])
 
     // If no media, show placeholder
     if (totalItems === 0 && !detail?.banner_image) {
@@ -90,9 +104,6 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                         className="media-item-image"
                         priority
                     />
-                    {heroVariant === 'closed' && (
-                        <span className="hero-media-badge">Sold</span>
-                    )}
                 </div>
             )
         }
@@ -109,12 +120,13 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                     <div key={idx} className="hero-media-slide">
                         {item.type === 'video' ? (
                             <video
+                                ref={idx === currentIndex ? videoRef : null}
                                 src={item.src}
                                 autoPlay
-                                loop
                                 muted
                                 playsInline
                                 className="media-item-video"
+                                onEnded={nextSlide}
                             />
                         ) : (
                             <Image
@@ -141,10 +153,6 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                     />
                 ))}
             </div>
-
-            {heroVariant === 'closed' && (
-                <span className="hero-media-badge" style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10 }}>Sold</span>
-            )}
         </div>
     )
 }
