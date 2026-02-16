@@ -10,170 +10,39 @@ export default function PublicShell({ children }: { children: ReactNode }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   return (
-    <div className="public-shell">
-      <style jsx global>{`
-        /* Scoped Navbar Styles */
-        .public-header-inner {
-          width: min(1280px, calc(100% - 2rem));
-          margin: 0 auto;
-          margin-top: 0.15rem;
-          padding: 0.75rem 1rem;
-          display: flex;
-          flex-flow: row nowrap;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(252, 250, 248, 0.95);
-          backdrop-filter: blur(10px);
-          border: 1px solid var(--color-border);
-          border-radius: 0;
-          box-shadow: var(--shadow-md);
-          position: relative;
-          min-height: 60px;
-        }
-
-        .brand {
-          display: flex;
-          flex-direction: column;
-          gap: 0.2rem;
-          color: var(--color-text-primary);
-          align-items: flex-start;
-          position: relative;
-          flex-shrink: 1;
-          min-width: 0;
-          max-width: calc(100% - 90px);
-        }
-
-        .desktop-nav {
-          display: none;
-        }
-
-        .mobile-toggle-wrapper {
-          display: flex;
-          align-items: center;
-          flex-shrink: 0;
-        }
-
-        .nav-toggle-btn {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: transparent;
-          border: 1px solid var(--color-border, #e5e5e5);
-          padding: 0.5rem 0.75rem;
-          border-radius: 4px;
-          cursor: pointer;
-          color: var(--color-text-secondary, #666);
-          font-size: 0.8rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .nav-toggle-btn.active {
-          background: var(--color-surface, #fff);
-          color: var(--color-primary, #F97316);
-          border-color: var(--color-primary, #F97316);
-        }
-
-        .nav-menu-dropdown {
-          position: absolute;
-          top: calc(100% + 0.5rem);
-          right: 0;
-          width: 200px;
-          background: #fff;
-          border: 1px solid #e5e5e5;
-          border-radius: 4px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-          display: flex;
-          flex-direction: column;
-          padding: 0.5rem;
-          z-index: 100;
-        }
-
-        .nav-dropdown-item {
-          padding: 0.75rem;
-          font-size: 0.9rem;
-          color: #333;
-          text-decoration: none;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          border-radius: 4px;
-        }
-
-        .nav-dropdown-item:hover {
-          background: #f5f5f5;
-          color: #F97316;
-        }
-
-        @media (min-width: 768px) {
-          .desktop-nav {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-          }
-          
-          .mobile-toggle-wrapper {
-            display: none;
-          }
-
-          .desktop-link {
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--color-text-primary, #333);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-          }
-
-          .desktop-link:hover {
-            color: var(--color-primary, #F97316);
-          }
-
-          .desktop-cta {
-            border: 1px solid var(--color-border, #e5e5e5);
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-          }
-           
-          .desktop-cta:hover {
-            border-color: var(--color-primary, #F97316);
-            background: rgba(249, 115, 22, 0.05);
-          }
-        }
-      `}</style>
-
-      <header className="public-header">
-        <div className="container public-header-inner">
-          <Link href="/" className="brand">
-            <span className="brand-mark">
-              <Image src={logo} alt="Indu Heritage" className="brand-logo" priority />
+    <div className="relative min-h-screen bg-gray-50 text-[#2D2420] font-sans">
+      <header className="sticky top-0 z-50 p-2 lg:p-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur-md border border-zinc-200 shadow-sm rounded-xl">
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            <span className="flex items-center gap-2">
+              <Image src={logo} alt="Indu Heritage" className="h-10 w-auto" priority />
               <span className="sr-only">Indu Heritage</span>
             </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="desktop-nav">
-            <Link href="/auctions" className="desktop-link">
+          <nav className="hidden md:flex items-center gap-6">
+            <Link href="/auctions" className="text-xs font-bold uppercase tracking-widest text-zinc-600 hover:text-orange-600 transition-colors">
               Auctions
             </Link>
             <a
               href="https://induheritage.com"
-              className="desktop-link desktop-cta"
+              className="group flex items-center gap-2 px-4 py-2 rounded border border-zinc-200 text-xs font-bold uppercase tracking-widest text-zinc-600 transition-colors hover:border-orange-500 hover:text-orange-600 hover:bg-orange-50/50"
               target="_blank"
               rel="noreferrer"
             >
               <span>My Store</span>
-              <Image src={shopify} alt="Shopify" width={16} height={16} />
+              <Image src={shopify} alt="Shopify" width={16} height={16} className="opacity-60 group-hover:opacity-100 transition-opacity" />
             </a>
           </nav>
 
           {/* Mobile Navigation Toggle */}
-          <div className="mobile-toggle-wrapper">
+          <div className="md:hidden relative">
             <button
-              className={`nav-toggle-btn ${isMenuOpen ? 'active' : ''}`}
+              className={`flex items-center gap-2 px-3 py-2 bg-white border rounded text-xs font-bold uppercase tracking-widest transition-colors ${isMenuOpen
+                ? 'border-orange-500 text-orange-600'
+                : 'border-zinc-200 text-zinc-500 hover:text-zinc-800'
+                }`}
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-label="Toggle menu"
             >
@@ -204,23 +73,23 @@ export default function PublicShell({ children }: { children: ReactNode }) {
             </button>
 
             {isMenuOpen && (
-              <nav className="nav-menu-dropdown">
+              <nav className="absolute top-full right-0 mt-2 w-56 bg-white border border-zinc-200 rounded-lg shadow-xl flex flex-col p-2 z-50 animate-in fade-in slide-in-from-top-2">
                 <Link
                   href="/auctions"
-                  className="nav-dropdown-item"
+                  className="px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:text-orange-600 rounded-md transition-colors"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Auctions
                 </Link>
                 <a
                   href="https://induheritage.com"
-                  className="nav-dropdown-item"
+                  className="px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 hover:text-orange-600 rounded-md transition-colors flex justify-between items-center"
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   <span>My Store</span>
-                  <Image src={shopify} alt="Shopify" width={16} height={16} style={{ opacity: 0.8 }} />
+                  <Image src={shopify} alt="Shopify" width={16} height={16} className="opacity-60" />
                 </a>
               </nav>
             )}
@@ -228,25 +97,25 @@ export default function PublicShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="public-main">{children}</main>
+      <main className="relative z-10">{children}</main>
 
-      <footer className="public-footer">
-        <div className="container public-footer-inner">
+      <footer className="border-t border-zinc-800 py-16 mt-20 bg-zinc-950 text-zinc-400">
+        <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-start gap-12">
           <div>
-            <div className="brand-mark">
-              <Image src={logo} alt="Indu Heritage" className="brand-logo brand-logo-footer" />
+            <div className="flex items-center gap-2 mb-4">
+              <Image src={logo} alt="Indu Heritage" className="h-8 w-auto brightness-0 invert opacity-80" />
               <span className="sr-only">Indu Heritage</span>
             </div>
-            <p className="footer-note">
+            <p className="text-sm text-zinc-500 max-w-xs leading-relaxed">
               Cozy, premium womenswear auctions with verified, real-time bidding.
             </p>
           </div>
-          <div className="footer-links">
-            <Link href="/auctions">Browse Auctions</Link>
-            <a href="https://induheritage.com" target="_blank" rel="noreferrer">
+          <div className="flex flex-col gap-4 text-sm font-medium">
+            <Link href="/auctions" className="hover:text-white transition-colors">Browse Auctions</Link>
+            <a href="https://induheritage.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
               Shop Indu Heritage
             </a>
-            <Link href="/admin/auctions">Admin Panel</Link>
+            <Link href="/admin/auctions" className="hover:text-white transition-colors">Admin Panel</Link>
           </div>
         </div>
       </footer>

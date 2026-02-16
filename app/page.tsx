@@ -119,23 +119,23 @@ export default async function HomePage() {
         shopifyLinkProps={shopifyLinkProps}
       />
 
-      <section className="landing-section">
-        <div className="container">
-          <div className="landing-section-header">
-            <div className="section-heading">
-              <span className="eyebrow">Heritage Promise</span>
-              <h2 className="landing-section-title">A premium auction house for collectors.</h2>
-              <p className="landing-section-subtitle">
+      <section className="py-24 bg-gray-50 border-t border-gray-200">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-16">
+            <div className="flex flex-col gap-2">
+              <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">Heritage Promise</span>
+              <h2 className="text-4xl lg:text-5xl font-bold font-display text-black max-w-2xl leading-tight">A premium auction house for collectors.</h2>
+              <p className="text-lg text-gray-600 max-w-xl leading-relaxed mt-4">
                 Our process protects provenance, delivers concierge support, and keeps bidding transparent.
               </p>
             </div>
           </div>
 
-          <div className="landing-heritage-grid">
+          <div className="grid md:grid-cols-3 gap-8">
             {heritagePillars.map((pillar) => (
-              <div className="heritage-card" key={pillar.title}>
-                <h4>{pillar.title}</h4>
-                <p>{pillar.description}</p>
+              <div className="bg-white border border-gray-200 rounded-2xl p-8 flex flex-col gap-4 hover:border-orange-500 transition-colors group" key={pillar.title}>
+                <h4 className="text-xl font-display font-bold text-black group-hover:text-orange-500 transition-colors">{pillar.title}</h4>
+                <p className="text-gray-600 leading-relaxed">{pillar.description}</p>
               </div>
             ))}
           </div>

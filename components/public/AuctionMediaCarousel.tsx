@@ -53,7 +53,7 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
     // Effect to handle video playback when slide changes
     useEffect(() => {
         const currentSlide = slides[currentIndex]
-        
+
         if (videoRef.current) {
             // If current slide is a video, ensure it's ready to play from start
             if (currentSlide?.type === 'video') {
@@ -75,7 +75,7 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
 
     if (slides.length === 0) {
         return (
-            <div className="auction-detail-image" style={{ background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '400px', color: '#888' }}>
+            <div className="flex items-center justify-center h-[400px] bg-zinc-100 text-zinc-400">
                 No media available
             </div>
         )
@@ -83,25 +83,18 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
 
     const currentSlide = slides[currentIndex]
 
-    // Handler for video end
-    const handleVideoEnded = () => {
-        // "fully played and automatically slide"
-        nextSlide()
-    }
-
     return (
-        <div className="media-carousel" style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--radius-md)', background: '#000', marginBottom: '1rem', width: '100%' }}>
-            <div className="carousel-slide" style={{ width: '100%', height: '100%', minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa' }}>
-
+        <div className="relative w-full overflow-hidden rounded-xl bg-gray-100 aspect-[3/4] lg:aspect-square mb-4 group">
+            <div className="w-full h-full flex items-center justify-center bg-zinc-100">
                 {currentSlide.type === 'image' ? (
                     <img
                         key={currentSlide.id}
                         src={currentSlide.src}
                         alt={`${title} - view ${currentIndex + 1}`}
-                        style={{ width: '100%', height: '100%', maxHeight: '600px', objectFit: 'contain' }}
+                        className="w-full h-full object-contain max-h-[600px]"
                     />
                 ) : (
-                    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="relative w-full h-full flex items-center justify-center">
                         <video
                             key={currentSlide.id}
                             ref={videoRef}
@@ -109,15 +102,13 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
                             controls
                             playsInline
                             preload="metadata"
-                            className="active-video-slide"
-                            style={{ width: '100%', height: '100%', maxHeight: '600px', objectFit: 'contain' }}
+                            className="w-full h-full object-contain max-h-[600px]"
                             onEnded={() => {
                                 console.log('Video ended, advancing slide')
                                 nextSlide()
                             }}
                             onError={(e) => {
                                 console.error('Video error:', e)
-                                // Do not auto-advance on error to let user see the issue
                             }}
                         />
                     </div>
@@ -131,35 +122,9 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
                         type="button"
                         onClick={prevSlide}
                         aria-label="Previous slide"
-                        style={{
-                            position: 'absolute',
-                            top: '50%',
-                            left: '10px',
-                            transform: 'translateY(-50%)',
-                            background: 'rgba(0, 0, 0, 0.65)',
-                            color: '#ffffff',
-                            border: '2px solid rgba(255,255,255,0.7)',
-                            borderRadius: '50%',
-                            width: '48px',
-                            height: '48px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 99, /* High Z-Index */
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                            transition: 'background 0.2s, transform 0.1s',
-                        }}
-                        onMouseOver={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.9)'
-                            e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
-                        }}
-                        onMouseOut={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.65)'
-                            e.currentTarget.style.transform = 'translateY(-50%) scale(1)'
-                        }}
+                        className="absolute top-1/2 left-4 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 text-white backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-black/70 hover:scale-110 transition-all z-10 opacity-0 group-hover:opacity-100 duration-300"
                     >
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="15 18 9 12 15 6"></polyline>
                         </svg>
                     </button>
@@ -168,75 +133,28 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
                         type="button"
                         onClick={nextSlide}
                         aria-label="Next slide"
-                        style={{
-                            position: 'absolute',
-                            top: '50%',
-                            right: '10px',
-                            transform: 'translateY(-50%)',
-                            background: 'rgba(0, 0, 0, 0.65)',
-                            color: '#ffffff',
-                            border: '2px solid rgba(255,255,255,0.7)',
-                            borderRadius: '50%',
-                            width: '48px',
-                            height: '48px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 99, /* High Z-Index */
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                            transition: 'background 0.2s, transform 0.1s',
-                        }}
-                        onMouseOver={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.9)'
-                            e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
-                        }}
-                        onMouseOut={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.65)'
-                            e.currentTarget.style.transform = 'translateY(-50%) scale(1)'
-                        }}
+                        className="absolute top-1/2 right-4 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 text-white backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-black/70 hover:scale-110 transition-all z-10 opacity-0 group-hover:opacity-100 duration-300"
                     >
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="9 18 15 12 9 6"></polyline>
                         </svg>
                     </button>
 
-                    {/* Indicators - Moved to top to avoid blocking video controls */}
-                    <div style={{
-                        position: 'absolute',
-                        top: '15px',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        display: 'flex',
-                        gap: '8px',
-                        zIndex: 99,
-                        background: 'rgba(0,0,0,0.5)',
-                        padding: '6px 12px',
-                        borderRadius: '20px',
-                        backdropFilter: 'blur(4px)'
-                    }}>
+                    {/* Indicators */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 flex gap-2 z-10 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm border border-white/10">
                         {slides.map((_, idx) => (
                             <button
                                 key={idx}
                                 type="button"
                                 onClick={() => setCurrentIndex(idx)}
-                                style={{
-                                    width: '12px',
-                                    height: '12px',
-                                    borderRadius: '50%',
-                                    border: '2px solid rgba(0,0,0,0.1)',
-                                    background: idx === currentIndex ? '#ffffff' : 'rgba(255,255,255,0.4)',
-                                    cursor: 'pointer',
-                                    padding: 0,
-                                    transition: 'background 0.2s, transform 0.1s'
-                                }}
+                                className={`w-2 h-2 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'
+                                    }`}
                                 aria-label={`Go to slide ${idx + 1}`}
                             />
                         ))}
                     </div>
                 </>
-            )
-            }
-        </div >
+            )}
+        </div>
     )
 }

@@ -251,96 +251,135 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
             ? 'Next Drop'
             : 'Curated Lot'
 
+    const getStatusPillClass = (variant: HeroVariant) => {
+        switch (variant) {
+            case 'live': return 'bg-red-500/10 text-red-500 ring-1 ring-red-500/20'
+            case 'registration': return 'bg-orange-500/10 text-orange-500 ring-1 ring-orange-500/20'
+            case 'upcoming': return 'bg-blue-500/10 text-blue-500 ring-1 ring-blue-500/20'
+            case 'closed': return 'bg-zinc-800 text-zinc-400'
+            case 'empty': return 'bg-zinc-800/50 text-zinc-500'
+            default: return 'bg-zinc-800 text-zinc-400'
+        }
+    }
+
     return (
-        <section className="landing-hero redesigned" data-variant={heroVariant} ref={heroRef}>
-            <div className="container landing-hero-inner">
-                <div className="landing-hero-copy">
-                    <span className="eyebrow">{heroEyebrow}</span>
-                    <h1 className="landing-hero-title">{heroTitle}</h1>
-                    <p className="landing-hero-subtitle">{heroSubtitle}</p>
-                    <div className="landing-hero-actions">
-                        {renderCta(primaryCta, 'btn btn-primary')}
-                        {renderCta(secondaryCta, 'btn btn-outline')}
-                    </div>
-                    <div className="landing-hero-badges">
-                        {heroBadges.map((badge) => (
-                            <span className="landing-badge" key={badge}>{badge}</span>
-                        ))}
-                    </div>
-                </div>
+        <section className="relative py-8 lg:py-12 overflow-hidden bg-gray-50" data-variant={heroVariant} ref={heroRef}>
 
-                <div className="landing-hero-card">
-                    <div className="hero-auction hero-card-horizontal" data-variant={heroVariant}>
-                        <div className="hero-auction-body">
-                            <div className="hero-card-status">
-                                <span className={`hero-status-pill ${heroVariant === 'empty' ? 'is-muted' : ''}`}>
-                                    {cardStatusLabel}
-                                </span>
-                                {cardStatusMeta ? (
-                                    <span className="hero-status-time">{cardStatusMeta}</span>
-                                ) : null}
-                            </div>
-
-                            <h3 className="hero-card-title">{cardTitle}</h3>
-                            <p className="hero-card-summary">{cardSummary}</p>
-
-                            {heroVariant === 'empty' ? (
-                                <div className="hero-card-list">
-                                    {emptySteps.map((step) => (
-                                        <div className="hero-card-list-item" key={step.label}>
-                                            <span className="hero-card-list-label">{step.label}</span>
-                                            <span className="hero-card-list-value">{step.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="hero-card-metrics">
-                                    {cardMetrics.map((metric) => (
-                                        <div key={metric.label}>
-                                            <span className="metric-label">{metric.label}</span>
-                                            <span className="metric-value">{metric.value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className="hero-card-actions">
-                                {heroVariant === 'live' && activeDetail ? (
-                                    <div className="hero-bid-row">
-                                        <input
-                                            type="text"
-                                            disabled
-                                            placeholder={`Next bid: ${formatCurrency(
-                                                (activeDetail.current_highest_bid || 0) > 0
-                                                    ? (activeDetail.current_highest_bid || 0) + (activeDetail.min_increment || 0)
-                                                    : (activeDetail.base_price || activeDetail.min_increment || 0)
-                                            )}`}
-                                            className="hero-bid-input"
-                                        />
-                                        <Link href={`/auction/${activeDetail.id}`} className="btn hero-bid-button">
-                                            Bid now
-                                        </Link>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {renderCta(primaryCta, 'btn btn-primary')}
-                                        {heroVariant !== 'empty' && (
-                                            <Link href="/auctions" className="hero-card-link">
-                                                View all auctions
-                                            </Link>
-                                        )}
-                                    </>
-                                )}
-                            </div>
+            <div className="max-w-[2000px] mx-auto px-6 lg:px-8 relative z-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-center">
+                    <div className="flex flex-col gap-6 lg:gap-8">
+                        <span className="text-orange-500 font-semibold tracking-widest uppercase text-sm">{heroEyebrow}</span>
+                        <h1 className="text-5xl lg:text-7xl font-bold font-display tracking-tight text-black leading-[1.1]">{heroTitle}</h1>
+                        <p className="text-lg text-gray-600 max-w-lg leading-relaxed">{heroSubtitle}</p>
+                        <div className="flex flex-wrap gap-4 mt-2">
+                            {renderCta(primaryCta, 'inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-sm transition-all duration-200 bg-orange-500 text-white hover:bg-orange-600 shadow-lg hover:shadow-orange-500/25 hover:-translate-y-0.5')}
+                            {renderCta(secondaryCta, 'inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-sm transition-all duration-200 border border-black text-black hover:border-orange-500 hover:text-orange-500 hover:bg-orange-500/10')}
                         </div>
+                        <div className="flex flex-wrap gap-3 items-center pt-4">
+                            {heroBadges.map((badge) => (
+                                <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 border border-gray-300 text-gray-700" key={badge}>{badge}</span>
+                            ))}
+                        </div>
+                    </div>
 
-                        <div className="hero-auction-media">
-                            <HeroMedia
-                                detail={detail}
-                                heroVariant={heroVariant}
-                                heroArtLabel={heroArtLabel}
-                                heroArtBadge={heroArtBadge}
-                            />
+                    <div className="relative">
+                        {/* Enhanced glow effect behind card */}
+                        <div className="absolute -inset-6 bg-gradient-to-br from-orange-500/20 via-orange-600/10 to-pink-500/20 rounded-3xl blur-3xl opacity-40 animate-pulse" />
+
+                        <div className="relative bg-white border-2 border-gray-200 rounded-3xl overflow-hidden shadow-2xl hover:shadow-orange-500/10 transition-all duration-500" data-variant={heroVariant}>
+                            {/* Horizontal layout: content left, media right on desktop */}
+                            <div className="flex flex-col lg:flex-row">
+                                {/* Content Section - Wider on desktop */}
+                                <div className="lg:w-[55%] p-6 lg:p-8 bg-gradient-to-br from-white to-gray-50/50">
+                                    {/* Status Header */}
+                                    <div className="flex items-center justify-between gap-4 mb-4">
+                                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${getStatusPillClass(heroVariant)}`}>
+                                            {heroVariant === 'live' && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+                                            {cardStatusLabel}
+                                        </span>
+                                        {cardStatusMeta ? (
+                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-100 px-3 py-1.5 rounded-full">{cardStatusMeta}</span>
+                                        ) : null}
+                                    </div>
+
+                                    {/* Title & Summary */}
+                                    <h3 className="text-2xl lg:text-3xl font-bold font-display text-black mb-2 leading-tight bg-gradient-to-r from-black to-gray-700 bg-clip-text">{cardTitle}</h3>
+                                    <p className="text-gray-600 mb-6 leading-relaxed text-sm lg:text-base">{cardSummary}</p>
+
+                                    {/* Metrics or Steps - Single Row Layout */}
+                                    {heroVariant === 'empty' ? (
+                                        <div className="space-y-3 mb-6">
+                                            {emptySteps.map((step, idx) => (
+                                                <div
+                                                    className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-pink-50 rounded-2xl border-2 border-orange-200 hover:border-orange-400 hover:shadow-md transition-all duration-300 group"
+                                                    key={step.label}
+                                                    style={{ animationDelay: `${idx * 100}ms` }}
+                                                >
+                                                    <span className="text-xs font-bold text-orange-600 uppercase tracking-wider">{step.label}</span>
+                                                    <span className="text-sm font-semibold text-black group-hover:text-orange-600 transition-colors">{step.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="mb-6 pb-6 border-b-2 border-orange-100">
+                                            <div className="flex justify-between gap-4">
+                                                {cardMetrics.map((metric, idx) => (
+                                                    <div
+                                                        key={metric.label}
+                                                        className="flex-1 text-center group hover:scale-105 transition-transform duration-300"
+                                                        style={{ animationDelay: `${idx * 100}ms` }}
+                                                    >
+                                                        <div className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 group-hover:text-orange-700 transition-colors">{metric.label}</div>
+                                                        <div className="text-lg lg:text-xl font-bold text-black group-hover:text-orange-600 transition-colors break-words">{metric.value}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* CTA Buttons */}
+                                    <div className="mt-auto">
+                                        {heroVariant === 'live' && activeDetail ? (
+                                            <div className="flex flex-col gap-3">
+                                                <input
+                                                    type="text"
+                                                    disabled
+                                                    placeholder={`Next bid: ${formatCurrency(
+                                                        (activeDetail.current_highest_bid || 0) > 0
+                                                            ? (activeDetail.current_highest_bid || 0) + (activeDetail.min_increment || 0)
+                                                            : (activeDetail.base_price || activeDetail.min_increment || 0)
+                                                    )}`}
+                                                    className="w-full bg-gradient-to-r from-gray-50 to-gray-100 border-2 border-gray-300 rounded-2xl px-4 py-3 text-black text-sm font-semibold focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all placeholder:text-gray-500 shadow-inner"
+                                                />
+                                                <Link href={`/auction/${activeDetail.id}`} className="w-full px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-orange-500/50 hover:-translate-y-1 text-center transform duration-300">
+                                                    🔥 Bid now
+                                                </Link>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col gap-3">
+                                                {renderCta(primaryCta, 'w-full inline-flex items-center justify-center px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-300 bg-gradient-to-r from-black to-gray-800 text-white hover:from-gray-800 hover:to-black shadow-xl hover:shadow-2xl hover:-translate-y-1 transform')}
+                                                {heroVariant !== 'empty' && (
+                                                    <Link href="/auctions" className="w-full inline-flex items-center justify-center px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-300 bg-white border-2 border-black text-black hover:bg-black hover:text-white hover:-translate-y-1 transform shadow-md hover:shadow-xl">
+                                                        View all auctions →
+                                                    </Link>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Media Section - Enhanced */}
+                                <div className="relative lg:w-[45%] aspect-[16/9] lg:aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 border-t-2 lg:border-t-0 lg:border-l-2 border-gray-200 overflow-hidden group">
+                                    {/* Subtle overlay gradient */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent z-10 pointer-events-none" />
+                                    <HeroMedia
+                                        detail={detail}
+                                        heroVariant={heroVariant}
+                                        heroArtLabel={heroArtLabel}
+                                        heroArtBadge={heroArtBadge}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

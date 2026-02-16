@@ -41,6 +41,10 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
         setCurrentIndex((prev) => (prev + 1) % totalItems)
     }
 
+    const prevSlide = () => {
+        setCurrentIndex((prev) => (prev - 1 + totalItems) % totalItems)
+    }
+
     useEffect(() => {
         if (!shouldScroll) return
 
@@ -51,7 +55,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
         }
 
         const currentItem = items[currentIndex]
-        
+
         // If current item is a video, don't set auto-advance timer
         // The video's onEnded event will handle advancing
         if (currentItem?.type === 'video') {
@@ -69,9 +73,9 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
     // If no media, show placeholder
     if (totalItems === 0 && !detail?.banner_image) {
         return (
-            <div className="hero-card-art">
-                <span className="hero-card-art-label">{heroArtLabel}</span>
-                <span className="hero-card-art-badge">{heroArtBadge}</span>
+            <div className="flex flex-col items-center justify-center h-full bg-gray-100 border border-gray-200 text-center gap-2 p-8">
+                <span className="text-xl font-display font-medium text-gray-600">{heroArtLabel}</span>
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-gray-200 text-gray-600">{heroArtBadge}</span>
             </div>
         )
     }
@@ -82,26 +86,27 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
             const item = items[0]
             if (item.type === 'video') {
                 return (
-                    <div className="hero-media-single">
+                    <div className="relative w-full h-full min-h-[400px]">
                         <video
                             src={item.src}
                             autoPlay
                             loop
                             muted
                             playsInline
-                            className="media-item-video"
+                            controls
+                            className="w-full h-full object-cover"
                         />
                     </div>
                 )
             }
             return (
-                <div className="hero-media-single">
+                <div className="relative w-full h-full min-h-[400px]">
                     <Image
                         src={item.src}
                         alt={detail?.title || 'Auction Item'}
                         fill
                         sizes="(max-width: 900px) 100vw, 50vw"
-                        className="media-item-image"
+                        className="object-cover"
                         priority
                     />
                 </div>
@@ -111,13 +116,13 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
 
     // Slideshow Rendering
     return (
-        <div className="hero-media-slider">
+        <div className="relative w-full h-full overflow-hidden group min-h-[400px]">
             <div
-                className="hero-media-slider-track"
+                className="flex h-full transition-transform duration-500 ease-out will-change-transform"
                 style={{ transform: `translateX(-${currentIndex * 100}%)` }}
             >
                 {items.map((item, idx) => (
-                    <div key={idx} className="hero-media-slide">
+                    <div key={idx} className="relative min-w-full h-full flex-shrink-0">
                         {item.type === 'video' ? (
                             <video
                                 ref={idx === currentIndex ? videoRef : null}
@@ -125,7 +130,8 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                                 autoPlay
                                 muted
                                 playsInline
-                                className="media-item-video"
+                                controls
+                                className="w-full h-full object-cover"
                                 onEnded={nextSlide}
                             />
                         ) : (
@@ -134,7 +140,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                                 alt={`View ${idx + 1}`}
                                 fill
                                 sizes="(max-width: 900px) 100vw, 50vw"
-                                className="media-item-image"
+                                className="object-cover"
                                 priority={idx === 0}
                             />
                         )}
@@ -142,12 +148,39 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                 ))}
             </div>
 
+            {/* Navigation Arrows */}
+            {totalItems > 1 && (
+                <>
+                    <button
+                        onClick={prevSlide}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
+                        aria-label="Previous slide"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={nextSlide}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
+                        aria-label="Next slide"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </>
+            )}
+
             {/* Slide Indicators */}
-            <div className="hero-media-indicators">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10 p-2 rounded-full bg-black/30 backdrop-blur-sm">
                 {items.map((_, idx) => (
                     <button
                         key={idx}
-                        className={`media-indicator ${idx === currentIndex ? 'active' : ''}`}
+                        className={`transition-all duration-300 rounded-full ${idx === currentIndex
+                            ? 'bg-white w-6 h-1.5'
+                            : 'bg-white/40 w-1.5 h-1.5 hover:bg-white/60'
+                            }`}
                         onClick={() => setCurrentIndex(idx)}
                         aria-label={`Go to slide ${idx + 1}`}
                     />

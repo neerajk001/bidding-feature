@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { adminStyles, cn } from '@/lib/admin-styles'
 
 interface Bidder {
   id: string
@@ -174,143 +175,132 @@ export default function AuctionDetailPage() {
   }
 
   if (loading) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading...</div>
+    return <div className="text-center py-16 text-gray-500">Loading...</div>
   }
 
   if (!auction) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Auction not found</div>
+    return <div className="text-center py-16 text-gray-500">Auction not found</div>
   }
 
   return (
     <div>
-      <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+      <div className="mb-8 flex gap-4 flex-wrap">
         <button
           onClick={() => router.push('/admin/auctions')}
-          className="btn btn-outline"
+          className={cn(adminStyles.btn, adminStyles.btnOutline)}
         >
           ← Back to Auctions
         </button>
         <button
           onClick={() => setIsEditing(!isEditing)}
-          className={`btn ${isEditing ? 'btn-outline' : 'btn-primary'}`}
-          style={{ backgroundColor: isEditing ? 'transparent' : 'var(--color-primary)' }}
+          className={cn(adminStyles.btn, isEditing ? adminStyles.btnOutline : adminStyles.btnPrimary)}
         >
           {isEditing ? 'Cancel Editing' : 'Edit Auction'}
         </button>
         <button
           onClick={handleDelete}
-          className="btn btn-danger"
+          className={cn(adminStyles.btn, adminStyles.btnDanger)}
         >
           Delete Auction
         </button>
       </div>
 
       {isEditing && (
-        <div className="card" style={{ marginBottom: '2rem' }}>
-          <h2 style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>Edit Auction Details</h2>
+        <div className={cn(adminStyles.card, "mb-8")}>
+          <h2 className="text-2xl font-bold text-black mb-6 pb-4 border-b border-gray-200">Edit Auction Details</h2>
           <form onSubmit={handleUpdate}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
-              <div>
-                <label>Title</label>
-                <input type="text" name="title" value={formData.title || ''} onChange={handleChange} required />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="title" className={adminStyles.label}>Title</label>
+                <input type="text" id="title" name="title" value={formData.title || ''} onChange={handleChange} required className={adminStyles.input} />
               </div>
-              <div>
-                <label>Product ID</label>
-                <input type="text" name="product_id" value={formData.product_id || ''} onChange={handleChange} required />
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="product_id" className={adminStyles.label}>Product ID</label>
+                <input type="text" id="product_id" name="product_id" value={formData.product_id || ''} onChange={handleChange} required className={adminStyles.input} />
               </div>
-              <div>
-                <label>Min Increment</label>
-                <input type="number" name="min_increment" value={formData.min_increment || ''} onChange={handleChange} step="0.01" required />
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="min_increment" className={adminStyles.label}>Min Increment</label>
+                <input type="number" id="min_increment" name="min_increment" value={formData.min_increment || ''} onChange={handleChange} step="0.01" required className={adminStyles.input} />
               </div>
-              <div>
-                <label>Status</label>
-                <select name="status" value={formData.status} onChange={handleChange}>
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="status" className={adminStyles.label}>Status</label>
+                <select id="status" name="status" value={formData.status} onChange={handleChange} className={adminStyles.select}>
                   <option value="draft">Draft</option>
                   <option value="live">Live</option>
                   <option value="ended">Ended</option>
                 </select>
               </div>
-              <div>
-                <label>Registration End</label>
-                <input type="datetime-local" name="registration_end_time" value={formData.registration_end_time || ''} onChange={handleChange} required style={{ colorScheme: 'dark', color: '#fff' }} />
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="registration_end_time" className={adminStyles.label}>Registration End</label>
+                <input type="datetime-local" id="registration_end_time" name="registration_end_time" value={formData.registration_end_time || ''} onChange={handleChange} required className={adminStyles.input} />
               </div>
-              <div>
-                <label>Bidding Start</label>
-                <input type="datetime-local" name="bidding_start_time" value={formData.bidding_start_time || ''} onChange={handleChange} required style={{ colorScheme: 'dark', color: '#fff' }} />
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="bidding_start_time" className={adminStyles.label}>Bidding Start</label>
+                <input type="datetime-local" id="bidding_start_time" name="bidding_start_time" value={formData.bidding_start_time || ''} onChange={handleChange} required className={adminStyles.input} />
               </div>
-              <div>
-                <label>Bidding End</label>
-                <input type="datetime-local" name="bidding_end_time" value={formData.bidding_end_time || ''} onChange={handleChange} required style={{ colorScheme: 'dark', color: '#fff' }} />
+              <div className={adminStyles.formGroup}>
+                <label htmlFor="bidding_end_time" className={adminStyles.label}>Bidding End</label>
+                <input type="datetime-local" id="bidding_end_time" name="bidding_end_time" value={formData.bidding_end_time || ''} onChange={handleChange} required className={adminStyles.input} />
               </div>
             </div>
-            <button type="submit" className="btn btn-primary" style={{ marginTop: '1.5rem', backgroundColor: 'var(--color-success)', border: 'none' }}>
+            <button type="submit" className={cn(adminStyles.btn, adminStyles.btnPrimary, "mt-6")}>
               Save Changes
             </button>
           </form>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
-        <div className="card">
-          <h1 style={{ marginBottom: '1rem', fontSize: '1.75rem' }}>{auction.title}</h1>
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div className={adminStyles.card}>
+          <h1 className="text-3xl font-bold text-black mb-4">{auction.title}</h1>
+          <div className="space-y-4">
             <div>
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Product ID:</span>
-              <div style={{ fontFamily: 'monospace', fontSize: '1.1rem' }}>{auction.product_id}</div>
+              <span className="block text-sm text-gray-600 mb-1">Product ID:</span>
+              <div className="font-mono text-lg text-black">{auction.product_id}</div>
             </div>
             <div>
-              <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>Min Increment:</span>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>₹{auction.min_increment}</div>
+              <span className="block text-sm text-gray-600 mb-1">Min Increment:</span>
+              <div className="text-xl font-semibold text-black">₹{auction.min_increment}</div>
             </div>
             <div>
-              <span className={`badge badge-${auction.status}`}>
+              <span className={cn(
+                adminStyles.badge,
+                auction.status === 'live' ? adminStyles.badgeLive :
+                  auction.status === 'draft' ? adminStyles.badgeDraft :
+                    adminStyles.badgeEnded
+              )}>
                 {auction.status.toUpperCase()}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="card" style={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center'
-        }}>
+        <div className={cn(adminStyles.card, "flex flex-col justify-center items-center text-center")}>
           {bids.length > 0 ? (
             <>
-              <div style={{
-                fontSize: '0.875rem',
-                textTransform: 'uppercase',
-                fontWeight: '800',
-                letterSpacing: '0.1em',
-                color: auction.status === 'ended' ? 'var(--color-success)' : 'var(--color-primary)',
-                marginBottom: '1rem'
-              }}>
+              <div className={cn(
+                "text-sm uppercase font-extrabold tracking-widest mb-4",
+                auction.status === 'ended' ? 'text-green-600' : 'text-orange-500'
+              )}>
                 {auction.status === 'ended' ? '🎉 WINNER 🎉' : '🔥 HIGHEST BID 🔥'}
               </div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+              <div className="text-2xl font-semibold mb-2 text-black">
                 {bids[0].bidders.name}
               </div>
-              <div style={{ fontSize: '0.95rem', color: 'var(--color-success)', fontWeight: 500, marginBottom: '0.75rem' }}>
+              <div className="text-base text-green-600 font-medium mb-3">
                 📞 {bids[0].bidders.phone}
               </div>
-              <div style={{
-                fontSize: '3rem',
-                fontWeight: '900',
-                color: 'var(--color-text-primary)',
-                marginBottom: '0.5rem'
-              }}>
+              <div className="text-5xl font-black text-black mb-2">
                 ₹{bids[0].amount.toFixed(2)}
               </div>
-              <div style={{ color: 'var(--color-text-secondary)' }}>
+              <div className="text-gray-600">
                 {bids.length} total bids
               </div>
             </>
           ) : (
             <>
-              <div style={{ fontSize: '1rem', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>Current Status</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>
+              <div className="text-base text-gray-600 mb-2">Current Status</div>
+              <div className="text-2xl font-bold text-gray-400">
                 No bids yet
               </div>
             </>
@@ -318,15 +308,15 @@ export default function AuctionDetailPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Registered Bidders */}
-        <div className="card">
-          <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>Registered Bidders ({bidders.length})</h2>
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        <div className={adminStyles.card}>
+          <h2 className="text-xl font-bold text-black mb-6">Registered Bidders ({bidders.length})</h2>
+          <div className="max-h-96 overflow-y-auto">
             {bidders.length === 0 ? (
-              <p style={{ color: 'var(--color-text-secondary)' }}>No bidders registered yet.</p>
+              <p className="text-gray-600">No bidders registered yet.</p>
             ) : (
-              <table>
+              <table className={adminStyles.table}>
                 <thead>
                   <tr>
                     <th>Name / Info</th>
@@ -340,28 +330,26 @@ export default function AuctionDetailPage() {
                     return (
                       <tr
                         key={bidder.id}
-                        style={{
-                          backgroundColor: isHighestBidder ? 'rgba(249, 115, 22, 0.1)' : 'transparent'
-                        }}
+                        className={isHighestBidder ? 'bg-orange-50' : ''}
                       >
                         <td>
-                          <div style={{ fontWeight: isHighestBidder ? 'bold' : 'normal' }}>
+                          <div className={isHighestBidder ? 'font-bold' : ''}>
                             {bidder.name} {isHighestBidder && '🏆'}
                           </div>
-                          <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 500 }}>📞 {bidder.phone}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>{bidder.email}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{bidder.id.substring(0, 8)}...</div>
+                          <div className="text-sm text-green-600 font-medium">📞 {bidder.phone}</div>
+                          <div className="text-xs text-gray-600">{bidder.email}</div>
+                          <div className="text-xs text-gray-400">{bidder.id.substring(0, 8)}...</div>
                         </td>
-                        <td style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        <td className="font-bold text-lg">
                           {bidder.highest_bid !== null ? (
-                            <span style={{ color: isHighestBidder ? 'var(--color-primary)' : 'inherit' }}>
+                            <span className={isHighestBidder ? 'text-orange-500' : ''}>
                               ₹{bidder.highest_bid.toFixed(2)}
                             </span>
                           ) : (
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>No bid</span>
+                            <span className="text-gray-400 text-sm italic">No bid</span>
                           )}
                         </td>
-                        <td style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+                        <td className="text-sm text-gray-600">
                           {new Date(bidder.created_at).toLocaleDateString()}
                         </td>
                       </tr>
@@ -374,13 +362,13 @@ export default function AuctionDetailPage() {
         </div>
 
         {/* Bid History */}
-        <div className="card">
-          <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>Bid History ({bids.length})</h2>
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        <div className={adminStyles.card}>
+          <h2 className="text-xl font-bold text-black mb-6">Bid History ({bids.length})</h2>
+          <div className="max-h-96 overflow-y-auto">
             {bids.length === 0 ? (
-              <p style={{ color: 'var(--color-text-secondary)' }}>No bids placed yet.</p>
+              <p className="text-gray-600">No bids placed yet.</p>
             ) : (
-              <table>
+              <table className={adminStyles.table}>
                 <thead>
                   <tr>
                     <th>Rank</th>
@@ -393,21 +381,19 @@ export default function AuctionDetailPage() {
                   {bids.map((bid, index) => (
                     <tr
                       key={bid.id}
-                      style={{
-                        backgroundColor: index === 0 ? 'rgba(249, 115, 22, 0.1)' : 'transparent'
-                      }}
+                      className={index === 0 ? 'bg-orange-50' : ''}
                     >
-                      <td style={{ fontWeight: 'bold' }}>
+                      <td className="font-bold">
                         {index === 0 ? '🏆 #1' : `#${index + 1}`}
                       </td>
                       <td>
-                        <div style={{ fontWeight: 500 }}>{bid.bidders.name}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--color-success)' }}>📞 {bid.bidders.phone}</div>
+                        <div className="font-medium">{bid.bidders.name}</div>
+                        <div className="text-xs text-green-600">📞 {bid.bidders.phone}</div>
                       </td>
-                      <td style={{ fontWeight: 'bold', fontSize: '1.1rem', color: index === 0 ? 'var(--color-primary)' : 'inherit' }}>
+                      <td className={cn("font-bold text-lg", index === 0 ? 'text-orange-500' : '')}>
                         ₹{bid.amount.toFixed(2)}
                       </td>
-                      <td style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
+                      <td className="text-sm text-gray-600">
                         {new Date(bid.created_at).toLocaleTimeString()}
                       </td>
                     </tr>

@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { adminStyles, cn } from '@/lib/admin-styles'
 
 function LoginForm() {
   const { status } = useSession()
@@ -17,17 +18,16 @@ function LoginForm() {
   }, [status, router, callbackUrl])
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-      <div className="admin-card" style={{ maxWidth: 520, textAlign: 'center' }}>
-        <h1 style={{ marginBottom: '0.75rem', fontSize: '2rem', color: '#FF6B35' }}>🔧 Admin Sign-In</h1>
-        <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '1rem' }}>
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className={cn(adminStyles.card, 'max-w-[520px] text-center')}>
+        <h1 className="mb-3 text-3xl text-orange-500">🔧 Admin Sign-In</h1>
+        <p className="text-gray-600 mb-8 text-base">
           Sign in with your approved Google account to access the admin panel.
         </p>
         <button
           type="button"
-          className="admin-btn admin-btn-primary"
+          className={cn(adminStyles.btn, adminStyles.btnPrimary, 'w-full text-lg py-4')}
           onClick={() => signIn('google', { callbackUrl })}
-          style={{ width: '100%', fontSize: '1.05rem', padding: '1rem' }}
         >
           Continue with Google
         </button>

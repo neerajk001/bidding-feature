@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { adminStyles } from '@/lib/admin-styles'
 
 interface DashboardStats {
   totalAuctions: number
@@ -97,8 +98,8 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem', color: '#6b7280' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
+      <div className="text-center py-16 text-gray-500">
+        <div className="text-4xl mb-4">⏳</div>
         Loading dashboard...
       </div>
     )
@@ -107,91 +108,91 @@ export default function AdminDashboard() {
   return (
     <div>
       {/* Dashboard Header */}
-      <div style={{ marginBottom: '2.5rem' }}>
-        <h1 className="admin-section-title" style={{ marginBottom: '0.5rem' }}>
+      <div className="mb-10">
+        <h1 className="text-3xl font-bold text-black mb-2">
           Dashboard
         </h1>
-        <p style={{ color: '#6b7280', fontSize: '1.05rem' }}>
+        <p className="text-gray-600 text-lg">
           Welcome to your admin control center
         </p>
       </div>
 
       {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-        <div className="admin-card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #fff5ed 0%, #ffffff 100%)', borderColor: '#FF6B35' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🎯</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#000', marginBottom: '0.25rem' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div className={`${adminStyles.card} text-center`} style={{ background: 'linear-gradient(135deg, #fff5ed 0%, #ffffff 100%)', borderColor: '#FF6B35' }}>
+          <div className="text-4xl mb-2">🎯</div>
+          <div className="text-3xl font-extrabold text-black mb-1">
             {stats.totalAuctions}
           </div>
-          <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 600 }}>Total Auctions</div>
+          <div className="text-sm text-gray-600 font-semibold">Total Auctions</div>
         </div>
 
-        <div className="admin-card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)', borderColor: '#ef4444' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔴</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#000', marginBottom: '0.25rem' }}>
+        <div className={`${adminStyles.card} text-center`} style={{ background: 'linear-gradient(135deg, #fef2f2 0%, #ffffff 100%)', borderColor: '#ef4444' }}>
+          <div className="text-4xl mb-2">🔴</div>
+          <div className="text-3xl font-extrabold text-black mb-1">
             {stats.liveAuctions}
           </div>
-          <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 600 }}>Live Now</div>
+          <div className="text-sm text-gray-600 font-semibold">Live Now</div>
         </div>
 
-        <div className="admin-card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #dcfce7 0%, #ffffff 100%)', borderColor: '#16a34a' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🏆</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#000', marginBottom: '0.25rem' }}>
+        <div className={`${adminStyles.card} text-center`} style={{ background: 'linear-gradient(135deg, #dcfce7 0%, #ffffff 100%)', borderColor: '#16a34a' }}>
+          <div className="text-4xl mb-2">🏆</div>
+          <div className="text-3xl font-extrabold text-black mb-1">
             {stats.recentWinners}
           </div>
-          <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 600 }}>Winners</div>
+          <div className="text-sm text-gray-600 font-semibold">Winners</div>
         </div>
 
-        <div className="admin-card" style={{ textAlign: 'center', background: 'linear-gradient(135deg, #dbeafe 0%, #ffffff 100%)', borderColor: '#3b82f6' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>👥</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#000', marginBottom: '0.25rem' }}>
+        <div className={`${adminStyles.card} text-center`} style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #ffffff 100%)', borderColor: '#3b82f6' }}>
+          <div className="text-4xl mb-2">👥</div>
+          <div className="text-3xl font-extrabold text-black mb-1">
             {stats.totalBidders}
           </div>
-          <div style={{ fontSize: '0.9rem', color: '#6b7280', fontWeight: 600 }}>Bidders</div>
+          <div className="text-sm text-gray-600 font-semibold">Bidders</div>
         </div>
       </div>
 
       {/* Secondary Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
-        <div className="admin-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-10">
+        <div className={`${adminStyles.card} p-5 text-center`}>
+          <div className="text-xs text-gray-600 mb-2 uppercase tracking-wide">
             Draft Auctions
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#000' }}>
+          <div className="text-3xl font-bold text-black">
             {stats.draftAuctions}
           </div>
         </div>
 
-        <div className="admin-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className={`${adminStyles.card} p-5 text-center`}>
+          <div className="text-xs text-gray-600 mb-2 uppercase tracking-wide">
             Ended Auctions
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#000' }}>
+          <div className="text-3xl font-bold text-black">
             {stats.endedAuctions}
           </div>
         </div>
 
-        <div className="admin-card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className={`${adminStyles.card} p-5 text-center`}>
+          <div className="text-xs text-gray-600 mb-2 uppercase tracking-wide">
             Total Bids
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#000' }}>
+          <div className="text-3xl font-bold text-black">
             {stats.totalBids}
           </div>
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem', color: '#000' }}>
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-6 text-black">
           Quick Actions
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {quickActions.map((action) => (
             <Link
               key={action.href}
               href={action.href}
-              className="admin-card"
+              className={adminStyles.card}
               style={{
                 textDecoration: 'none',
                 transition: 'all 0.2s ease',
@@ -227,26 +228,26 @@ export default function AdminDashboard() {
                   {action.icon}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <h3 style={{ 
-                    margin: 0, 
-                    fontSize: '1.15rem', 
-                    fontWeight: 700, 
+                  <h3 style={{
+                    margin: 0,
+                    fontSize: '1.15rem',
+                    fontWeight: 700,
                     color: '#000',
                     marginBottom: '0.5rem'
                   }}>
                     {action.title}
                   </h3>
-                  <p style={{ 
-                    margin: 0, 
-                    fontSize: '0.9rem', 
+                  <p style={{
+                    margin: 0,
+                    fontSize: '0.9rem',
                     color: '#6b7280',
                     lineHeight: '1.5'
                   }}>
                     {action.description}
                   </p>
                 </div>
-                <div style={{ 
-                  fontSize: '1.25rem', 
+                <div style={{
+                  fontSize: '1.25rem',
                   color: action.color,
                   marginTop: '0.25rem'
                 }}>
@@ -259,14 +260,14 @@ export default function AdminDashboard() {
       </div>
 
       {/* Additional Info */}
-      <div className="admin-card" style={{ marginTop: '2rem', background: '#fafafa' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ fontSize: '1.5rem' }}>💡</div>
+      <div className={adminStyles.card} style={{ marginTop: '2rem', background: '#fafafa' }}>
+        <div className="flex items-center gap-4">
+          <div className="text-2xl">💡</div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#000', marginBottom: '0.25rem' }}>
+            <h3 className="m-0 text-base font-bold text-black mb-1">
               Quick Tip
             </h3>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#6b7280' }}>
+            <p className="m-0 text-sm text-gray-600">
               Click on any card above to navigate to that section. You can also use the navigation menu at the top.
             </p>
           </div>

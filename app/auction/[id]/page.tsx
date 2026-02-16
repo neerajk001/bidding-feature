@@ -363,61 +363,56 @@ export default function AuctionDetailPage() {
   const showLiveBid = phase === 'live'
   return (
     <PublicShell>
-      <section className="section section-tight">
-        <div className="container">
-          <Link href="/auctions" className="btn btn-outline" style={{ marginBottom: '1.5rem' }}>
-            Back to auctions
+      <section className="py-12 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <Link href="/auctions" className="inline-flex items-center text-sm font-medium text-zinc-500 hover:text-zinc-900 mb-8 gap-1 transition-colors group">
+            <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to auctions
           </Link>
 
           {loading ? (
-            <div className="card skeleton-card" />
+            <div className="bg-white border border-zinc-200 rounded-xl shadow-sm h-[600px] animate-pulse" />
           ) : error ? (
-            <div className="card notice notice-error">{error}</div>
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>
           ) : auction ? (
             <>
-              <div className="auction-detail-grid">
-                <div className="card auction-detail-card">
+              <div className="grid lg:grid-cols-[1fr_400px] gap-8 items-start">
+                <div className="rounded-xl overflow-hidden">
                   <AuctionMediaCarousel
                     banner={auction.banner_image}
                     gallery={auction.gallery_images}
                     reel={auction.reel_url}
                     title={auction.title}
                   />
-                  <div className="auction-detail-body">
-                    <div className="auction-detail-header">
-                      <div>
-                        <span className="eyebrow">Auction</span>
-                        <h1>{auction.title}</h1>
+                  <div className="p-6 lg:p-8 flex flex-col gap-8">
+                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                      <div className="flex flex-col gap-2">
+                        <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">Auction</span>
+                        <h1 className="text-3xl lg:text-4xl font-bold font-display text-black">{auction.title}</h1>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <span className={`badge badge-${auction.status}`}>{auction.status}</span>
-                          <span className={pillClass}>{phaseLabel}</span>
+                      <div className="flex flex-col gap-2 items-end">
+                        <div className="flex gap-2 items-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${auction.status === 'live' ? 'bg-green-100 text-green-700' :
+                            auction.status === 'ended' ? 'bg-gray-100 text-gray-500' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>{auction.status}</span>
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-gray-100 text-gray-600'
+                            }`}>{phaseLabel}</span>
                         </div>
 
                         {/* Bid form in header when auction is live and user is registered */}
                         {showLiveBid && bidderId && (
-                          <div style={{ marginTop: '0.5rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-
+                          <div className="mt-2 w-full flex flex-col items-end gap-3">
                             {auction.available_sizes && auction.available_sizes.length > 0 && (
-                              <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                {/* Size Label or Icon could go here */}
+                              <div className="flex gap-1 flex-wrap justify-end">
                                 {auction.available_sizes.map(size => (
                                   <button
                                     key={size}
                                     type="button"
                                     onClick={() => setSelectedSize(size)}
-                                    style={{
-                                      padding: '0.25rem 0.6rem',
-                                      fontSize: '0.8rem',
-                                      border: selectedSize === size ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                      borderRadius: '4px',
-                                      background: selectedSize === size ? 'var(--color-primary)' : 'transparent',
-                                      color: selectedSize === size ? '#fff' : 'var(--color-text-secondary)',
-                                      cursor: 'pointer',
-                                      transition: 'all 0.2s',
-                                      fontWeight: selectedSize === size ? 600 : 400
-                                    }}
+                                    className={`px-3 py-1 text-xs rounded transition-all border ${selectedSize === size
+                                      ? 'bg-orange-500 border-orange-500 text-white font-semibold'
+                                      : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                                      }`}
                                   >
                                     {size}
                                   </button>
@@ -425,7 +420,7 @@ export default function AuctionDetailPage() {
                               </div>
                             )}
 
-                            <form onSubmit={handleBidSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <form onSubmit={handleBidSubmit} className="flex gap-2 items-center">
                               <input
                                 id="bid-amount"
                                 name="bid-amount"
@@ -436,25 +431,12 @@ export default function AuctionDetailPage() {
                                 onChange={(event) => setBidAmount(event.target.value)}
                                 placeholder={`₹${minimumBid}`}
                                 required
-                                style={{
-                                  width: '140px',
-                                  padding: '0.5rem 0.75rem',
-                                  fontSize: '0.95rem',
-                                  border: '2px solid var(--color-primary)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  background: 'var(--color-surface)',
-                                  color: 'var(--color-text-primary)'
-                                }}
+                                className="w-32 px-3 py-2 text-sm border-2 border-orange-500 rounded bg-white text-black focus:outline-none focus:ring-2 focus:ring-orange-200"
                               />
                               <button
                                 type="submit"
-                                className="btn btn-primary"
+                                className="px-4 py-2 bg-orange-500 text-white rounded font-semibold text-sm hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                 disabled={bidSubmitting}
-                                style={{
-                                  whiteSpace: 'nowrap',
-                                  padding: '0.5rem 1rem',
-                                  fontSize: '0.95rem'
-                                }}
                               >
                                 {bidSubmitting ? 'Placing...' : 'Place Bid'}
                               </button>
@@ -466,33 +448,24 @@ export default function AuctionDetailPage() {
 
                     {/* Show message if bid was placed */}
                     {message && showLiveBid && (
-                      <div className={`notice notice-${message.type}`} style={{ marginTop: '1rem' }}>
+                      <div className={`px-4 py-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                        }`}>
                         {message.text}
                       </div>
                     )}
 
-                    <div className="auction-detail-stats">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 border-t border-gray-200 pt-6">
                       <div>
-                        <span className="metric-label">Current bid</span>
-                        <span className="metric-value">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Current bid</span>
+                        <span className="text-2xl font-bold text-black block flex items-center gap-2">
                           {formatCurrency(auction.current_highest_bid)}
                           {auction.highest_bid_size && (
-                            <span style={{
-                              marginLeft: '0.5rem',
-                              fontSize: '0.8rem',
-                              padding: '2px 6px',
-                              border: '1px solid var(--color-border)',
-                              borderRadius: '4px',
-                              background: 'var(--color-surface-light)',
-                              verticalAlign: 'middle',
-                              fontWeight: 'normal',
-                              color: 'var(--color-text-secondary)'
-                            }}>
+                            <span className="text-xs px-2 py-0.5 border border-gray-200 bg-gray-50 rounded text-gray-500 font-normal">
                               Size: {auction.highest_bid_size}
                             </span>
                           )}
                         </span>
-                        <span className="metric-caption">
+                        <span className="text-sm text-gray-600 mt-1 block">
                           {auction.highest_bidder_name
                             ? `Leader: ${auction.highest_bidder_name}`
                             : 'Be the first bidder'}
@@ -500,57 +473,58 @@ export default function AuctionDetailPage() {
                       </div>
                       {auction.base_price && (
                         <div>
-                          <span className="metric-label">Base price</span>
-                          <span className="metric-value">
+                          <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Base price</span>
+                          <span className="text-2xl font-bold text-black block">
                             {formatCurrency(auction.base_price)}
                           </span>
-                          <span className="metric-caption">
+                          <span className="text-sm text-gray-600 mt-1 block">
                             Starting price
                           </span>
                         </div>
                       )}
                       <div>
-                        <span className="metric-label">Minimum increment</span>
-                        <span className="metric-value">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Minimum increment</span>
+                        <span className="text-2xl font-bold text-black block">
                           {formatCurrency(auction.min_increment)}
                         </span>
-                        <span className="metric-caption">
+                        <span className="text-sm text-gray-600 mt-1 block">
                           {auction.total_bids ? `${auction.total_bids} bids` : 'No bids yet'}
                         </span>
                       </div>
                     </div>
 
-                    <div className="timeline-grid">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-gray-200">
                       <div>
-                        <span className="metric-label">Registration ends</span>
-                        <span className="metric-value">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Registration ends</span>
+                        <span className="text-sm font-medium text-black">
                           {formatDateTime(auction.registration_end_time)}
                         </span>
                       </div>
                       <div>
-                        <span className="metric-label">Bidding starts</span>
-                        <span className="metric-value">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Bidding starts</span>
+                        <span className="text-sm font-medium text-black">
                           {formatDateTime(auction.bidding_start_time)}
                         </span>
                       </div>
                       <div>
-                        <span className="metric-label">Bidding ends</span>
-                        <span className="metric-value">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Bidding ends</span>
+                        <span className="text-sm font-medium text-black">
                           {formatDateTime(auction.bidding_end_time)}
                         </span>
                       </div>
                     </div>
 
                     {countdownTarget && (
-                      <div className="countdown-banner">
-                        <span className={pillClass}>
+                      <div className="flex justify-between items-center p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-white text-orange-700 border border-orange-200'
+                          }`}>
                           {phase === 'registration'
                             ? 'Registration closes in'
                             : phase === 'upcoming'
                               ? 'Bidding opens in'
                               : 'Auction ends in'}
                         </span>
-                        <span className="countdown-value">
+                        <span className="text-xl font-bold font-mono text-orange-700">
                           {formatCountdown(countdownTarget, now)}
                         </span>
                       </div>
@@ -558,16 +532,16 @@ export default function AuctionDetailPage() {
                   </div>
                 </div>
 
-                <div className="card auction-action-card">
-                  <div className="auction-action-header">
-                    <h2>
+                <div className="sticky top-24 flex flex-col gap-6 p-6 bg-white border border-zinc-200 rounded-xl shadow-sm">
+                  <div className="flex flex-col gap-2 border-b border-zinc-100 pb-4">
+                    <h2 className="text-xl font-bold text-zinc-900">
                       {phase === 'live'
                         ? 'Auction Status'
                         : phase === 'ended'
                           ? 'Auction ended'
                           : 'Register to bid'}
                     </h2>
-                    <p className="metric-caption">
+                    <p className="text-sm text-zinc-500 leading-relaxed">
                       {phase === 'registration'
                         ? 'Complete phone verification once and register to join.'
                         : phase === 'upcoming'
@@ -579,30 +553,31 @@ export default function AuctionDetailPage() {
                   </div>
 
                   {message && !showLiveBid && (
-                    <div className={`notice notice-${message.type}`}>{message.text}</div>
+                    <div className={`px-4 py-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+                      }`}>{message.text}</div>
                   )}
 
                   {phase === 'ended' && (
-                    <div className="empty-state">
-                      <h3>Auction complete</h3>
-                      <p>
+                    <div className="text-center py-8">
+                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Auction complete</h3>
+                      <p className="text-zinc-500 mb-6 text-sm">
                         Final bid: {formatCurrency(auction.current_highest_bid)}. Winner:{' '}
                         {auction.winner_name || auction.highest_bidder_name || 'TBD'}
                       </p>
-                      <Link href="/auctions" className="btn btn-outline">
+                      <Link href="/auctions" className="inline-flex justify-center w-full px-4 py-2 border border-zinc-200 rounded-lg text-sm font-medium hover:bg-zinc-50 hover:text-orange-600 transition-colors">
                         Browse other auctions
                       </Link>
                     </div>
                   )}
 
                   {showRegistration && !bidderId && checkingUser && (
-                    <div className="empty-state">
+                    <div className="text-center py-8 text-zinc-500">
                       <p>Checking your verification status...</p>
                     </div>
                   )}
 
                   {showRegistration && !bidderId && !checkingUser && !profile && (
-                    <div className="stack">
+                    <div className="flex flex-col gap-4">
                       <EmailOtpVerification
                         auctionId={auction.id}
                         onVerificationComplete={handleVerificationSuccess}
@@ -612,9 +587,9 @@ export default function AuctionDetailPage() {
                   )}
 
                   {showRegistration && !bidderId && !checkingUser && profile && (
-                    <form onSubmit={handleRegister} className="stack">
+                    <form onSubmit={handleRegister} className="flex flex-col gap-4">
                       <div>
-                        <label htmlFor="name">Full name</label>
+                        <label htmlFor="name" className="block text-sm font-medium text-zinc-700 mb-1">Full name</label>
                         <input
                           id="name"
                           name="name"
@@ -624,10 +599,11 @@ export default function AuctionDetailPage() {
                             setRegistrationForm((prev) => ({ ...prev, name: event.target.value }))
                           }
                           required
+                          className="w-full px-3 py-2 border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                         />
                       </div>
                       <div>
-                        <label htmlFor="email">Email</label>
+                        <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1">Email</label>
                         <input
                           id="email"
                           name="email"
@@ -637,24 +613,25 @@ export default function AuctionDetailPage() {
                             setRegistrationForm((prev) => ({ ...prev, email: event.target.value }))
                           }
                           required
+                          className="w-full px-3 py-2 border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                         />
                       </div>
                       <div>
-                        <label htmlFor="phone">Verified phone</label>
-                        <input id="phone" name="phone" type="tel" value={registrationForm.phone} readOnly />
+                        <label htmlFor="phone" className="block text-sm font-medium text-zinc-700 mb-1">Verified phone</label>
+                        <input id="phone" name="phone" type="tel" value={registrationForm.phone} readOnly className="w-full px-3 py-2 border border-zinc-200 bg-zinc-50 text-zinc-500 rounded-md text-sm cursor-not-allowed" />
                       </div>
-                      <button type="submit" className="btn btn-primary" disabled={registrationSubmitting}>
+                      <button type="submit" className="w-full px-4 py-2 bg-orange-500 text-white rounded font-semibold text-sm hover:bg-orange-600 transition-colors disabled:opacity-50" disabled={registrationSubmitting}>
                         {registrationSubmitting ? 'Registering...' : 'Complete registration'}
                       </button>
                     </form>
                   )}
 
                   {showRegistration && bidderId && (
-                    <div className="empty-state">
-                      <h3>Registration confirmed</h3>
-                      <p>You are registered and ready to bid when the auction opens.</p>
+                    <div className="text-center py-8">
+                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Registration confirmed</h3>
+                      <p className="text-zinc-500 text-sm mb-4">You are registered and ready to bid when the auction opens.</p>
                       {countdownTarget && (
-                        <div className="countdown-mini">
+                        <div className="inline-block px-3 py-1 bg-orange-50 text-orange-700 rounded text-xs font-bold uppercase tracking-wider">
                           Bidding starts in {formatCountdown(countdownTarget, now)}
                         </div>
                       )}
@@ -662,29 +639,29 @@ export default function AuctionDetailPage() {
                   )}
 
                   {phase === 'upcoming' && !bidderId && (
-                    <div className="empty-state">
-                      <h3>Registration closed</h3>
-                      <p>Only registered bidders can participate once bidding opens.</p>
+                    <div className="text-center py-8">
+                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Registration closed</h3>
+                      <p className="text-zinc-500 text-sm">Only registered bidders can participate once bidding opens.</p>
                     </div>
                   )}
 
                   {showLiveBid && bidderId && (
-                    <div className="empty-state">
-                      <h3>Bidding is active</h3>
-                      <p>
-                        Current lead: {formatCurrency(auction.current_highest_bid)}.
-                        Next bid must be at least {formatCurrency(minimumBid)}.
+                    <div className="text-center py-8">
+                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Bidding is active</h3>
+                      <p className="text-zinc-600 text-sm mb-4">
+                        Current lead: <span className="font-semibold text-zinc-900">{formatCurrency(auction.current_highest_bid)}</span>.
+                        Next bid must be at least <span className="font-semibold text-zinc-900">{formatCurrency(minimumBid)}</span>.
                       </p>
-                      <div className="metric-caption" style={{ marginTop: '1rem' }}>
+                      <div className="text-xs text-zinc-500 bg-zinc-50 p-3 rounded border border-zinc-100">
                         💡 Use the bid form at the top to place your bid. Auction extends automatically on last-minute bids.
                       </div>
                     </div>
                   )}
 
                   {showLiveBid && !bidderId && (
-                    <div className="empty-state">
-                      <h3>Registration closed</h3>
-                      <p>You need to register before bidding goes live to place bids.</p>
+                    <div className="text-center py-8">
+                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Registration closed</h3>
+                      <p className="text-zinc-500 text-sm">You need to register before bidding goes live to place bids.</p>
                     </div>
                   )}
                 </div>

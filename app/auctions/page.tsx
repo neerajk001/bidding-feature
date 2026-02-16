@@ -60,66 +60,61 @@ export default function AuctionsPage() {
 
   return (
     <PublicShell>
-      <section className="section section-tight">
-        <div className="container">
-          <div className="section-heading" style={{ textAlign: 'center', marginBottom: '3rem' }}>
-            <span className="eyebrow">The Collection</span>
-            <h1>All Active Auctions</h1>
+      <section className="py-12 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-12 flex flex-col gap-2">
+            <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">The Collection</span>
+            <h1 className="text-3xl lg:text-4xl font-bold font-display text-zinc-900">All Active Auctions</h1>
           </div>
 
-          {error && <div className="notice notice-error">{error}</div>}
+          {error && <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-8 text-center">{error}</div>}
 
           {loading ? (
-            <div className="grid grid-3">
-              <div className="skeleton-block" style={{ height: '400px' }} />
-              <div className="skeleton-block" style={{ height: '400px' }} />
-              <div className="skeleton-block" style={{ height: '400px' }} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className="bg-zinc-100 animate-pulse rounded-xl h-[400px]" />
+              <div className="bg-zinc-100 animate-pulse rounded-xl h-[400px]" />
+              <div className="bg-zinc-100 animate-pulse rounded-xl h-[400px]" />
             </div>
           ) : auctions.length === 0 ? (
-            <div className="empty-state" style={{ padding: '4rem 0' }}>
-              <h3>No live auctions right now</h3>
-              <p style={{ color: 'var(--color-text-secondary)' }}>
+            <div className="py-24 text-center">
+              <h3 className="text-xl font-medium text-zinc-900 mb-2">No live auctions right now</h3>
+              <p className="text-zinc-500">
                 Check back soon for the next exclusive drop.
               </p>
             </div>
           ) : (
-            <div className="grid grid-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {auctions.map((auction) => (
-                <Link href={`/auction/${auction.id}`} key={auction.id} className="auction-card">
-                  <div className="auction-card-image">
+                <Link href={`/auction/${auction.id}`} key={auction.id} className="group flex flex-col gap-4">
+                  <div className="aspect-[3/4] relative bg-zinc-100 rounded-xl overflow-hidden">
                     {auction.banner_image ? (
-                      <img src={auction.banner_image} alt={auction.title} />
+                      <img
+                        src={auction.banner_image}
+                        alt={auction.title}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
                     ) : (
-                      <div
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          background: 'var(--color-surface-light)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--color-text-muted)',
-                        }}
-                      >
+                      <div className="w-full h-full flex items-center justify-center bg-zinc-100 text-zinc-400 font-medium uppercase tracking-wider text-sm">
                         NO IMAGE
                       </div>
                     )}
                   </div>
-                  <div className="auction-card-body" style={{ padding: '1rem 0' }}>
-                    <div className="stack" style={{ gap: '0.25rem' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: '500' }}>{auction.title}</h3>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="metric-value" style={{ fontSize: '1rem' }}>
-                          {formatCurrency(auction.current_highest_bid)}
-                        </span>
-                        <span className={`badge badge-${auction.status}`} style={{ fontSize: '0.65rem' }}>
-                          {auction.status}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
-                        <span>Ends {formatDate(auction.bidding_end_time)}</span>
-                        <span>{auction.total_bids || 0} Bids</span>
-                      </div>
+                  <div className="flex flex-col gap-2 py-2">
+                    <h3 className="text-lg font-display font-medium text-zinc-900 group-hover:text-orange-600 transition-colors">{auction.title}</h3>
+                    <div className="flex justify-between items-center">
+                      <span className="text-base font-semibold text-zinc-900">
+                        {formatCurrency(auction.current_highest_bid)}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${auction.status === 'live' ? 'bg-green-100 text-green-700' :
+                          auction.status === 'ended' ? 'bg-zinc-100 text-zinc-500' :
+                            'bg-orange-100 text-orange-700'
+                        }`}>
+                        {auction.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs text-zinc-500 mt-1 font-medium">
+                      <span>Ends {formatDate(auction.bidding_end_time)}</span>
+                      <span>{auction.total_bids || 0} Bids</span>
                     </div>
                   </div>
                 </Link>
