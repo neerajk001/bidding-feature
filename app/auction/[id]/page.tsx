@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import PublicShell from '@/components/public/PublicShell'
 import EmailOtpVerification from '@/components/auth/EmailOtpVerification'
+import AuctionMediaCarousel from '@/components/public/AuctionMediaCarousel'
 
 interface AuctionDetail {
   id: string
@@ -25,6 +26,9 @@ interface AuctionDetail {
   winner_name?: string | null
   winning_amount?: number | null
   winner_declared_at?: string | null
+  available_sizes?: string[] | null
+  gallery_images?: string[] | null
+  highest_bid_size?: string | null
 }
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; text: string }
@@ -56,6 +60,7 @@ export default function AuctionDetailPage() {
   const [bidSubmitting, setBidSubmitting] = useState(false)
   const [now, setNow] = useState(new Date())
   const [checkingUser, setCheckingUser] = useState(false)
+  const [selectedSize, setSelectedSize] = useState<string>('')
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -246,7 +251,7 @@ export default function AuctionDetailPage() {
     localStorage.setItem('auction_user_phone', payload.phone)
     localStorage.setItem('auction_user_email', payload.email)
     localStorage.setItem('auction_user_name', payload.name)
-    
+
     setMessage({ type: 'success', text: 'Email verified. Complete registration to bid.' })
   }
 
@@ -314,6 +319,15 @@ export default function AuctionDetailPage() {
       return
     }
 
+    if (auction.available_sizes && auction.available_sizes.length > 0 && !selectedSize) {
+      setMessage({
+        type: 'error',
+        text: 'Please select a size.'
+      })
+      setBidSubmitting(false)
+      return
+    }
+
     try {
       const response = await fetch('/api/place-bid', {
         method: 'POST',
@@ -321,7 +335,8 @@ export default function AuctionDetailPage() {
         body: JSON.stringify({
           auction_id: auction.id,
           bidder_id: bidderId,
-          amount: amountValue
+          amount: amountValue,
+          size: selectedSize
         })
       })
 
@@ -362,21 +377,12 @@ export default function AuctionDetailPage() {
             <>
               <div className="auction-detail-grid">
                 <div className="card auction-detail-card">
-                  {auction.banner_image && (
-                    <div className="auction-detail-image">
-                      <img src={auction.banner_image} alt={auction.title} />
-                    </div>
-                  )}
-                  {auction.reel_url && (
-                    <div className="auction-detail-video">
-                      <video
-                        src={auction.reel_url}
-                        controls
-                        playsInline
-                        preload="metadata"
-                      />
-                    </div>
-                  )}
+                  <AuctionMediaCarousel
+                    banner={auction.banner_image}
+                    gallery={auction.gallery_images}
+                    reel={auction.reel_url}
+                    title={auction.title}
+                  />
                   <div className="auction-detail-body">
                     <div className="auction-detail-header">
                       <div>
@@ -388,43 +394,72 @@ export default function AuctionDetailPage() {
                           <span className={`badge badge-${auction.status}`}>{auction.status}</span>
                           <span className={pillClass}>{phaseLabel}</span>
                         </div>
-                        
+
                         {/* Bid form in header when auction is live and user is registered */}
                         {showLiveBid && bidderId && (
-                          <form onSubmit={handleBidSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
-                            <input
-                              id="bid-amount"
-                              name="bid-amount"
-                              type="number"
-                              min={minimumBid}
-                              step="0.01"
-                              value={bidAmount}
-                              onChange={(event) => setBidAmount(event.target.value)}
-                              placeholder={`₹${minimumBid}`}
-                              required
-                              style={{ 
-                                width: '140px',
-                                padding: '0.5rem 0.75rem',
-                                fontSize: '0.95rem',
-                                border: '2px solid var(--color-primary)',
-                                borderRadius: 'var(--radius-sm)',
-                                background: 'var(--color-surface)',
-                                color: 'var(--color-text-primary)'
-                              }}
-                            />
-                            <button 
-                              type="submit" 
-                              className="btn btn-primary" 
-                              disabled={bidSubmitting} 
-                              style={{ 
-                                whiteSpace: 'nowrap',
-                                padding: '0.5rem 1rem',
-                                fontSize: '0.95rem'
-                              }}
-                            >
-                              {bidSubmitting ? 'Placing...' : 'Place Bid'}
-                            </button>
-                          </form>
+                          <div style={{ marginTop: '0.5rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+
+                            {auction.available_sizes && auction.available_sizes.length > 0 && (
+                              <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                {/* Size Label or Icon could go here */}
+                                {auction.available_sizes.map(size => (
+                                  <button
+                                    key={size}
+                                    type="button"
+                                    onClick={() => setSelectedSize(size)}
+                                    style={{
+                                      padding: '0.25rem 0.6rem',
+                                      fontSize: '0.8rem',
+                                      border: selectedSize === size ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                      borderRadius: '4px',
+                                      background: selectedSize === size ? 'var(--color-primary)' : 'transparent',
+                                      color: selectedSize === size ? '#fff' : 'var(--color-text-secondary)',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s',
+                                      fontWeight: selectedSize === size ? 600 : 400
+                                    }}
+                                  >
+                                    {size}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            <form onSubmit={handleBidSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                              <input
+                                id="bid-amount"
+                                name="bid-amount"
+                                type="number"
+                                min={minimumBid}
+                                step="0.01"
+                                value={bidAmount}
+                                onChange={(event) => setBidAmount(event.target.value)}
+                                placeholder={`₹${minimumBid}`}
+                                required
+                                style={{
+                                  width: '140px',
+                                  padding: '0.5rem 0.75rem',
+                                  fontSize: '0.95rem',
+                                  border: '2px solid var(--color-primary)',
+                                  borderRadius: 'var(--radius-sm)',
+                                  background: 'var(--color-surface)',
+                                  color: 'var(--color-text-primary)'
+                                }}
+                              />
+                              <button
+                                type="submit"
+                                className="btn btn-primary"
+                                disabled={bidSubmitting}
+                                style={{
+                                  whiteSpace: 'nowrap',
+                                  padding: '0.5rem 1rem',
+                                  fontSize: '0.95rem'
+                                }}
+                              >
+                                {bidSubmitting ? 'Placing...' : 'Place Bid'}
+                              </button>
+                            </form>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -441,6 +476,21 @@ export default function AuctionDetailPage() {
                         <span className="metric-label">Current bid</span>
                         <span className="metric-value">
                           {formatCurrency(auction.current_highest_bid)}
+                          {auction.highest_bid_size && (
+                            <span style={{
+                              marginLeft: '0.5rem',
+                              fontSize: '0.8rem',
+                              padding: '2px 6px',
+                              border: '1px solid var(--color-border)',
+                              borderRadius: '4px',
+                              background: 'var(--color-surface-light)',
+                              verticalAlign: 'middle',
+                              fontWeight: 'normal',
+                              color: 'var(--color-text-secondary)'
+                            }}>
+                              Size: {auction.highest_bid_size}
+                            </span>
+                          )}
                         </span>
                         <span className="metric-caption">
                           {auction.highest_bidder_name

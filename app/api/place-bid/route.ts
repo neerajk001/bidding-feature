@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Get auction details
     const { data: auction, error: auctionError } = await supabaseAdmin
       .from('auctions')
-      .select('id, status, min_increment, base_price, bidding_start_time, bidding_end_time')
+      .select('id, status, min_increment, base_price, bidding_start_time, bidding_end_time, available_sizes')
       .eq('id', auction_id)
       .single()
 
@@ -61,6 +61,23 @@ export async function POST(request: NextRequest) {
         { error: 'Bidding has ended' },
         { status: 400 }
       )
+    }
+
+    // Validate Size Selection
+    const { size } = body
+    if (auction.available_sizes && auction.available_sizes.length > 0) {
+      if (!size) {
+        return NextResponse.json(
+          { error: 'Please select a size to place your bid' },
+          { status: 400 }
+        )
+      }
+      if (!auction.available_sizes.includes(size)) {
+        return NextResponse.json(
+          { error: 'Invalid size selected' },
+          { status: 400 }
+        )
+      }
     }
 
     // Verify bidder is registered for this auction
@@ -163,6 +180,7 @@ export async function POST(request: NextRequest) {
         .from('bids')
         .update({
           amount: amount,
+          size: size || null,
           created_at: new Date().toISOString() // Update time so it shows as latest
         })
         .eq('id', existingBid.id)
@@ -178,7 +196,8 @@ export async function POST(request: NextRequest) {
         .insert({
           auction_id,
           bidder_id,
-          amount
+          amount,
+          size: size || null
         })
         .select('id, created_at')
         .single()

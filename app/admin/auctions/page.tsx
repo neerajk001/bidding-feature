@@ -28,7 +28,8 @@ export default function AdminAuctionsPage() {
     registration_end_time: '',
     bidding_start_time: '',
     bidding_end_time: '',
-    status: 'draft'
+    status: 'draft',
+    available_sizes: ''
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -51,12 +52,56 @@ export default function AdminAuctionsPage() {
     }
   }
 
+  const uploadFile = async (file: File, folder: string): Promise<string> => {
+    // 1. Get signed URL
+    const res = await fetch('/api/admin/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        type: file.type,
+        folder
+      })
+    })
+
+    if (!res.ok) throw new Error('Failed to get upload URL')
+    const { signedUrl, publicUrl } = await res.json()
+
+    // 2. Upload file directly to storage
+    const uploadRes = await fetch(signedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type
+      }
+    })
+
+    if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.statusText}`)
+
+    return publicUrl
+  }
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
     setMessage(null)
 
     try {
+      let reelUrl = ''
+      if (reelFile) {
+        setMessage({ type: 'info', text: 'Uploading reel video (this may take a moment)...' })
+        reelUrl = await uploadFile(reelFile, 'reels')
+      }
+
+      const uploadedGalleryUrls: string[] = []
+      if (galleryFiles.length > 0) {
+        setMessage({ type: 'info', text: `Uploading ${galleryFiles.length} gallery images...` })
+        for (const file of galleryFiles) {
+          const url = await uploadFile(file, 'gallery')
+          uploadedGalleryUrls.push(url)
+        }
+      }
+
       const body = new FormData()
       body.append('title', formData.title)
       body.append('product_id', formData.product_id)
@@ -68,14 +113,20 @@ export default function AdminAuctionsPage() {
       body.append('bidding_start_time', formData.bidding_start_time)
       body.append('bidding_end_time', formData.bidding_end_time)
       body.append('status', formData.status)
+      body.append('available_sizes', formData.available_sizes)
 
       if (formData.banner_image) {
         body.append('banner_image', formData.banner_image)
       }
 
-      if (reelFile) {
-        body.append('reel', reelFile)
+      // Append uploaded URLs
+      if (reelUrl) {
+        body.append('reel_url', reelUrl)
       }
+
+      uploadedGalleryUrls.forEach(url => {
+        body.append('gallery_urls', url)
+      })
 
       const response = await fetch('/api/admin/auctions', {
         method: 'POST',
@@ -99,13 +150,20 @@ export default function AdminAuctionsPage() {
         registration_end_time: '',
         bidding_start_time: '',
         bidding_end_time: '',
-        status: 'draft'
+        status: 'draft',
+        available_sizes: ''
       })
       setReelFile(null)
       if (reelPreview) {
         URL.revokeObjectURL(reelPreview)
         setReelPreview('')
       }
+
+      // Clear gallery
+      galleryPreviews.forEach(url => URL.revokeObjectURL(url))
+      setGalleryFiles([])
+      setGalleryPreviews([])
+
       setShowForm(false)
       fetchAuctions() // Refresh the list
     } catch (error) {
@@ -179,6 +237,54 @@ export default function AdminAuctionsPage() {
     setReelFile(file)
     setReelPreview(previewUrl)
     setMessage({ type: 'success', text: 'Reel video ready to upload.' })
+  }
+
+  const [galleryFiles, setGalleryFiles] = useState<File[]>([])
+  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([])
+
+  const handleGalleryFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const newFiles: File[] = []
+    const newPreviews: string[] = []
+
+    // Max 5 images total including existing
+    const currentCount = galleryFiles.length
+    const maxAllowed = 5
+    const remainingSlots = maxAllowed - currentCount
+
+    if (remainingSlots <= 0) {
+      setMessage({ type: 'error', text: 'Maximum 5 gallery images allowed.' })
+      return
+    }
+
+    const filesToProcess = Array.from(files).slice(0, remainingSlots)
+
+    filesToProcess.forEach(file => {
+      if (!file.type.startsWith('image/')) return
+      if (file.size > 5 * 1024 * 1024) return // 5MB limit
+
+      newFiles.push(file)
+      newPreviews.push(URL.createObjectURL(file))
+    })
+
+    if (newFiles.length < files.length) {
+      setMessage({ type: 'success', text: `Added ${newFiles.length} images. Some were skipped (limit 5 or invalid).` })
+    } else {
+      setMessage({ type: 'success', text: `Added ${newFiles.length} images to gallery.` })
+    }
+
+    setGalleryFiles(prev => [...prev, ...newFiles])
+    setGalleryPreviews(prev => [...prev, ...newPreviews])
+  }
+
+  const removeGalleryImage = (index: number) => {
+    setGalleryFiles(prev => prev.filter((_, i) => i !== index))
+
+    // Revoke URL to avoid memory leak
+    URL.revokeObjectURL(galleryPreviews[index])
+    setGalleryPreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   return (
@@ -334,6 +440,22 @@ export default function AdminAuctionsPage() {
             </div>
 
             <div className="admin-form-group">
+              <label htmlFor="available_sizes" className="admin-label">Available Sizes (optional)</label>
+              <input
+                type="text"
+                id="available_sizes"
+                name="available_sizes"
+                value={formData.available_sizes}
+                onChange={handleChange}
+                placeholder="S, M, L, XL, XXL (comma separated)"
+                className="admin-input"
+              />
+              <span className="admin-helper-text">
+                Enter available sizes (e.g. S,M,L). If set, users must select one when bidding.
+              </span>
+            </div>
+
+            <div className="admin-form-group">
               <label htmlFor="base_price" className="admin-label">Base Price (₹) - Optional</label>
               <input
                 type="number"
@@ -390,6 +512,59 @@ export default function AdminAuctionsPage() {
                     className="admin-image-preview"
                     style={{ maxWidth: '520px', height: '160px' }}
                   />
+                )}
+              </div>
+            </div>
+
+            <div className="admin-form-group">
+              <label className="admin-label">Gallery Images (Max 5)</label>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleGalleryFiles}
+                  className="admin-file-input"
+                  disabled={galleryFiles.length >= 5}
+                />
+                <span className="admin-helper-text">
+                  Upload up to 5 additional images for the scrolling gallery.
+                </span>
+
+                {galleryPreviews.length > 0 && (
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    {galleryPreviews.map((src, idx) => (
+                      <div key={idx} style={{ position: 'relative', width: '100px', height: '100px' }}>
+                        <img
+                          src={src}
+                          alt={`Gallery ${idx}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: '1px solid #ccc' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeGalleryImage(idx)}
+                          style={{
+                            position: 'absolute',
+                            top: '-5px',
+                            right: '-5px',
+                            background: 'red',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

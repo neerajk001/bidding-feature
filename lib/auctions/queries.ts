@@ -9,7 +9,7 @@ export async function getAuctions(includeEnded: boolean = false) {
 
         const { data: auctions, error } = await supabaseAdmin
             .from('auctions')
-            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price')
+            .select('*')
             .in('status', statuses)
             .order('bidding_start_time', { ascending: false })
 
@@ -145,7 +145,7 @@ export async function getAuctionDetail(id: string) {
     try {
         const { data: auction, error } = await supabaseAdmin
             .from('auctions')
-            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment, base_price')
+            .select('*')
             .eq('id', id)
             .single()
 

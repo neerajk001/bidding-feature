@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
 
     let body: Record<string, any> = {}
     let reelFile: File | null = null
+    let galleryUrls: string[] = []
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData()
@@ -56,15 +57,60 @@ export async function POST(request: NextRequest) {
         bidding_start_time: getString('bidding_start_time'),
         bidding_end_time: getString('bidding_end_time'),
         status: getString('status'),
-        reel_url: getString('reel_url')
+        reel_url: getString('reel_url'),
+        available_sizes: getString('available_sizes')
       }
 
       const maybeReel = formData.get('reel')
       if (maybeReel && typeof maybeReel !== 'string') {
         reelFile = maybeReel
       }
+
+      // Handle Gallery Images (Multiple)
+      const galleryFiles = formData.getAll('gallery') as File[]
+
+      if (galleryFiles && galleryFiles.length > 0) {
+        for (const file of galleryFiles) {
+          if (file instanceof File) {
+            // Basic validation
+            if (!file.type.startsWith('image/')) continue;
+            if (file.size > 5 * 1024 * 1024) continue; // 5MB limit per image
+
+            const ext = file.name.split('.').pop() || 'jpg'
+            const path = `gallery/${crypto.randomUUID()}.${ext}`
+            const buffer = Buffer.from(await file.arrayBuffer())
+
+            const { error: uploadError } = await supabaseAdmin
+              .storage
+              .from(bucket)
+              .upload(path, buffer, {
+                contentType: file.type,
+                upsert: false
+              })
+
+            if (!uploadError) {
+              const { data: publicData } = supabaseAdmin.storage.from(bucket).getPublicUrl(path)
+              galleryUrls.push(publicData.publicUrl)
+            }
+          }
+        }
+      }
+
+      // Handle Gallery URLs (passed as strings from client-side upload)
+      const passedGalleryUrls = formData.getAll('gallery_urls')
+      if (passedGalleryUrls.length > 0) {
+        passedGalleryUrls.forEach(url => {
+          if (typeof url === 'string' && url.trim() !== '') {
+            galleryUrls.push(url)
+          }
+        })
+      }
     } else {
       body = await request.json()
+      // Also check if gallery_urls are in JSON body
+      if (body.gallery_urls && Array.isArray(body.gallery_urls)) {
+        galleryUrls.push(...body.gallery_urls)
+      }
     }
 
     // Validate required fields
@@ -78,8 +124,16 @@ export async function POST(request: NextRequest) {
       bidding_start_time,
       bidding_end_time,
       status,
-      reel_url
+      reel_url,
+      available_sizes
     } = body
+
+    // ... validation logic ...
+
+    // Parse available sizes
+    const availableSizesArray = available_sizes
+      ? String(available_sizes).split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+      : []
 
     if (!title || !product_id || !min_increment || !registration_end_time ||
       !bidding_start_time || !bidding_end_time || !status) {
@@ -114,7 +168,7 @@ export async function POST(request: NextRequest) {
     let basePriceValue: number | null = null
     if (base_price && base_price !== '') {
       basePriceValue = typeof base_price === 'number' ? base_price : parseFloat(base_price)
-      
+
       if (!Number.isFinite(basePriceValue) || basePriceValue <= 0) {
         return NextResponse.json(
           { error: 'Base price must be a positive number' },
@@ -196,6 +250,8 @@ export async function POST(request: NextRequest) {
       reelPublicUrl = publicData.publicUrl
     }
 
+
+
     // Insert into Supabase using admin client
     const { data, error } = await supabaseAdmin
       .from('auctions')
@@ -206,10 +262,12 @@ export async function POST(request: NextRequest) {
         base_price: basePriceValue,
         banner_image: banner_image || null,
         reel_url: reelPublicUrl,
+        gallery_images: galleryUrls.length > 0 ? galleryUrls : [],
         registration_end_time: registrationEndUTC,
         bidding_start_time: biddingStartUTC,
         bidding_end_time: biddingEndUTC,
-        status
+        status,
+        available_sizes: availableSizesArray
       })
       .select()
       .single()

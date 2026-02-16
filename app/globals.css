@@ -1505,7 +1505,7 @@ tr:hover td {
     align-items: flex-start !important;
   }
 
-  .auction-detail-header > div:last-child {
+  .auction-detail-header>div:last-child {
     width: 100%;
     align-items: flex-start !important;
   }
@@ -3125,4 +3125,79 @@ tr:hover td {
   .hero-headline {
     font-size: 2.5rem !important;
   }
+}
+
+/* Enhanced Media Slider (Replaced Marquee) */
+.hero-media-slider,
+.hero-media-single {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-light);
+}
+
+.hero-media-slider-track {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-media-slide {
+  min-width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.media-item-image,
+.media-item-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Indicators */
+.hero-media-indicators {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.media-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.3s ease;
+}
+
+.media-indicator.active {
+  background: #fff;
+  transform: scale(1.2);
+}
+
+/* Sold badge */
+.hero-media-badge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 6px 14px;
+  background: #000;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 99px;
+  z-index: 20;
 }

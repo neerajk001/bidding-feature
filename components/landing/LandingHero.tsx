@@ -4,6 +4,7 @@ import { useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ActiveAuctionResponse, AuctionSummary } from './types'
+import HeroMedia from './HeroMedia'
 
 const currencyFormatter = new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -310,7 +311,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                             type="text"
                                             disabled
                                             placeholder={`Next bid: ${formatCurrency(
-                                                (activeDetail.current_highest_bid || 0) > 0 
+                                                (activeDetail.current_highest_bid || 0) > 0
                                                     ? (activeDetail.current_highest_bid || 0) + (activeDetail.min_increment || 0)
                                                     : (activeDetail.base_price || activeDetail.min_increment || 0)
                                             )}`}
@@ -334,26 +335,12 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                         </div>
 
                         <div className="hero-auction-media">
-                            {detail?.banner_image ? (
-                                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                                    <Image
-                                        src={detail.banner_image}
-                                        alt={detail.title}
-                                        fill
-                                        sizes="(max-width: 900px) 100vw, 50vw"
-                                        style={{ objectFit: 'cover' }}
-                                        priority
-                                    />
-                                    {heroVariant === 'closed' && (
-                                        <span className="hero-media-badge">Sold</span>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="hero-card-art">
-                                    <span className="hero-card-art-label">{heroArtLabel}</span>
-                                    <span className="hero-card-art-badge">{heroArtBadge}</span>
-                                </div>
-                            )}
+                            <HeroMedia
+                                detail={detail}
+                                heroVariant={heroVariant}
+                                heroArtLabel={heroArtLabel}
+                                heroArtBadge={heroArtBadge}
+                            />
                         </div>
                     </div>
                 </div>

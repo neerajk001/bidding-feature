@@ -15,6 +15,8 @@ export interface AuctionSummary {
     winner_name?: string | null
     winning_amount?: number | null
     winner_declared_at?: string | null
+    gallery_images?: string[] | null
+    reel_url?: string | null
 }
 
 export interface ActiveAuctionResponse {

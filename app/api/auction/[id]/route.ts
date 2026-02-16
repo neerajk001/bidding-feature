@@ -18,7 +18,7 @@ export async function GET(
     const { data: auction, error } = await supabaseAdmin
       .from('auctions')
       .select(
-        'id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price'
+        'id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, gallery_images, reel_url, min_increment, base_price, available_sizes'
       )
       .eq('id', id)
       .single()
@@ -29,7 +29,7 @@ export async function GET(
 
     const { data: highestBid } = await supabaseAdmin
       .from('bids')
-      .select('amount, bidder:bidder_id(name)')
+      .select('amount, size, bidder:bidder_id(name)')
       .eq('auction_id', id)
       .order('amount', { ascending: false })
       .order('created_at', { ascending: false })
@@ -50,10 +50,10 @@ export async function GET(
     const winningAmount = winner?.winning_amount ?? null
     const winnerBidder = winner?.bidder
     const winnerName = Array.isArray(winnerBidder) ? winnerBidder[0]?.name ?? null : (winnerBidder as any)?.name ?? null
-    
+
     const highestBidder = highestBid?.bidder
     const highestBidderName = Array.isArray(highestBidder) ? highestBidder[0]?.name ?? null : (highestBidder as any)?.name ?? null
-    
+
     const useWinner = auction.status === 'ended' && winningAmount !== null
 
     return NextResponse.json(
@@ -61,6 +61,7 @@ export async function GET(
         ...auction,
         current_highest_bid: useWinner ? winningAmount : highestBid?.amount ?? null,
         highest_bidder_name: useWinner ? winnerName : highestBidderName,
+        highest_bid_size: highestBid?.size ?? null,
         total_bids: count ?? 0,
         winner_name: winnerName,
         winning_amount: winningAmount,
