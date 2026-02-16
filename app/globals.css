@@ -1830,13 +1830,17 @@ tr:hover td {
 }
 
 .hero-card-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  display: flex;
   gap: 0.625rem;
   padding: 0.875rem;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(120, 93, 72, 0.16);
+}
+
+.hero-card-metrics > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .hero-card-actions {
