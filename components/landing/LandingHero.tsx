@@ -265,7 +265,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
     return (
         <section className="relative py-8 lg:py-12 overflow-hidden bg-gray-50" data-variant={heroVariant} ref={heroRef}>
 
-            <div className="max-w-[2000px] mx-auto px-6 lg:px-8 relative z-10">
+            <div className="max-w-[2200px] mx-auto px-6 lg:px-8 relative z-10">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-center">
                     <div className="flex flex-col gap-6 lg:gap-8">
                         <span className="text-orange-500 font-semibold tracking-widest uppercase text-sm">{heroEyebrow}</span>
@@ -290,28 +290,28 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                             {/* Horizontal layout: content left, media right on desktop */}
                             <div className="flex flex-col lg:flex-row">
                                 {/* Content Section - Wider on desktop */}
-                                <div className="lg:w-[55%] p-6 lg:p-8 bg-gradient-to-br from-white to-gray-50/50">
+                                <div className="lg:w-[55%] p-5 lg:p-6 bg-gradient-to-br from-white to-gray-50/50">
                                     {/* Status Header */}
-                                    <div className="flex items-center justify-between gap-4 mb-4">
-                                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${getStatusPillClass(heroVariant)}`}>
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${getStatusPillClass(heroVariant)}`}>
                                             {heroVariant === 'live' && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
                                             {cardStatusLabel}
                                         </span>
                                         {cardStatusMeta ? (
-                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-100 px-3 py-1.5 rounded-full">{cardStatusMeta}</span>
+                                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-100 px-2.5 py-1 rounded-full">{cardStatusMeta}</span>
                                         ) : null}
                                     </div>
 
                                     {/* Title & Summary */}
-                                    <h3 className="text-2xl lg:text-3xl font-bold font-display text-black mb-2 leading-tight bg-gradient-to-r from-black to-gray-700 bg-clip-text">{cardTitle}</h3>
-                                    <p className="text-gray-600 mb-6 leading-relaxed text-sm lg:text-base">{cardSummary}</p>
+                                    <h3 className="text-xl lg:text-2xl font-bold font-display text-black mb-2 leading-tight bg-gradient-to-r from-black to-gray-700 bg-clip-text">{cardTitle}</h3>
+                                    <p className="text-gray-600 mb-4 leading-relaxed text-xs lg:text-sm">{cardSummary}</p>
 
                                     {/* Metrics or Steps - Single Row Layout */}
                                     {heroVariant === 'empty' ? (
-                                        <div className="space-y-3 mb-6">
+                                        <div className="space-y-2.5 mb-4">
                                             {emptySteps.map((step, idx) => (
                                                 <div
-                                                    className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-pink-50 rounded-2xl border-2 border-orange-200 hover:border-orange-400 hover:shadow-md transition-all duration-300 group"
+                                                    className="flex items-center justify-between p-3 bg-gradient-to-r from-orange-50 to-pink-50 rounded-2xl border-2 border-orange-200 hover:border-orange-400 hover:shadow-md transition-all duration-300 group"
                                                     key={step.label}
                                                     style={{ animationDelay: `${idx * 100}ms` }}
                                                 >
@@ -321,16 +321,16 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="mb-6 pb-6 border-b-2 border-orange-100">
-                                            <div className="flex justify-between gap-4">
+                                        <div className="mb-4 pb-4 border-b-2 border-orange-100">
+                                            <div className="flex justify-between gap-3">
                                                 {cardMetrics.map((metric, idx) => (
                                                     <div
                                                         key={metric.label}
                                                         className="flex-1 text-center group hover:scale-105 transition-transform duration-300"
                                                         style={{ animationDelay: `${idx * 100}ms` }}
                                                     >
-                                                        <div className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 group-hover:text-orange-700 transition-colors">{metric.label}</div>
-                                                        <div className="text-lg lg:text-xl font-bold text-black group-hover:text-orange-600 transition-colors break-words">{metric.value}</div>
+                                                        <div className="text-[10px] font-bold text-orange-600 uppercase tracking-wider mb-1.5 group-hover:text-orange-700 transition-colors">{metric.label}</div>
+                                                        <div className="text-sm lg:text-base font-bold text-black group-hover:text-orange-600 transition-colors break-words leading-tight">{metric.value}</div>
                                                     </div>
                                                 ))}
                                             </div>

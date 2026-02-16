@@ -19,6 +19,7 @@ interface Bid {
   amount: number
   created_at: string
   bidder_id: string
+  size?: string
   bidders: {
     name: string
     phone: string
@@ -373,6 +374,7 @@ export default function AuctionDetailPage() {
                   <tr>
                     <th>Rank</th>
                     <th>Bidder</th>
+                    <th>Size</th>
                     <th>Amount</th>
                     <th>Time</th>
                   </tr>
@@ -389,6 +391,9 @@ export default function AuctionDetailPage() {
                       <td>
                         <div className="font-medium">{bid.bidders.name}</div>
                         <div className="text-xs text-green-600">📞 {bid.bidders.phone}</div>
+                      </td>
+                      <td className="text-sm font-medium text-gray-700">
+                        {bid.size || <span className="text-gray-400 italic text-xs">N/A</span>}
                       </td>
                       <td className={cn("font-bold text-lg", index === 0 ? 'text-orange-500' : '')}>
                         ₹{bid.amount.toFixed(2)}

@@ -172,20 +172,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                 </>
             )}
 
-            {/* Slide Indicators */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10 p-2 rounded-full bg-black/30 backdrop-blur-sm">
-                {items.map((_, idx) => (
-                    <button
-                        key={idx}
-                        className={`transition-all duration-300 rounded-full ${idx === currentIndex
-                            ? 'bg-white w-6 h-1.5'
-                            : 'bg-white/40 w-1.5 h-1.5 hover:bg-white/60'
-                            }`}
-                        onClick={() => setCurrentIndex(idx)}
-                        aria-label={`Go to slide ${idx + 1}`}
-                    />
-                ))}
-            </div>
+
         </div>
     )
 }

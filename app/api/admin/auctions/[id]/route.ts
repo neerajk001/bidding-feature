@@ -42,6 +42,7 @@ export async function GET(
         created_at,
         bidder_id,
         auction_id,
+        size,
         bidders!fk_bids_bidder (
           id,
           name,
@@ -60,7 +61,7 @@ export async function GET(
         .select('*')
         .eq('auction_id', auctionId)
         .order('amount', { ascending: false })
-      
+
       // Manually join bidder info
       const bidsWithBidderInfo = simpleBids?.map(bid => {
         const bidder = bidders?.find(b => b.id === bid.bidder_id)
@@ -74,7 +75,7 @@ export async function GET(
           } : null
         }
       }) || []
-      
+
       const currentHighestBid = simpleBids && simpleBids.length > 0
         ? Math.max(...simpleBids.map(b => b.amount))
         : null
@@ -82,10 +83,10 @@ export async function GET(
       // Calculate highest bid for each bidder
       const biddersWithHighestBid = bidders?.map(bidder => {
         const bidderBids = simpleBids?.filter(bid => bid.bidder_id === bidder.id) || []
-        const highestBid = bidderBids.length > 0 
+        const highestBid = bidderBids.length > 0
           ? Math.max(...bidderBids.map(b => b.amount))
           : null
-        
+
         return {
           ...bidder,
           highest_bid: highestBid
@@ -107,10 +108,10 @@ export async function GET(
     // Calculate highest bid for each bidder
     const biddersWithHighestBid = bidders?.map(bidder => {
       const bidderBids = bids?.filter(bid => bid.bidder_id === bidder.id) || []
-      const highestBid = bidderBids.length > 0 
+      const highestBid = bidderBids.length > 0
         ? Math.max(...bidderBids.map(b => b.amount))
         : null
-      
+
       return {
         ...bidder,
         highest_bid: highestBid
