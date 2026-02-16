@@ -269,7 +269,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-center">
                     <div className="flex flex-col gap-6 lg:gap-8">
                         <span className="text-orange-500 font-semibold tracking-widest uppercase text-sm">{heroEyebrow}</span>
-                        <h1 className="text-5xl lg:text-7xl font-bold font-display tracking-tight text-black leading-[1.1]">{heroTitle}</h1>
+                        <h1 className="text-4xl lg:text-7xl font-bold font-display tracking-tight text-black leading-[1.1]">{heroTitle}</h1>
                         <p className="text-lg text-gray-600 max-w-lg leading-relaxed">{heroSubtitle}</p>
                         <div className="flex flex-wrap gap-4 mt-2">
                             {renderCta(primaryCta, 'inline-flex items-center justify-center px-8 py-4 rounded-full font-semibold text-sm transition-all duration-200 bg-orange-500 text-white hover:bg-orange-600 shadow-lg hover:shadow-orange-500/25 hover:-translate-y-0.5')}
@@ -369,7 +369,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                 </div>
 
                                 {/* Media Section - Enhanced */}
-                                <div className="relative lg:w-[45%] aspect-[16/9] lg:aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 border-t-2 lg:border-t-0 lg:border-l-2 border-gray-200 overflow-hidden group">
+                                <div className="relative lg:w-[45%] aspect-[3/4] lg:aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 border-t-2 lg:border-t-0 lg:border-l-2 border-gray-200 overflow-hidden group">
                                     {/* Subtle overlay gradient */}
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent z-10 pointer-events-none" />
                                     <HeroMedia

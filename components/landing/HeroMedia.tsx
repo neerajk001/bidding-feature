@@ -86,7 +86,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
             const item = items[0]
             if (item.type === 'video') {
                 return (
-                    <div className="relative w-full h-full min-h-[400px]">
+                    <div className="relative w-full h-full">
                         <video
                             src={item.src}
                             autoPlay
@@ -100,7 +100,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
                 )
             }
             return (
-                <div className="relative w-full h-full min-h-[400px]">
+                <div className="relative w-full h-full">
                     <Image
                         src={item.src}
                         alt={detail?.title || 'Auction Item'}
@@ -116,7 +116,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
 
     // Slideshow Rendering
     return (
-        <div className="relative w-full h-full overflow-hidden group min-h-[400px]">
+        <div className="relative w-full h-full overflow-hidden group">
             <div
                 className="flex h-full transition-transform duration-500 ease-out will-change-transform"
                 style={{ transform: `translateX(-${currentIndex * 100}%)` }}
