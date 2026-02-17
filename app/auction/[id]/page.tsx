@@ -395,16 +395,16 @@ export default function AuctionDetailPage() {
                   </div>
 
                   {/* Auction Info Card */}
-                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-4">
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 lg:p-6 flex flex-col gap-5">
 
                     {/* Header */}
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex flex-col gap-1">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex flex-col gap-2">
                         <span className="uppercase tracking-widest text-xs font-bold text-orange-500">Live Auction</span>
                         <h1 className="text-xl lg:text-2xl font-bold font-display text-black">{auction.title}</h1>
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live'
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live'
                           ? 'bg-red-500 text-white animate-pulse'
                           : phase === 'ended'
                             ? 'bg-gray-200 text-gray-600'
@@ -416,69 +416,69 @@ export default function AuctionDetailPage() {
                     </div>
 
                     {/* Current Bid Highlight */}
-                    <div className="bg-gradient-to-br from-orange-50 to-pink-50 border-2 border-orange-200 rounded-lg p-3.5">
-                      <div className="flex justify-between items-center">
+                    <div className="bg-gradient-to-br from-orange-50 to-pink-50 border-2 border-orange-200 rounded-lg p-4 lg:p-5">
+                      <div className="flex justify-between items-center gap-4">
                         <div>
-                          <span className="text-xs uppercase tracking-wider text-orange-700 font-bold mb-0.5 block">Current Bid</span>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-bold text-black">{formatCurrency(auction.current_highest_bid)}</span>
+                          <span className="text-xs uppercase tracking-wider text-orange-700 font-bold mb-1.5 block">Current Bid</span>
+                          <div className="flex items-baseline gap-2.5">
+                            <span className="text-2xl lg:text-3xl font-bold text-black">{formatCurrency(auction.current_highest_bid)}</span>
                             {auction.highest_bid_size && (
-                              <span className="text-xs px-1.5 py-0.5 border border-orange-300 bg-white rounded text-orange-700 font-semibold">
+                              <span className="text-xs px-2 py-1 border border-orange-300 bg-white rounded text-orange-700 font-semibold">
                                 Size: {auction.highest_bid_size}
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-gray-600 mt-0.5 block">
+                          <span className="text-xs text-gray-600 mt-1.5 block">
                             {auction.highest_bidder_name ? `Leader: ${auction.highest_bidder_name}` : 'Be the first bidder'}
                           </span>
                         </div>
                         <div className="text-right">
-                          <span className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5 block">Total Bids</span>
-                          <span className="text-xl font-bold text-black">{auction.total_bids || 0}</span>
+                          <span className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-1.5 block">Total Bids</span>
+                          <span className="text-2xl font-bold text-black">{auction.total_bids || 0}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Auction Stats Grid */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-4">
                       {auction.base_price && (
-                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                          <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-0.5 block">Base Price</span>
-                          <span className="text-lg font-bold text-black block">{formatCurrency(auction.base_price)}</span>
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1.5 block">Base Price</span>
+                          <span className="text-xl font-bold text-black block">{formatCurrency(auction.base_price)}</span>
                         </div>
                       )}
-                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-0.5 block">Min Increment</span>
-                        <span className="text-lg font-bold text-black block">{formatCurrency(auction.min_increment)}</span>
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1.5 block">Min Increment</span>
+                        <span className="text-xl font-bold text-black block">{formatCurrency(auction.min_increment)}</span>
                       </div>
                     </div>
 
                     {/* Timeline */}
-                    <div className="border-t border-gray-200 pt-4">
-                      <h3 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Timeline</h3>
-                      <div className="grid grid-cols-1 gap-2">
-                        <div className="flex justify-between items-center">
+                    <div className="border-t border-gray-200 pt-5">
+                      <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Timeline</h3>
+                      <div className="grid grid-cols-1 gap-3">
+                        <div className="flex justify-between items-center py-1">
                           <span className="text-xs text-gray-600 font-medium">Registration Ends</span>
-                          <span className="text-xs font-semibold text-black">{formatDateTime(auction.registration_end_time)}</span>
+                          <span className="text-sm font-semibold text-black">{formatDateTime(auction.registration_end_time)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center py-1">
                           <span className="text-xs text-gray-600 font-medium">Bidding Starts</span>
-                          <span className="text-xs font-semibold text-black">{formatDateTime(auction.bidding_start_time)}</span>
+                          <span className="text-sm font-semibold text-black">{formatDateTime(auction.bidding_start_time)}</span>
                         </div>
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center py-1">
                           <span className="text-xs text-gray-600 font-medium">Bidding Ends</span>
-                          <span className="text-xs font-semibold text-black">{formatDateTime(auction.bidding_end_time)}</span>
+                          <span className="text-sm font-semibold text-black">{formatDateTime(auction.bidding_end_time)}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Countdown */}
                     {countdownTarget && (
-                      <div className="bg-black text-white rounded-lg p-3 flex justify-between items-center">
+                      <div className="bg-black text-white rounded-lg p-4 flex justify-between items-center">
                         <span className="text-xs font-bold uppercase tracking-wider">
                           {phase === 'registration' ? 'Registration closes in' : phase === 'upcoming' ? 'Bidding opens in' : 'Auction ends in'}
                         </span>
-                        <span className="text-lg font-bold font-mono">{formatCountdown(countdownTarget, now)}</span>
+                        <span className="text-xl font-bold font-mono">{formatCountdown(countdownTarget, now)}</span>
                       </div>
                     )}
                   </div>
