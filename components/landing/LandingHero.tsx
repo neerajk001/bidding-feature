@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ActiveAuctionResponse, AuctionSummary } from './types'
@@ -44,6 +44,7 @@ interface LandingHeroProps {
     activeAuction: ActiveAuctionResponse | null
     activeDetail: AuctionSummary | null
     endedDetail?: AuctionSummary | null
+    nextUpcomingAuction?: AuctionSummary | null
 }
 
 type HeroVariant = 'live' | 'registration' | 'upcoming' | 'closed' | 'empty'
@@ -53,8 +54,40 @@ type HeroCta = {
     href: string
 }
 
-export default function LandingHero({ activeAuction, activeDetail, endedDetail }: LandingHeroProps) {
+export default function LandingHero({ activeAuction, activeDetail, endedDetail, nextUpcomingAuction }: LandingHeroProps) {
     const heroRef = useRef<HTMLElement>(null)
+    const [isRegistered, setIsRegistered] = useState<boolean | null>(null)
+
+    // Check if user is registered for the active live auction
+    useEffect(() => {
+        const checkRegistration = async () => {
+            // Only check if we have a live auction
+            if (activeAuction?.phase !== 'live' || !activeDetail?.id) {
+                // If not live, registration status doesn't matter for this specific logic
+                // Set to true so we don't interfere with standard display
+                setIsRegistered(true)
+                return
+            }
+
+            const userId = localStorage.getItem('user_id')
+            if (!userId) {
+                // Guest user -> Not registered
+                setIsRegistered(false)
+                return
+            }
+
+            try {
+                const res = await fetch(`/api/check-registration?user_id=${userId}&auction_id=${activeDetail.id}`)
+                const data = await res.json()
+                setIsRegistered(!!data.registered)
+            } catch (error) {
+                console.error('Failed to check registration:', error)
+                setIsRegistered(false)
+            }
+        }
+
+        checkRegistration()
+    }, [activeAuction, activeDetail])
 
     useEffect(() => {
         const hero = heroRef.current
@@ -84,137 +117,182 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
 
     const isLive = activeAuction?.phase === 'live'
     const isRegistration = activeAuction?.phase === 'registration'
-    const hasActive = Boolean(activeDetail)
-    const hasEnded = !hasActive && Boolean(endedDetail)
 
-    const heroVariant: HeroVariant = hasActive
-        ? (isLive ? 'live' : isRegistration ? 'registration' : 'upcoming')
-        : hasEnded
-            ? 'closed'
-            : 'empty'
+    // Determine effective state based on registration
+    // If Live AND Not Registered -> Show Next Upcoming
+    const showLive = isLive && (isRegistered === true || isRegistered === null) // Optimistically show live while checking? or wait?
+    // User requested: "if someone didnt registered... replace with upcoming"
+    // So if isRegistered is false, we force upcoming.
 
-    const detail = activeDetail ?? endedDetail ?? null
+    // Better logic:
+    // Base State
+    let effectiveDetail = activeDetail
+    let effectiveVariant: HeroVariant = 'empty'
 
-    const heroEyebrow = heroVariant === 'live'
+    if (activeDetail) {
+        if (isLive) {
+            // If checking (null), show Live (or loading? lets show Live). 
+            // If check finishes and is false, show Upcoming.
+            if (isRegistered === false) {
+                // Not registered. Fallback to next upcoming.
+                if (nextUpcomingAuction) {
+                    effectiveDetail = nextUpcomingAuction
+                    effectiveVariant = 'upcoming'
+                } else {
+                    // No upcoming? Show empty or keep showing live (as locked)?
+                    // "replace with upcoming" implies there is one. 
+                    // If none, maybe show "Curating Next Lot".
+                    effectiveDetail = null
+                    effectiveVariant = 'empty'
+                }
+            } else {
+                effectiveVariant = 'live'
+            }
+        } else if (isRegistration) {
+            effectiveVariant = 'registration'
+        } else {
+            effectiveVariant = 'upcoming'
+        }
+    } else if (endedDetail) {
+        effectiveDetail = endedDetail
+        effectiveVariant = 'closed'
+    } else {
+        effectiveVariant = 'empty'
+    }
+
+    // Force upcoming if we replaced the live auction
+    // The logic above handles it. But wait, `isRegistered` starts as null.
+    // Ideally we want to avoid layout shift. 
+    // If we defaults `isRegistered` to null, we show Live. Then it snaps to upcoming.
+    // If we default to false, we show Upcoming. Then snaps to Live.
+    // Since most users are guests, defaulting to false might be smoother for them?
+    // But logged in users would see a flash of upcoming.
+    // Let's stick to null (Live) and swap if needed. 
+
+    // Re-calculating helpers based on effectiveDetail and effectiveVariant
+    const detail = effectiveDetail
+
+    const heroEyebrow = effectiveVariant === 'live'
         ? 'Live Auction'
-        : heroVariant === 'registration'
+        : effectiveVariant === 'registration'
             ? 'Registration Open'
-            : heroVariant === 'upcoming'
+            : effectiveVariant === 'upcoming'
                 ? 'Upcoming Auction'
-                : heroVariant === 'closed'
+                : effectiveVariant === 'closed'
                     ? 'Auction Closed'
                     : 'Curating Next Lot'
 
-    const heroTitle = heroVariant === 'live'
-        ? `Live now: ${activeDetail?.title || 'Heritage Auction'}`
-        : heroVariant === 'registration'
-            ? `Registration open for ${activeDetail?.title || 'the next auction'}`
-            : heroVariant === 'upcoming'
-                ? `Next up: ${activeDetail?.title || 'Heritage Auction'}`
-                : heroVariant === 'closed'
+    const heroTitle = effectiveVariant === 'live'
+        ? `Live now: ${effectiveDetail?.title || 'Heritage Auction'}`
+        : effectiveVariant === 'registration'
+            ? `Registration open for ${effectiveDetail?.title || 'the next auction'}`
+            : effectiveVariant === 'upcoming'
+                ? `Next up: ${effectiveDetail?.title || 'Heritage Auction'}`
+                : effectiveVariant === 'closed'
                     ? 'Auction closed. Winner announced.'
                     : 'The next heritage lot is in curation.'
 
-    const heroSubtitle = heroVariant === 'live'
-        ? `Real-time bidding is open until ${formatDateTime(activeDetail?.bidding_end_time)}.`
-        : heroVariant === 'registration'
-            ? `Reserve your paddle before ${formatDateTime(activeDetail?.registration_end_time)}.`
-            : heroVariant === 'upcoming'
-                ? `Preview the lot and set a reminder for ${formatDateTime(activeDetail?.bidding_start_time)}.`
-                : heroVariant === 'closed'
+    const heroSubtitle = effectiveVariant === 'live'
+        ? `Real-time bidding is open until ${formatDateTime(effectiveDetail?.bidding_end_time)}.`
+        : effectiveVariant === 'registration'
+            ? `Reserve your paddle before ${formatDateTime(effectiveDetail?.registration_end_time)}.`
+            : effectiveVariant === 'upcoming'
+                ? `Preview the lot and set a reminder for ${formatDateTime(effectiveDetail?.bidding_start_time)}.`
+                : effectiveVariant === 'closed'
                     ? `See the final bid and explore what's coming next.`
                     : 'Our curators are preparing the next release. Explore the calendar and curated drops.'
 
-    const heroBadges = heroVariant === 'closed'
+    const heroBadges = effectiveVariant === 'closed'
         ? ['Winner verified', 'Archive stored', 'Next drop soon']
-        : heroVariant === 'empty'
+        : effectiveVariant === 'empty'
             ? ['Curated weekly', 'Verified provenance', 'Concierge support']
             : ['Verified authenticity', 'Real-time bidding', 'Premium delivery']
 
-    const primaryCta: HeroCta | null = heroVariant === 'empty'
+    const primaryCta: HeroCta | null = effectiveVariant === 'empty'
         ? { label: 'Browse auction calendar', href: '#auction-calendar' }
-        : heroVariant === 'closed'
+        : effectiveVariant === 'closed'
             ? { label: 'View results', href: detail ? `/auction/${detail.id}` : '/auctions' }
             : detail
                 ? {
-                    label: heroVariant === 'registration'
+                    label: effectiveVariant === 'registration'
                         ? 'Register to bid'
-                        : heroVariant === 'live'
+                        : effectiveVariant === 'live'
                             ? 'Enter live auction'
                             : 'Preview lot',
                     href: `/auction/${detail.id}`,
                 }
                 : { label: 'Browse auction calendar', href: '#auction-calendar' }
 
-    const secondaryCta: HeroCta | null = heroVariant === 'empty'
+    const secondaryCta: HeroCta | null = effectiveVariant === 'empty'
         ? { label: 'Shop curated drops', href: '#shopify-drops' }
         : { label: 'Browse auction calendar', href: '#auction-calendar' }
 
-    const cardStatusLabel = heroVariant === 'live'
+    const cardStatusLabel = effectiveVariant === 'live'
         ? 'Live Auction'
-        : heroVariant === 'registration'
+        : effectiveVariant === 'registration'
             ? 'Registration Open'
-            : heroVariant === 'upcoming'
+            : effectiveVariant === 'upcoming'
                 ? 'Upcoming Auction'
-                : heroVariant === 'closed'
+                : effectiveVariant === 'closed'
                     ? 'Auction Closed'
                     : 'No Live Auction'
 
-    const cardStatusMeta = heroVariant === 'live'
-        ? `Ends ${formatDateTime(activeDetail?.bidding_end_time)}`
-        : heroVariant === 'registration'
-            ? `Closes ${formatDateTime(activeDetail?.registration_end_time)}`
-            : heroVariant === 'upcoming'
-                ? `Starts ${formatDateTime(activeDetail?.bidding_start_time)}`
-                : heroVariant === 'closed'
+    const cardStatusMeta = effectiveVariant === 'live'
+        ? `Ends ${formatDateTime(effectiveDetail?.bidding_end_time)}`
+        : effectiveVariant === 'registration'
+            ? `Closes ${formatDateTime(effectiveDetail?.registration_end_time)}`
+            : effectiveVariant === 'upcoming'
+                ? `Starts ${formatDateTime(effectiveDetail?.bidding_start_time)}`
+                : effectiveVariant === 'closed'
                     ? `Ended ${formatDateTime(endedDetail?.bidding_end_time)}`
                     : 'Next drop in preparation'
 
     const winnerName = endedDetail?.winner_name || endedDetail?.highest_bidder_name || 'No bids'
+    // Logic for winning amount display if we are showing closed variant
     const winningAmount = endedDetail?.winning_amount ?? endedDetail?.current_highest_bid
     const winningBidDisplay = winningAmount === null || winningAmount === undefined
         ? 'No bids'
         : formatCurrency(winningAmount)
 
-    const cardTitle = heroVariant === 'empty'
+    const cardTitle = effectiveVariant === 'empty'
         ? 'Next lot in curation'
         : detail?.title || 'Heritage Auction'
 
-    const cardSummary = heroVariant === 'live'
-        ? (activeDetail?.current_highest_bid
-            ? `Current lead at ${formatCurrency(activeDetail.current_highest_bid)}.`
+    const cardSummary = effectiveVariant === 'live'
+        ? (effectiveDetail?.current_highest_bid
+            ? `Current lead at ${formatCurrency(effectiveDetail.current_highest_bid)}.`
             : 'Bidding is open. Be the first to place a bid.')
-        : heroVariant === 'registration'
-            ? `Registration closes ${formatDateTime(activeDetail?.registration_end_time)}.`
-            : heroVariant === 'upcoming'
-                ? `Auction opens on ${formatDateTime(activeDetail?.bidding_start_time)}.`
-                : heroVariant === 'closed'
+        : effectiveVariant === 'registration'
+            ? `Registration closes ${formatDateTime(effectiveDetail?.registration_end_time)}.`
+            : effectiveVariant === 'upcoming'
+                ? `Auction opens on ${formatDateTime(effectiveDetail?.bidding_start_time)}.`
+                : effectiveVariant === 'closed'
                     ? (winnerName === 'No bids'
                         ? 'No bids were placed. See the full result.'
                         : `Winner ${winnerName} with ${winningBidDisplay}.`)
                     : 'Our curators are assembling a new collection of heirloom pieces.'
 
-    const cardMetrics = heroVariant === 'live'
+    const cardMetrics = effectiveVariant === 'live'
         ? [
-            { label: 'Current bid', value: formatCurrency(activeDetail?.current_highest_bid) },
-            { label: 'Active bids', value: `${activeDetail?.total_bids || 0}` },
-            { label: 'Ends', value: formatDateTime(activeDetail?.bidding_end_time) },
+            { label: 'Current bid', value: formatCurrency(effectiveDetail?.current_highest_bid) },
+            { label: 'Active bids', value: `${effectiveDetail?.total_bids || 0}` },
+            { label: 'Ends', value: formatDateTime(effectiveDetail?.bidding_end_time) },
         ]
-        : heroVariant === 'registration'
+        : effectiveVariant === 'registration'
             ? [
-                { label: 'Registration ends', value: formatDateTime(activeDetail?.registration_end_time) },
-                { label: 'Auction starts', value: formatDateTime(activeDetail?.bidding_start_time) },
-                ...(activeDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(activeDetail?.base_price) }] : []),
-                { label: 'Bid increment', value: formatCurrency(activeDetail?.min_increment) },
+                { label: 'Registration ends', value: formatDateTime(effectiveDetail?.registration_end_time) },
+                { label: 'Auction starts', value: formatDateTime(effectiveDetail?.bidding_start_time) },
+                ...(effectiveDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(effectiveDetail?.base_price) }] : []),
+                { label: 'Bid increment', value: formatCurrency(effectiveDetail?.min_increment) },
             ]
-            : heroVariant === 'upcoming'
+            : effectiveVariant === 'upcoming'
                 ? [
-                    { label: 'Auction starts', value: formatDateTime(activeDetail?.bidding_start_time) },
-                    { label: 'Registration closes', value: formatDateTime(activeDetail?.registration_end_time) },
-                    ...(activeDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(activeDetail?.base_price) }] : []),
-                    { label: 'Bid increment', value: formatCurrency(activeDetail?.min_increment) },
+                    { label: 'Auction starts', value: formatDateTime(effectiveDetail?.bidding_start_time) },
+                    { label: 'Registration closes', value: formatDateTime(effectiveDetail?.registration_end_time) },
+                    ...(effectiveDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(effectiveDetail?.base_price) }] : []),
+                    { label: 'Bid increment', value: formatCurrency(effectiveDetail?.min_increment) },
                 ]
-                : heroVariant === 'closed'
+                : effectiveVariant === 'closed'
                     ? [
                         { label: 'Winner', value: winnerName },
                         { label: 'Winning bid', value: winningBidDisplay },
@@ -245,9 +323,9 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
     }
 
     const heroArtLabel = detail?.title || 'Indu Heritage'
-    const heroArtBadge = heroVariant === 'closed'
+    const heroArtBadge = effectiveVariant === 'closed'
         ? 'Archive Result'
-        : heroVariant === 'empty'
+        : effectiveVariant === 'empty'
             ? 'Next Drop'
             : 'Curated Lot'
 
@@ -263,7 +341,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
     }
 
     return (
-        <section className="relative py-8 lg:py-12 overflow-hidden bg-gray-50" data-variant={heroVariant} ref={heroRef}>
+        <section className="relative py-8 lg:py-12 overflow-hidden bg-gray-50" data-variant={effectiveVariant} ref={heroRef}>
 
             <div className="max-w-[2200px] mx-auto px-6 lg:px-8 relative z-10">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-center">
@@ -286,15 +364,15 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                         {/* Enhanced glow effect behind card */}
                         <div className="absolute -inset-6 bg-gradient-to-br from-orange-500/20 via-orange-600/10 to-pink-500/20 rounded-3xl blur-3xl opacity-40 animate-pulse" />
 
-                        <div className="relative bg-white border-2 border-gray-200 rounded-3xl overflow-hidden shadow-2xl hover:shadow-orange-500/10 transition-all duration-500" data-variant={heroVariant}>
+                        <div className="relative bg-white border-2 border-gray-200 rounded-3xl overflow-hidden shadow-2xl hover:shadow-orange-500/10 transition-all duration-500" data-variant={effectiveVariant}>
                             {/* Horizontal layout: content left, media right on desktop */}
                             <div className="flex flex-col lg:flex-row">
                                 {/* Content Section - Wider on desktop */}
                                 <div className="lg:w-[55%] p-5 lg:p-6 bg-gradient-to-br from-white to-gray-50/50">
                                     {/* Status Header */}
                                     <div className="flex items-center justify-between gap-3 mb-3">
-                                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${getStatusPillClass(heroVariant)}`}>
-                                            {heroVariant === 'live' && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+                                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm ${getStatusPillClass(effectiveVariant)}`}>
+                                            {effectiveVariant === 'live' && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
                                             {cardStatusLabel}
                                         </span>
                                         {cardStatusMeta ? (
@@ -307,7 +385,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                     <p className="text-gray-600 mb-4 leading-relaxed text-xs lg:text-sm">{cardSummary}</p>
 
                                     {/* Metrics or Steps - Single Row Layout */}
-                                    {heroVariant === 'empty' ? (
+                                    {effectiveVariant === 'empty' ? (
                                         <div className="space-y-2.5 mb-4">
                                             {emptySteps.map((step, idx) => (
                                                 <div
@@ -339,26 +417,26 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
 
                                     {/* CTA Buttons */}
                                     <div className="mt-auto">
-                                        {heroVariant === 'live' && activeDetail ? (
+                                        {effectiveVariant === 'live' && effectiveDetail ? (
                                             <div className="flex flex-col gap-3">
                                                 <input
                                                     type="text"
                                                     disabled
                                                     placeholder={`Next bid: ${formatCurrency(
-                                                        (activeDetail.current_highest_bid || 0) > 0
-                                                            ? (activeDetail.current_highest_bid || 0) + (activeDetail.min_increment || 0)
-                                                            : (activeDetail.base_price || activeDetail.min_increment || 0)
+                                                        (effectiveDetail.current_highest_bid || 0) > 0
+                                                            ? (effectiveDetail.current_highest_bid || 0) + (effectiveDetail.min_increment || 0)
+                                                            : (effectiveDetail.base_price || effectiveDetail.min_increment || 0)
                                                     )}`}
                                                     className="w-full bg-gradient-to-r from-gray-50 to-gray-100 border-2 border-gray-300 rounded-2xl px-4 py-3 text-black text-sm font-semibold focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all placeholder:text-gray-500 shadow-inner"
                                                 />
-                                                <Link href={`/auction/${activeDetail.id}`} className="w-full px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-orange-500/50 hover:-translate-y-1 text-center transform duration-300">
+                                                <Link href={`/auction/${effectiveDetail.id}`} className="w-full px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-orange-500/50 hover:-translate-y-1 text-center transform duration-300">
                                                     🔥 Bid now
                                                 </Link>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col gap-3">
                                                 {renderCta(primaryCta, 'w-full inline-flex items-center justify-center px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-300 bg-gradient-to-r from-black to-gray-800 text-white hover:from-gray-800 hover:to-black shadow-xl hover:shadow-2xl hover:-translate-y-1 transform')}
-                                                {heroVariant !== 'empty' && (
+                                                {effectiveVariant !== 'empty' && (
                                                     <Link href="/auctions" className="w-full inline-flex items-center justify-center px-6 py-3 rounded-2xl font-bold text-sm transition-all duration-300 bg-white border-2 border-black text-black hover:bg-black hover:text-white hover:-translate-y-1 transform shadow-md hover:shadow-xl">
                                                         View all auctions →
                                                     </Link>
@@ -374,7 +452,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail }
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent z-10 pointer-events-none" />
                                     <HeroMedia
                                         detail={detail}
-                                        heroVariant={heroVariant}
+                                        heroVariant={effectiveVariant}
                                         heroArtLabel={heroArtLabel}
                                         heroArtBadge={heroArtBadge}
                                     />

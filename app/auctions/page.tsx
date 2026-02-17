@@ -64,7 +64,7 @@ export default function AuctionsPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-12 flex flex-col gap-2">
             <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">The Collection</span>
-            <h1 className="text-3xl lg:text-4xl font-bold font-display text-zinc-900">All Active Auctions</h1>
+            <h1 className="text-3xl lg:text-4xl font-bold font-display text-zinc-900">Current & Upcoming Auctions</h1>
           </div>
 
           {error && <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-8 text-center">{error}</div>}
@@ -77,16 +77,16 @@ export default function AuctionsPage() {
             </div>
           ) : auctions.length === 0 ? (
             <div className="py-24 text-center">
-              <h3 className="text-xl font-medium text-zinc-900 mb-2">No live auctions right now</h3>
+              <h3 className="text-xl font-medium text-zinc-900 mb-2">No active auctions right now</h3>
               <p className="text-zinc-500">
                 Check back soon for the next exclusive drop.
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {auctions.map((auction) => (
-                <Link href={`/auction/${auction.id}`} key={auction.id} className="group flex flex-col gap-4">
-                  <div className="aspect-[3/4] relative bg-zinc-100 rounded-xl overflow-hidden">
+                <Link href={`/auction/${auction.id}`} key={auction.id} className="group flex flex-col bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-all duration-300">
+                  <div className="aspect-[3/4] relative bg-zinc-100 overflow-hidden">
                     {auction.banner_image ? (
                       <img
                         src={auction.banner_image}
@@ -99,22 +99,25 @@ export default function AuctionsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-2 py-2">
-                    <h3 className="text-lg font-display font-medium text-zinc-900 group-hover:text-orange-600 transition-colors">{auction.title}</h3>
-                    <div className="flex justify-between items-center">
-                      <span className="text-base font-semibold text-zinc-900">
+                  <div className="flex flex-col gap-2 p-3">
+                    <h3 className="text-sm font-display font-medium text-zinc-900 group-hover:text-orange-600 transition-colors line-clamp-1">{auction.title}</h3>
+
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-sm font-semibold text-zinc-900">
                         {formatCurrency(auction.current_highest_bid)}
                       </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${auction.status === 'live' ? 'bg-green-100 text-green-700' :
-                          auction.status === 'ended' ? 'bg-zinc-100 text-zinc-500' :
-                            'bg-orange-100 text-orange-700'
-                        }`}>
-                        {auction.status}
-                      </span>
+                      <span className="text-xs text-zinc-500 font-medium">{auction.total_bids || 0} Bids</span>
                     </div>
-                    <div className="flex justify-between text-xs text-zinc-500 mt-1 font-medium">
-                      <span>Ends {formatDate(auction.bidding_end_time)}</span>
-                      <span>{auction.total_bids || 0} Bids</span>
+
+                    <div className="pt-2 border-t border-gray-100 flex flex-col gap-1 text-[10px] text-zinc-500 font-medium uppercase tracking-wide">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Starts</span>
+                        <span>{formatDate(auction.bidding_start_time)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Ends</span>
+                        <span className={auction.status === 'live' ? 'text-red-600' : ''}>{formatDate(auction.bidding_end_time)}</span>
+                      </div>
                     </div>
                   </div>
                 </Link>

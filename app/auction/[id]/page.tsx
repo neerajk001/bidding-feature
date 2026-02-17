@@ -361,66 +361,192 @@ export default function AuctionDetailPage() {
 
   const showRegistration = phase === 'registration'
   const showLiveBid = phase === 'live'
+
   return (
     <PublicShell>
-      <section className="py-12 lg:py-20">
-        <div className="max-w-7xl mx-auto px-4">
-          <Link href="/auctions" className="inline-flex items-center text-sm font-medium text-zinc-500 hover:text-zinc-900 mb-8 gap-1 transition-colors group">
+      <section className="py-8 lg:py-12 bg-gray-50">
+        <div className="max-w-6xl mx-auto px-4">
+          <Link href="/auctions" className="inline-flex items-center text-sm font-medium text-zinc-500 hover:text-orange-600 mb-6 gap-1 transition-colors group">
             <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to auctions
           </Link>
 
           {loading ? (
-            <div className="bg-white border border-zinc-200 rounded-xl shadow-sm h-[600px] animate-pulse" />
+            <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm h-[600px] animate-pulse" />
           ) : error ? (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4 text-sm">{error}</div>
           ) : auction ? (
             <>
-              <div className="grid lg:grid-cols-[1fr_400px] gap-8 items-start">
-                <div className="rounded-xl overflow-hidden">
-                  <AuctionMediaCarousel
-                    banner={auction.banner_image}
-                    gallery={auction.gallery_images}
-                    reel={auction.reel_url}
-                    title={auction.title}
-                  />
-                  <div className="p-6 lg:p-8 flex flex-col gap-8">
-                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                      <div className="flex flex-col gap-2">
-                        <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">Auction</span>
-                        <h1 className="text-3xl lg:text-4xl font-bold font-display text-black">{auction.title}</h1>
-                      </div>
-                      <div className="flex flex-col gap-2 items-end">
-                        <div className="flex gap-2 items-center">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${auction.status === 'live' ? 'bg-green-100 text-green-700' :
-                            auction.status === 'ended' ? 'bg-gray-100 text-gray-500' :
-                              'bg-orange-100 text-orange-700'
-                            }`}>{auction.status}</span>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-gray-100 text-gray-600'
-                            }`}>{phaseLabel}</span>
-                        </div>
+              {/* Main Grid Layout */}
+              <div className="grid lg:grid-cols-[1fr_380px] gap-6 items-start">
 
-                        {/* Bid form in header when auction is live and user is registered */}
-                        {showLiveBid && bidderId && (
-                          <div className="mt-2 w-full flex flex-col items-end gap-3">
-                            {auction.available_sizes && auction.available_sizes.length > 0 && (
-                              <div className="flex gap-1 flex-wrap justify-end">
+                {/* Left Column - Image & Details */}
+                <div className="flex flex-col gap-6">
+
+                  {/* Compact Image Container */}
+                  <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                    <div className="aspect-[16/9] relative">
+                      <AuctionMediaCarousel
+                        banner={auction.banner_image}
+                        gallery={auction.gallery_images}
+                        reel={auction.reel_url}
+                        title={auction.title}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Auction Info Card */}
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col gap-4">
+
+                    {/* Header */}
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="uppercase tracking-widest text-xs font-bold text-orange-500">Live Auction</span>
+                        <h1 className="text-xl lg:text-2xl font-bold font-display text-black">{auction.title}</h1>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live'
+                          ? 'bg-red-500 text-white animate-pulse'
+                          : phase === 'ended'
+                            ? 'bg-gray-200 text-gray-600'
+                            : 'bg-orange-100 text-orange-700'
+                          }`}>
+                          {phaseLabel}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Current Bid Highlight */}
+                    <div className="bg-gradient-to-br from-orange-50 to-pink-50 border-2 border-orange-200 rounded-lg p-3.5">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-xs uppercase tracking-wider text-orange-700 font-bold mb-0.5 block">Current Bid</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold text-black">{formatCurrency(auction.current_highest_bid)}</span>
+                            {auction.highest_bid_size && (
+                              <span className="text-xs px-1.5 py-0.5 border border-orange-300 bg-white rounded text-orange-700 font-semibold">
+                                Size: {auction.highest_bid_size}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-600 mt-0.5 block">
+                            {auction.highest_bidder_name ? `Leader: ${auction.highest_bidder_name}` : 'Be the first bidder'}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5 block">Total Bids</span>
+                          <span className="text-xl font-bold text-black">{auction.total_bids || 0}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Auction Stats Grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {auction.base_price && (
+                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-0.5 block">Base Price</span>
+                          <span className="text-lg font-bold text-black block">{formatCurrency(auction.base_price)}</span>
+                        </div>
+                      )}
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-0.5 block">Min Increment</span>
+                        <span className="text-lg font-bold text-black block">{formatCurrency(auction.min_increment)}</span>
+                      </div>
+                    </div>
+
+                    {/* Timeline */}
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Timeline</h3>
+                      <div className="grid grid-cols-1 gap-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600 font-medium">Registration Ends</span>
+                          <span className="text-xs font-semibold text-black">{formatDateTime(auction.registration_end_time)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600 font-medium">Bidding Starts</span>
+                          <span className="text-xs font-semibold text-black">{formatDateTime(auction.bidding_start_time)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-600 font-medium">Bidding Ends</span>
+                          <span className="text-xs font-semibold text-black">{formatDateTime(auction.bidding_end_time)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Countdown */}
+                    {countdownTarget && (
+                      <div className="bg-black text-white rounded-lg p-3 flex justify-between items-center">
+                        <span className="text-xs font-bold uppercase tracking-wider">
+                          {phase === 'registration' ? 'Registration closes in' : phase === 'upcoming' ? 'Bidding opens in' : 'Auction ends in'}
+                        </span>
+                        <span className="text-lg font-bold font-mono">{formatCountdown(countdownTarget, now)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column - Bidding Panel */}
+                <div className="sticky top-24">
+                  <div className="bg-white border-2 border-gray-200 rounded-2xl shadow-lg overflow-hidden">
+
+                    {/* Panel Header */}
+                    <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-5 text-white">
+                      <h2 className="text-xl font-bold">
+                        {phase === 'live' ? 'Place Your Bid' : phase === 'ended' ? 'Auction Ended' : 'Register to Bid'}
+                      </h2>
+                      <p className="text-sm text-orange-100 mt-1">
+                        {phase === 'registration'
+                          ? 'Complete verification and register to join'
+                          : phase === 'upcoming'
+                            ? 'Registration closed. Bidding opens soon'
+                            : phase === 'live'
+                              ? 'Live bidding in progress'
+                              : 'Check back for future auctions'}
+                      </p>
+                    </div>
+
+                    {/* Panel Content */}
+                    <div className="p-5">
+
+                      {/* Messages */}
+                      {message && (
+                        <div className={`px-4 py-3 rounded-lg text-sm mb-4 ${message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+                          }`}>
+                          {message.text}
+                        </div>
+                      )}
+
+                      {/* Live Bidding Form */}
+                      {showLiveBid && bidderId && (
+                        <div className="flex flex-col gap-4">
+
+                          {/* Size Selection */}
+                          {auction.available_sizes && auction.available_sizes.length > 0 && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Select Size</label>
+                              <div className="flex gap-2 flex-wrap">
                                 {auction.available_sizes.map(size => (
                                   <button
                                     key={size}
                                     type="button"
                                     onClick={() => setSelectedSize(size)}
-                                    className={`px-3 py-1 text-xs rounded transition-all border ${selectedSize === size
-                                      ? 'bg-orange-500 border-orange-500 text-white font-semibold'
-                                      : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                                    className={`px-4 py-2 text-sm rounded-lg font-semibold transition-all border-2 ${selectedSize === size
+                                      ? 'bg-orange-500 border-orange-500 text-white'
+                                      : 'border-gray-300 text-gray-700 hover:border-orange-300 hover:bg-orange-50'
                                       }`}
                                   >
                                     {size}
                                   </button>
                                 ))}
                               </div>
-                            )}
+                            </div>
+                          )}
 
-                            <form onSubmit={handleBidSubmit} className="flex gap-2 items-center">
+                          {/* Bid Amount Form */}
+                          <form onSubmit={handleBidSubmit} className="flex flex-col gap-3">
+                            <div>
+                              <label htmlFor="bid-amount" className="block text-sm font-semibold text-gray-700 mb-2">
+                                Your Bid Amount
+                              </label>
                               <input
                                 id="bid-amount"
                                 name="bid-amount"
@@ -429,241 +555,155 @@ export default function AuctionDetailPage() {
                                 step="0.01"
                                 value={bidAmount}
                                 onChange={(event) => setBidAmount(event.target.value)}
-                                placeholder={`₹${minimumBid}`}
+                                placeholder={`Minimum: ₹${minimumBid}`}
                                 required
-                                className="w-32 px-3 py-2 text-sm border-2 border-orange-500 rounded bg-white text-black focus:outline-none focus:ring-2 focus:ring-orange-200"
+                                className="w-full px-4 py-3 text-lg font-semibold border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                               />
-                              <button
-                                type="submit"
-                                className="px-4 py-2 bg-orange-500 text-white rounded font-semibold text-sm hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                disabled={bidSubmitting}
-                              >
-                                {bidSubmitting ? 'Placing...' : 'Place Bid'}
-                              </button>
-                            </form>
+                              <p className="text-xs text-gray-500 mt-1">Minimum bid: {formatCurrency(minimumBid)}</p>
+                            </div>
+                            <button
+                              type="submit"
+                              className="w-full px-6 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={bidSubmitting}
+                            >
+                              {bidSubmitting ? 'Placing Bid...' : '🔥 Place Bid Now'}
+                            </button>
+                          </form>
+
+                          <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            💡 Auction extends automatically on last-minute bids
                           </div>
-                        )}
-                      </div>
-                    </div>
+                        </div>
+                      )}
 
-                    {/* Show message if bid was placed */}
-                    {message && showLiveBid && (
-                      <div className={`px-4 py-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
-                        }`}>
-                        {message.text}
-                      </div>
-                    )}
+                      {/* Live but Not Registered */}
+                      {showLiveBid && !bidderId && (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-3xl">🔒</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900 mb-2">Registration Closed</h3>
+                          <p className="text-sm text-gray-600">You need to register before bidding goes live to participate.</p>
+                        </div>
+                      )}
 
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 border-t border-gray-200 pt-6">
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Current bid</span>
-                        <span className="text-2xl font-bold text-black block flex items-center gap-2">
-                          {formatCurrency(auction.current_highest_bid)}
-                          {auction.highest_bid_size && (
-                            <span className="text-xs px-2 py-0.5 border border-gray-200 bg-gray-50 rounded text-gray-500 font-normal">
-                              Size: {auction.highest_bid_size}
-                            </span>
+                      {/* Ended State */}
+                      {phase === 'ended' && (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-3xl">🏁</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900 mb-2">Auction Complete</h3>
+                          <p className="text-sm text-gray-600 mb-1">
+                            Final bid: <span className="font-semibold text-black">{formatCurrency(auction.current_highest_bid)}</span>
+                          </p>
+                          <p className="text-sm text-gray-600 mb-6">
+                            Winner: <span className="font-semibold text-black">{auction.winner_name || auction.highest_bidder_name || 'TBD'}</span>
+                          </p>
+                          <Link
+                            href="/auctions"
+                            className="inline-flex justify-center px-6 py-3 border-2 border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 hover:border-orange-500 hover:text-orange-600 transition-colors"
+                          >
+                            Browse Other Auctions
+                          </Link>
+                        </div>
+                      )}
+
+                      {/* Registration - Checking User */}
+                      {showRegistration && !bidderId && checkingUser && (
+                        <div className="text-center py-8 text-gray-500">
+                          <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                          <p className="text-sm">Checking your verification status...</p>
+                        </div>
+                      )}
+
+                      {/* Registration - OTP Verification */}
+                      {showRegistration && !bidderId && !checkingUser && !profile && (
+                        <div className="flex flex-col gap-4">
+                          <EmailOtpVerification
+                            auctionId={auction.id}
+                            onVerificationComplete={handleVerificationSuccess}
+                            onError={handleVerificationError}
+                          />
+                        </div>
+                      )}
+
+                      {/* Registration - Complete Form */}
+                      {showRegistration && !bidderId && !checkingUser && profile && (
+                        <form onSubmit={handleRegister} className="flex flex-col gap-4">
+                          <div>
+                            <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
+                            <input
+                              id="name"
+                              name="name"
+                              type="text"
+                              value={registrationForm.name}
+                              onChange={(event) => setRegistrationForm((prev) => ({ ...prev, name: event.target.value }))}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                            <input
+                              id="email"
+                              name="email"
+                              type="email"
+                              value={registrationForm.email}
+                              onChange={(event) => setRegistrationForm((prev) => ({ ...prev, email: event.target.value }))}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-2">Verified Phone</label>
+                            <input
+                              id="phone"
+                              name="phone"
+                              type="tel"
+                              value={registrationForm.phone}
+                              readOnly
+                              className="w-full px-4 py-3 border-2 border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full px-6 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
+                            disabled={registrationSubmitting}
+                          >
+                            {registrationSubmitting ? 'Registering...' : 'Complete Registration'}
+                          </button>
+                        </form>
+                      )}
+
+                      {/* Registration Confirmed */}
+                      {showRegistration && bidderId && (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-3xl">✓</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-green-700 mb-2">Registration Confirmed</h3>
+                          <p className="text-sm text-gray-600 mb-4">You are registered and ready to bid when the auction opens.</p>
+                          {countdownTarget && (
+                            <div className="inline-block px-4 py-2 bg-orange-50 text-orange-700 rounded-lg text-sm font-bold uppercase tracking-wider">
+                              Bidding starts in {formatCountdown(countdownTarget, now)}
+                            </div>
                           )}
-                        </span>
-                        <span className="text-sm text-gray-600 mt-1 block">
-                          {auction.highest_bidder_name
-                            ? `Leader: ${auction.highest_bidder_name}`
-                            : 'Be the first bidder'}
-                        </span>
-                      </div>
-                      {auction.base_price && (
-                        <div>
-                          <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Base price</span>
-                          <span className="text-2xl font-bold text-black block">
-                            {formatCurrency(auction.base_price)}
-                          </span>
-                          <span className="text-sm text-gray-600 mt-1 block">
-                            Starting price
-                          </span>
                         </div>
                       )}
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Minimum increment</span>
-                        <span className="text-2xl font-bold text-black block">
-                          {formatCurrency(auction.min_increment)}
-                        </span>
-                        <span className="text-sm text-gray-600 mt-1 block">
-                          {auction.total_bids ? `${auction.total_bids} bids` : 'No bids yet'}
-                        </span>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-gray-200">
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Registration ends</span>
-                        <span className="text-sm font-medium text-black">
-                          {formatDateTime(auction.registration_end_time)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Bidding starts</span>
-                        <span className="text-sm font-medium text-black">
-                          {formatDateTime(auction.bidding_start_time)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-xs uppercase tracking-wider text-gray-600 font-semibold mb-1 block">Bidding ends</span>
-                        <span className="text-sm font-medium text-black">
-                          {formatDateTime(auction.bidding_end_time)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {countdownTarget && (
-                      <div className="flex justify-between items-center p-4 bg-orange-50 border border-orange-200 rounded-xl">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${phase === 'live' ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-white text-orange-700 border border-orange-200'
-                          }`}>
-                          {phase === 'registration'
-                            ? 'Registration closes in'
-                            : phase === 'upcoming'
-                              ? 'Bidding opens in'
-                              : 'Auction ends in'}
-                        </span>
-                        <span className="text-xl font-bold font-mono text-orange-700">
-                          {formatCountdown(countdownTarget, now)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="sticky top-24 flex flex-col gap-6 p-6 bg-white border border-zinc-200 rounded-xl shadow-sm">
-                  <div className="flex flex-col gap-2 border-b border-zinc-100 pb-4">
-                    <h2 className="text-xl font-bold text-zinc-900">
-                      {phase === 'live'
-                        ? 'Auction Status'
-                        : phase === 'ended'
-                          ? 'Auction ended'
-                          : 'Register to bid'}
-                    </h2>
-                    <p className="text-sm text-zinc-500 leading-relaxed">
-                      {phase === 'registration'
-                        ? 'Complete phone verification once and register to join.'
-                        : phase === 'upcoming'
-                          ? 'Registration is closed. Bidding opens soon.'
-                          : phase === 'live'
-                            ? 'Live bidding is in progress. Place your bid at the top.'
-                            : 'Check back for future auctions.'}
-                    </p>
-                  </div>
-
-                  {message && !showLiveBid && (
-                    <div className={`px-4 py-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
-                      }`}>{message.text}</div>
-                  )}
-
-                  {phase === 'ended' && (
-                    <div className="text-center py-8">
-                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Auction complete</h3>
-                      <p className="text-zinc-500 mb-6 text-sm">
-                        Final bid: {formatCurrency(auction.current_highest_bid)}. Winner:{' '}
-                        {auction.winner_name || auction.highest_bidder_name || 'TBD'}
-                      </p>
-                      <Link href="/auctions" className="inline-flex justify-center w-full px-4 py-2 border border-zinc-200 rounded-lg text-sm font-medium hover:bg-zinc-50 hover:text-orange-600 transition-colors">
-                        Browse other auctions
-                      </Link>
-                    </div>
-                  )}
-
-                  {showRegistration && !bidderId && checkingUser && (
-                    <div className="text-center py-8 text-zinc-500">
-                      <p>Checking your verification status...</p>
-                    </div>
-                  )}
-
-                  {showRegistration && !bidderId && !checkingUser && !profile && (
-                    <div className="flex flex-col gap-4">
-                      <EmailOtpVerification
-                        auctionId={auction.id}
-                        onVerificationComplete={handleVerificationSuccess}
-                        onError={handleVerificationError}
-                      />
-                    </div>
-                  )}
-
-                  {showRegistration && !bidderId && !checkingUser && profile && (
-                    <form onSubmit={handleRegister} className="flex flex-col gap-4">
-                      <div>
-                        <label htmlFor="name" className="block text-sm font-medium text-zinc-700 mb-1">Full name</label>
-                        <input
-                          id="name"
-                          name="name"
-                          type="text"
-                          value={registrationForm.name}
-                          onChange={(event) =>
-                            setRegistrationForm((prev) => ({ ...prev, name: event.target.value }))
-                          }
-                          required
-                          className="w-full px-3 py-2 border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1">Email</label>
-                        <input
-                          id="email"
-                          name="email"
-                          type="email"
-                          value={registrationForm.email}
-                          onChange={(event) =>
-                            setRegistrationForm((prev) => ({ ...prev, email: event.target.value }))
-                          }
-                          required
-                          className="w-full px-3 py-2 border border-zinc-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="phone" className="block text-sm font-medium text-zinc-700 mb-1">Verified phone</label>
-                        <input id="phone" name="phone" type="tel" value={registrationForm.phone} readOnly className="w-full px-3 py-2 border border-zinc-200 bg-zinc-50 text-zinc-500 rounded-md text-sm cursor-not-allowed" />
-                      </div>
-                      <button type="submit" className="w-full px-4 py-2 bg-orange-500 text-white rounded font-semibold text-sm hover:bg-orange-600 transition-colors disabled:opacity-50" disabled={registrationSubmitting}>
-                        {registrationSubmitting ? 'Registering...' : 'Complete registration'}
-                      </button>
-                    </form>
-                  )}
-
-                  {showRegistration && bidderId && (
-                    <div className="text-center py-8">
-                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Registration confirmed</h3>
-                      <p className="text-zinc-500 text-sm mb-4">You are registered and ready to bid when the auction opens.</p>
-                      {countdownTarget && (
-                        <div className="inline-block px-3 py-1 bg-orange-50 text-orange-700 rounded text-xs font-bold uppercase tracking-wider">
-                          Bidding starts in {formatCountdown(countdownTarget, now)}
+                      {/* Upcoming - Not Registered */}
+                      {phase === 'upcoming' && !bidderId && (
+                        <div className="text-center py-8">
+                          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-3xl">⏰</span>
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-900 mb-2">Registration Closed</h3>
+                          <p className="text-sm text-gray-600">Only registered bidders can participate once bidding opens.</p>
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {phase === 'upcoming' && !bidderId && (
-                    <div className="text-center py-8">
-                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Registration closed</h3>
-                      <p className="text-zinc-500 text-sm">Only registered bidders can participate once bidding opens.</p>
-                    </div>
-                  )}
-
-                  {showLiveBid && bidderId && (
-                    <div className="text-center py-8">
-                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Bidding is active</h3>
-                      <p className="text-zinc-600 text-sm mb-4">
-                        Current lead: <span className="font-semibold text-zinc-900">{formatCurrency(auction.current_highest_bid)}</span>.
-                        Next bid must be at least <span className="font-semibold text-zinc-900">{formatCurrency(minimumBid)}</span>.
-                      </p>
-                      <div className="text-xs text-zinc-500 bg-zinc-50 p-3 rounded border border-zinc-100">
-                        💡 Use the bid form at the top to place your bid. Auction extends automatically on last-minute bids.
-                      </div>
-                    </div>
-                  )}
-
-                  {showLiveBid && !bidderId && (
-                    <div className="text-center py-8">
-                      <h3 className="text-lg font-bold text-zinc-900 mb-2">Registration closed</h3>
-                      <p className="text-zinc-500 text-sm">You need to register before bidding goes live to place bids.</p>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </>

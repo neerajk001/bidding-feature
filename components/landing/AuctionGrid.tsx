@@ -106,7 +106,14 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
     // Let's use: status != 'ended' and id != activeDetail.id
 
     const pastAuctions = useMemo(() => {
-        return auctions.filter((auction) => auction.status === 'ended').slice(0, 6)
+        return auctions
+            .filter((auction) => auction.status === 'ended')
+            .sort((a, b) => {
+                const aTime = new Date(a.bidding_end_time).getTime()
+                const bTime = new Date(b.bidding_end_time).getTime()
+                return bTime - aTime
+            })
+            .slice(0, 6)
     }, [auctions])
 
     const recentEndedAuction = useMemo(() => {
@@ -157,9 +164,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                 Past Results
                             </button>
                         </div>
-                        <Link href="/auctions" className="inline-flex items-center justify-center px-6 py-2 rounded-lg font-semibold text-sm transition-colors border border-gray-300 text-gray-700 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-500/10">
-                            Explore Calendar
-                        </Link>
+
                     </div>
                 </div>
 

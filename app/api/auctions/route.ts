@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     await finalizeEndedAuctions()
 
     const includeEnded = request.nextUrl.searchParams.get('includeEnded') === 'true'
-    const statuses = includeEnded ? ['live', 'ended'] : ['live']
+    const statuses = includeEnded ? ['live', 'upcoming', 'ended'] : ['live', 'upcoming']
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')

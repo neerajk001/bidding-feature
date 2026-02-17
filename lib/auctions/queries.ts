@@ -11,7 +11,7 @@ export async function getAuctions(includeEnded: boolean = false) {
             .from('auctions')
             .select('*')
             .in('status', statuses)
-            .order('bidding_start_time', { ascending: false })
+            .order('bidding_start_time', { ascending: true })
 
         if (error) {
             console.error('Supabase error fetching auctions:', {
@@ -93,7 +93,7 @@ export async function getActiveAuctionState() {
             .from('auctions')
             .select('id, registration_end_time, bidding_start_time, bidding_end_time')
             .eq('status', 'live')
-            .order('bidding_start_time', { ascending: false })
+            .order('bidding_start_time', { ascending: true })
 
         if (error || !auctions || auctions.length === 0) {
             return { exists: false }
