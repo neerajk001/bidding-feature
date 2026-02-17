@@ -341,7 +341,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
     }
 
     return (
-        <section className="relative py-8 lg:py-12 overflow-hidden bg-gray-50" data-variant={effectiveVariant} ref={heroRef}>
+        <section className="relative pb-8 lg:pb-12 overflow-hidden bg-gray-50" data-variant={effectiveVariant} ref={heroRef}>
 
             <div className="max-w-[2200px] mx-auto px-6 lg:px-8 relative z-10">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-center">
