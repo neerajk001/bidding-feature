@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+@theme {
+    --font-display: var(--font-unna), serif;
+    --font-body: var(--font-sora), sans-serif;
+
+    --color-primary: #800000;
+    --color-secondary: #D4AF37;
+    --color-cream: #FAF7F2;
+    --color-text: #2D2420;
+}
+
+body {
+    @apply bg-cream text-text font-body antialiased;
+}

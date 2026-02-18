@@ -94,7 +94,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
             <div className="max-w-7xl mx-auto px-4">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
                     <div className="flex flex-col gap-2">
-                        <span className="uppercase tracking-widest text-xs font-bold text-orange-500">Auction Calendar</span>
+                        <span className="uppercase tracking-widest text-xs font-bold text-secondary font-display">Auction Calendar</span>
                         <h2 className="text-3xl lg:text-4xl font-bold font-display text-black">Explore Auctions</h2>
                         <p className="text-gray-600 max-w-2xl leading-relaxed text-sm">
                             Register early to unlock preview access, bidding guides, and personal styling notes.
@@ -135,7 +135,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                     <Link
                                         href={`/auction/${auction.id}`}
                                         key={auction.id}
-                                        className="group relative flex flex-col bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:border-orange-500 hover:shadow-lg transition-all duration-300"
+                                        className="group relative flex flex-col bg-white border border-secondary/20 rounded-xl overflow-hidden hover:border-primary hover:shadow-lg transition-all duration-300"
                                     >
                                         <div className="aspect-[4/5] relative bg-gray-100 overflow-hidden">
                                             {auction.banner_image ? (
@@ -159,8 +159,8 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                             {/* Status Badge */}
                                             <div className="absolute top-3 left-3">
                                                 <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm ${auction.status === 'live'
-                                                        ? 'bg-red-500 text-white shadow-lg'
-                                                        : 'bg-white/90 text-gray-700 border border-gray-200'
+                                                    ? 'bg-red-500 text-white shadow-lg'
+                                                    : 'bg-white/90 text-gray-700 border border-gray-200'
                                                     }`}>
                                                     {auction.status}
                                                 </span>
@@ -169,7 +169,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
 
                                         <div className="p-4 flex flex-col gap-3 flex-1 bg-white">
                                             <div className="flex justify-between items-start gap-2">
-                                                <h3 className="text-base font-display font-bold text-black leading-tight line-clamp-2 group-hover:text-orange-600 transition-colors">
+                                                <h3 className="text-base font-display font-bold text-black leading-tight line-clamp-2 group-hover:text-primary transition-colors">
                                                     {auction.title}
                                                 </h3>
                                             </div>
@@ -188,7 +188,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                                     <span className="block text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Starting Bid</span>
                                                     <span className="text-base font-bold text-black">{formatCurrency(startingBid)}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center gap-1 text-primary opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <span className="text-xs font-bold uppercase tracking-wider">View</span>
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -272,7 +272,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                                 </div>
                                                 <div className="text-right">
                                                     <span className="block text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Final Bid</span>
-                                                    <span className="text-sm font-bold text-orange-600">
+                                                    <span className="text-sm font-bold text-primary">
                                                         {formatCurrency(auction.winning_amount ?? auction.current_highest_bid)}
                                                     </span>
                                                 </div>
@@ -298,10 +298,10 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                 {auctionTab === 'upcoming' && recentEndedAuction && (
                     <div className="mt-16">
                         <div className="flex flex-col gap-2 mb-6">
-                            <span className="uppercase tracking-widest text-xs font-bold text-orange-500">Latest Result</span>
+                            <span className="uppercase tracking-widest text-xs font-bold text-secondary font-display">Latest Result</span>
                             <h3 className="text-2xl lg:text-3xl font-bold font-display text-black">Recent Winner</h3>
                         </div>
-                        <div className="bg-gradient-to-br from-orange-50 to-pink-50 border-2 border-orange-200 rounded-2xl p-6 lg:p-8 max-w-3xl">
+                        <div className="bg-gradient-to-br from-primary/5 to-secondary/10 border border-secondary/20 rounded-2xl p-6 lg:p-8 max-w-3xl">
                             <div className="flex items-center gap-2 mb-3">
                                 <span className="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-gray-900 text-white">
                                     Auction Ended
@@ -311,7 +311,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                             <p className="text-base lg:text-lg text-gray-700 mb-6">{recentEndedAuction.title}</p>
                             <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-orange-200">
                                 <div>
-                                    <span className="block text-xs uppercase tracking-wider text-orange-700 font-bold mb-1">Highest Bidder</span>
+                                    <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Highest Bidder</span>
                                     <span className="text-lg lg:text-xl font-bold text-black">
                                         {recentEndedAuction.winner_name ||
                                             recentEndedAuction.highest_bidder_name ||
@@ -319,8 +319,8 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                     </span>
                                 </div>
                                 <div>
-                                    <span className="block text-xs uppercase tracking-wider text-orange-700 font-bold mb-1">Winning Bid</span>
-                                    <span className="text-lg lg:text-xl font-bold text-orange-600">
+                                    <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Winning Bid</span>
+                                    <span className="text-lg lg:text-xl font-bold text-primary font-display">
                                         {formatCurrency(
                                             recentEndedAuction.winning_amount ?? recentEndedAuction.current_highest_bid
                                         )}

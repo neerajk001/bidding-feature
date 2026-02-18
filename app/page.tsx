@@ -119,11 +119,11 @@ export default async function HomePage() {
         shopifyLinkProps={shopifyLinkProps}
       />
 
-      <section className="py-24 bg-gray-50 border-t border-gray-200">
+      <section className="py-24 bg-cream border-t border-secondary/20">
         <div className="container mx-auto px-4">
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-16">
             <div className="flex flex-col gap-2">
-              <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">Heritage Promise</span>
+              <span className="uppercase tracking-widest text-xs font-semibold text-secondary font-display">Heritage Promise</span>
               <h2 className="text-4xl lg:text-5xl font-bold font-display text-black max-w-2xl leading-tight">A premium auction house for collectors.</h2>
               <p className="text-lg text-gray-600 max-w-xl leading-relaxed mt-4">
                 Our process protects provenance, delivers concierge support, and keeps bidding transparent.
@@ -133,8 +133,8 @@ export default async function HomePage() {
 
           <div className="grid md:grid-cols-3 gap-8">
             {heritagePillars.map((pillar) => (
-              <div className="bg-white border border-gray-200 rounded-2xl p-8 flex flex-col gap-4 hover:border-orange-500 transition-colors group" key={pillar.title}>
-                <h4 className="text-xl font-display font-bold text-black group-hover:text-orange-500 transition-colors">{pillar.title}</h4>
+              <div className="bg-white border border-secondary/20 rounded-2xl p-8 flex flex-col gap-4 hover:border-primary transition-colors group" key={pillar.title}>
+                <h4 className="text-xl font-display font-bold text-black group-hover:text-primary transition-colors">{pillar.title}</h4>
                 <p className="text-gray-600 leading-relaxed">{pillar.description}</p>
               </div>
             ))}

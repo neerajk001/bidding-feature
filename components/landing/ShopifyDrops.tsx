@@ -18,17 +18,17 @@ interface ShopifyDropsProps {
 
 export default function ShopifyDrops({ shopifyDrops, shopifyStoreUrl, shopifyLinkProps }: ShopifyDropsProps) {
   return (
-    <section className="py-24 bg-zinc-50" id="shopify-drops">
+    <section className="py-24 bg-cream" id="shopify-drops">
       <div className="container mx-auto px-4">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-12">
           <div className="flex flex-col gap-2">
-            <span className="uppercase tracking-widest text-xs font-semibold text-orange-500">Shopify Drops</span>
+            <span className="uppercase tracking-widest text-xs font-semibold text-secondary font-display">Shopify Drops</span>
             <h2 className="text-4xl font-bold font-display text-text-primary">New drops to check out and buy.</h2>
             <p className="text-text-secondary max-w-lg leading-relaxed">
               Limited-run collections curated for direct purchase while the auction house prepares the next lot.
             </p>
           </div>
-          <a href={shopifyStoreUrl} className="inline-flex items-center justify-center px-6 py-3 rounded-full font-semibold text-sm transition-colors bg-orange-500 text-white hover:bg-orange-600 shadow-md hover:shadow-lg hover:-translate-y-0.5" {...shopifyLinkProps}>
+          <a href={shopifyStoreUrl} className="inline-flex items-center justify-center px-6 py-3 rounded-full font-semibold text-sm transition-colors bg-secondary text-text hover:bg-secondary/80 shadow-md hover:shadow-lg hover:-translate-y-0.5" {...shopifyLinkProps}>
             Check it out and buy
           </a>
         </div>
@@ -36,7 +36,7 @@ export default function ShopifyDrops({ shopifyDrops, shopifyStoreUrl, shopifyLin
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-8">
           {shopifyDrops.length > 0 ? (
             shopifyDrops.map((drop) => (
-              <div className="bg-white border border-stone-200 rounded-2xl p-4 flex flex-col transition-all hover:-translate-y-1 hover:shadow-xl group" key={drop.id}>
+              <div className="bg-white border border-secondary/20 rounded-2xl p-4 flex flex-col transition-all hover:-translate-y-1 hover:shadow-xl hover:border-primary group" key={drop.id}>
                 {drop.image_url && (
                   <div className="w-full h-[380px] rounded-xl overflow-hidden mb-4 relative bg-zinc-50">
                     <img
@@ -52,7 +52,7 @@ export default function ShopifyDrops({ shopifyDrops, shopifyStoreUrl, shopifyLin
                 </div>
                 <h3 className="text-lg font-display text-gray-900 mb-1">{drop.title}</h3>
                 <p className="text-sm text-stone-600 mb-4 line-clamp-2 leading-relaxed">{drop.description}</p>
-                <a href={drop.link_url} className="mt-auto self-start text-sm font-semibold text-amber-700 underline underline-offset-4 hover:text-amber-900" target="_blank" rel="noreferrer">
+                <a href={drop.link_url} className="mt-auto self-start text-sm font-semibold text-primary underline underline-offset-4 hover:text-primary/80 font-display" target="_blank" rel="noreferrer">
                   Check it out and buy
                 </a>
               </div>
