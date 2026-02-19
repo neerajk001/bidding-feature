@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
       ? String(available_sizes).split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
       : []
 
+    // Validate required fields
     if (!title || !product_id || !min_increment || !registration_end_time ||
       !bidding_start_time || !bidding_end_time || !status) {
       return NextResponse.json(
@@ -178,33 +179,47 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert datetime-local strings (treated as IST) to ISO format for Supabase
-    // We append the IST offset (+05:30) so that the input time "22:00" is treated as "22:00 IST"
-    // instead of "22:00 UTC". This ensures it displays as "22:00" for users in India.
     const toIST = (dateStr: string) => {
-      // If it already has an offset or Z, leave it, otherwise assume IST
-      if (dateStr.includes('Z') || dateStr.includes('+')) return new Date(dateStr)
-      return new Date(`${dateStr}+05:30`)
+      try {
+        // If it already has an offset or Z, leave it, otherwise assume IST
+        if (dateStr.includes('Z') || dateStr.includes('+')) return new Date(dateStr)
+        return new Date(`${dateStr}+05:30`)
+      } catch (e) {
+        return new Date('Invalid')
+      }
     }
 
-    const registrationEndUTC = toIST(registration_end_time).toISOString()
-    const biddingStartUTC = toIST(bidding_start_time).toISOString()
-    const biddingEndUTC = toIST(bidding_end_time).toISOString()
+    let registrationEndUTC, biddingStartUTC, biddingEndUTC
+    try {
+      const regEnd = toIST(registration_end_time)
+      const bidStart = toIST(bidding_start_time)
+      const bidEnd = toIST(bidding_end_time)
 
-    // Validate time logic
-    const regEnd = new Date(registrationEndUTC)
-    const bidStart = new Date(biddingStartUTC)
-    const bidEnd = new Date(biddingEndUTC)
+      if (Number.isNaN(regEnd.getTime()) || Number.isNaN(bidStart.getTime()) || Number.isNaN(bidEnd.getTime())) {
+        throw new Error('Invalid date format provided')
+      }
 
-    if (regEnd >= bidStart) {
+      registrationEndUTC = regEnd.toISOString()
+      biddingStartUTC = bidStart.toISOString()
+      biddingEndUTC = bidEnd.toISOString()
+
+      // Validate time logic
+      if (regEnd >= bidStart) {
+        return NextResponse.json(
+          { error: 'Registration must end before bidding starts' },
+          { status: 400 }
+        )
+      }
+
+      if (bidStart >= bidEnd) {
+        return NextResponse.json(
+          { error: 'Bidding start time must be before end time' },
+          { status: 400 }
+        )
+      }
+    } catch (e: any) {
       return NextResponse.json(
-        { error: 'Registration must end before bidding starts' },
-        { status: 400 }
-      )
-    }
-
-    if (bidStart >= bidEnd) {
-      return NextResponse.json(
-        { error: 'Bidding start time must be before end time' },
+        { error: e.message || 'Invalid date format' },
         { status: 400 }
       )
     }
@@ -285,10 +300,10 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('API error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
