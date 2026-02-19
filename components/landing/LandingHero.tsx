@@ -384,7 +384,20 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                                     </div>
 
                                     {/* Title & Summary */}
-                                    <h3 className="text-2xl lg:text-3xl font-bold font-display text-text mb-3 leading-tight decoration-secondary/30 underline-offset-4">{cardTitle}</h3>
+                                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                                        <h3 className="text-2xl lg:text-3xl font-bold font-display text-text leading-tight decoration-secondary/30 underline-offset-4">{cardTitle}</h3>
+                                        {effectiveDetail?.registration_count ? (
+                                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50/80 border border-blue-100 backdrop-blur-sm">
+                                                <span className="relative flex h-2 w-2">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                                </span>
+                                                <span className="text-xs font-semibold text-blue-700 font-sans tracking-wide">
+                                                    {effectiveDetail.registration_count} registered
+                                                </span>
+                                            </div>
+                                        ) : null}
+                                    </div>
                                     <p className="text-text/70 mb-6 leading-relaxed text-sm font-body">{cardSummary}</p>
 
                                     {/* Metrics or Steps - Single Row Layout */}

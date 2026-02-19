@@ -291,6 +291,11 @@ export default function AuctionDetailPage() {
               <div className="text-base text-green-600 font-medium mb-3">
                 📞 {bids[0].bidders.phone}
               </div>
+              {bids[0].size && (
+                <div className="text-lg font-bold text-blue-600 mb-2 border border-blue-200 bg-blue-50 px-3 py-1 rounded inline-block">
+                  Size: {bids[0].size}
+                </div>
+              )}
               <div className="text-5xl font-black text-black mb-2">
                 ₹{bids[0].amount.toFixed(2)}
               </div>

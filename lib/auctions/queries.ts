@@ -40,6 +40,11 @@ export async function getAuctions(includeEnded: boolean = false) {
                     .select('id', { count: 'exact', head: true })
                     .eq('auction_id', auction.id)
 
+                const { count: registrationCount } = await supabaseAdmin
+                    .from('bidders')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('auction_id', auction.id)
+
                 const { data: winner } = auction.status === 'ended'
                     ? await supabaseAdmin
                         .from('winners')
@@ -63,6 +68,7 @@ export async function getAuctions(includeEnded: boolean = false) {
                     current_highest_bid: displayAmount,
                     highest_bidder_name: displayName,
                     total_bids: count ?? 0,
+                    registration_count: registrationCount ?? 0,
                     winner_name: winnerName,
                     winning_amount: winningAmount,
                     winner_declared_at: winner?.declared_at ?? null,
@@ -161,6 +167,11 @@ export async function getAuctionDetail(id: string) {
             .select('id', { count: 'exact', head: true })
             .eq('auction_id', auction.id)
 
+        const { count: registrationCount } = await supabaseAdmin
+            .from('bidders')
+            .select('id', { count: 'exact', head: true })
+            .eq('auction_id', auction.id)
+
         // If ended, get winner
         let winner = null
         if (auction.status === 'ended') {
@@ -177,6 +188,7 @@ export async function getAuctionDetail(id: string) {
             current_highest_bid: winner?.winning_amount ?? highestBid?.amount ?? null,
             highest_bidder_name: (Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name) ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null,
             total_bids: count ?? 0,
+            registration_count: registrationCount ?? 0,
             winner_name: Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name,
             winning_amount: winner?.winning_amount ?? null,
             winner_declared_at: winner?.declared_at ?? null,
