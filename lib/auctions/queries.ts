@@ -99,38 +99,31 @@ export async function getActiveAuctionState() {
             return { exists: false }
         }
 
-        const liveAuction = auctions.find(auction => {
-            // Logic from API
-            // If live: now >= start && now <= end
-            // However, the original code had a bug or check: `now >= auction.bidding_start_time`
-            // Wait, in real world, live starts at start_time.
-            return now >= auction.bidding_start_time && now <= auction.bidding_end_time
-        })
+        // Picking the first live auction as the "Active" one.
+        const activeAuction = auctions[0]
 
-        if (liveAuction) {
+        // Determine phase based on time relative to start
+        // If before start time, it's registration (or upcoming).
+        // If after start time, it's properly live.
+        const isBeforeStart = now < activeAuction.bidding_start_time
+
+        if (isBeforeStart) {
             return {
                 exists: true,
-                auction_id: liveAuction.id,
-                phase: 'live' as const,
-                cta: 'Place Bid'
-            }
-        }
-
-        const registrationAuction = auctions.find(auction => {
-            // Registration open: now < reg_end && now < start
-            return now < auction.registration_end_time && now < auction.bidding_start_time
-        })
-
-        if (registrationAuction) {
-            return {
-                exists: true,
-                auction_id: registrationAuction.id,
+                auction_id: activeAuction.id,
                 phase: 'registration' as const,
                 cta: 'Register Now'
             }
         }
 
-        return { exists: false }
+        // Default to live
+        return {
+            exists: true,
+            auction_id: activeAuction.id,
+            phase: 'live' as const,
+            cta: 'Place Bid'
+        }
+
     } catch (error: any) {
         console.error('getActiveAuctionState error:', {
             message: error?.message || 'Unknown error',
