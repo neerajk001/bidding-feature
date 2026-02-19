@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { supabase } from '@/lib/supabase/client'
 import { ActiveAuctionResponse, AuctionSummary } from './types'
 import HeroMedia from './HeroMedia'
 
@@ -88,6 +89,43 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
 
         checkRegistration()
     }, [activeAuction, activeDetail])
+
+    // State for realtime bid updates
+    const [liveBidData, setLiveBidData] = useState<{ amount: number, total: number } | null>(null)
+
+    // Realtime Subscription
+    useEffect(() => {
+        // FREE TIER PROTECTION: Only connect if auction is LIVE
+        if (activeAuction?.phase !== 'live' || !activeDetail?.id) return
+
+        const channel = supabase
+            .channel(`landing-hero-${activeDetail.id}`)
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${activeDetail.id}` },
+                (payload: any) => {
+                    const newBid = payload.new
+                    setLiveBidData(prev => {
+                        const newAmount = Number(newBid.amount)
+                        // Only update if higher
+                        if (prev && newAmount <= prev.amount) return prev
+                        return {
+                            amount: newAmount,
+                            total: (prev?.total || activeDetail.total_bids || 0) + 1
+                        }
+                    })
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [activeAuction?.phase, activeDetail?.id])
+
+    // Use live data if available, otherwise fall back to prop data
+    const displayPrice = liveBidData?.amount ?? activeDetail?.current_highest_bid ?? 0
+    const displayTotalBids = liveBidData?.total ?? activeDetail?.total_bids ?? 0
 
     useEffect(() => {
         const hero = heroRef.current
@@ -274,8 +312,8 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
 
     const cardMetrics = effectiveVariant === 'live'
         ? [
-            { label: 'Current bid', value: formatCurrency(effectiveDetail?.current_highest_bid) },
-            { label: 'Active bids', value: `${effectiveDetail?.total_bids || 0}` },
+            { label: 'Current bid', value: formatCurrency(displayPrice) },
+            { label: 'Active bids', value: `${displayTotalBids}` },
             { label: 'Ends', value: formatDateTime(effectiveDetail?.bidding_end_time) },
         ]
         : effectiveVariant === 'registration'
@@ -443,9 +481,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                                                         type="text"
                                                         disabled
                                                         placeholder={`Next bid: ${formatCurrency(
-                                                            (effectiveDetail.current_highest_bid || 0) > 0
-                                                                ? (effectiveDetail.current_highest_bid || 0) + (effectiveDetail.min_increment || 0)
-                                                                : (effectiveDetail.base_price || effectiveDetail.min_increment || 0)
+                                                            (displayPrice > 0 ? displayPrice : (effectiveDetail.base_price || 0)) + (effectiveDetail.min_increment || 50)
                                                         )}`}
                                                         className="w-full bg-white border border-secondary/20 rounded-xl pl-12 pr-4 py-3 text-text text-sm font-semibold font-body focus:ring-1 focus:ring-secondary focus:border-secondary outline-none transition-all placeholder:text-text/40 shadow-sm"
                                                     />

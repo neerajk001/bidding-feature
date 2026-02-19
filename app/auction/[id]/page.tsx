@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -152,24 +152,81 @@ export default function AuctionDetailPage() {
     verifySavedUser()
   }, [auction])
 
+  // Ref for throttling refresh calls
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   useEffect(() => {
-    if (!auction) return
+    // FREE TIER PROTECTION:
+    // Only connect to Realtime (WebSocket) if:
+    // 1. We have auction data
+    // 2. The auction is actually LIVE (don't waste connections on upcoming/ended)
+    // 3. The current time is within the bidding window
+
+    const nowTime = new Date().getTime()
+    const startTime = new Date(auction?.bidding_start_time || '').getTime()
+    const endTime = new Date(auction?.bidding_end_time || '').getTime()
+    const isLive = auction?.status === 'live' && nowTime >= startTime && nowTime <= endTime
+
+    if (!auction || !isLive) return
+
+    // Throttle the full refresh to avoid hammering the API
+    const scheduleRefresh = () => {
+      if (refreshTimeoutRef.current) return
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshAuction()
+        refreshTimeoutRef.current = null
+      }, 3000) // Refresh full details every 3 seconds max
+    }
 
     const channel = supabase
-      .channel(`auction-bids-${auction.id}`)
+      .channel(`auction-room-${auction.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${auction.id}` },
-        () => {
-          refreshAuction()
+        (payload: any) => {
+          const newBid = payload.new
+          // Optimistically update the UI immediately
+          setAuction((prev) => {
+            if (!prev) return null
+            const newAmount = Number(newBid.amount)
+            // If the new bid is higher (it should be), update display
+            const isHigher = newAmount > (prev.current_highest_bid || 0)
+            if (!isHigher) return prev
+
+            return {
+              ...prev,
+              current_highest_bid: newAmount,
+              total_bids: (prev.total_bids || 0) + 1,
+              highest_bidder_name: prev.highest_bidder_name
+            }
+          })
+          scheduleRefresh()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'auctions', filter: `id=eq.${auction.id}` },
+        (payload: any) => {
+          const updatedAuction = payload.new
+          setAuction((prev) => {
+            if (!prev) return null
+            return {
+              ...prev,
+              bidding_end_time: updatedAuction.bidding_end_time,
+              status: updatedAuction.status
+            }
+          })
         }
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current)
+      }
     }
-  }, [auction])
+  }, [auction?.id, auction?.status, auction?.bidding_end_time])
 
   const refreshAuction = async () => {
     try {

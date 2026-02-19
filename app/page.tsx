@@ -60,57 +60,77 @@ export default async function HomePage() {
   // Ensure allAuctions is an array
   const allAuctions = Array.isArray(allAuctionsRaw) ? allAuctionsRaw : []
 
-  let activeDetail: any = null
-  let activeAuctionPhase: any = null
+  console.log('Homepage Debug:', {
+    activeState,
+    allAuctionsCount: allAuctions.length,
+    statuses: allAuctions.map((a: any) => ({ io: a.id, st: a.status, end: a.bidding_end_time })),
+    dropsCount: shopifyDrops?.length
+  })
 
-  // Resolve active auction details
-  // Note: getActiveAuctionState returns { exists: boolean, auction_id?: string, phase?: 'live'|'registration', cta?: string }
-  // We need to type cast or check properly.
-  // The 'queries.ts' I wrote returns object { exists, ... }
+  // Determine what to show in Hero
+  // Priority: 
+  // 1. Live Auction (activeState.exists && phase='live')
+  // 2. Registration Auction (activeState.exists && phase='registration')
+  // 3. Upcoming Auction (status='upcoming' or 'draft' but usually filtered out)
+  // 4. Recently Ended Auction
 
-  const state = activeState as any
+  let displayActiveDetail = null
+  let displayActivePhase = null
+  let displayEndedDetail = null
+  let displayNextUpcoming = null
 
-  if (state && state.exists && state.auction_id) {
-    const detail = await getAuctionDetail(state.auction_id)
+  if (activeState && (activeState as any).exists && (activeState as any).auction_id) {
+    const detail = await getAuctionDetail((activeState as any).auction_id)
     if (detail) {
-      activeDetail = detail
-      activeAuctionPhase = state
+      displayActiveDetail = detail
+      displayActivePhase = activeState
     }
   }
 
-  // Fallback if no active auction found (e.g. no live/registration phase)
-  // We still want to show *something* in the hero, typically the next upcoming auction or just a placeholder.
-  // Original logic: "Fallback to first non-ended auction if no active one"
-  if (!activeDetail && allAuctions.length > 0) {
-    const fallback = allAuctions.find((a: any) => a.status !== 'ended')
-    if (fallback) {
-      activeDetail = fallback
-      // activeAuctionPhase remains null, so hero will show generic "Upcoming" or whatever logic is inside LandingHero
+  // If no active auction (Live or Registration), look for next upcoming
+  if (!displayActiveDetail) {
+    const upcoming = allAuctions.find((a: any) =>
+      a.status === 'upcoming' ||
+      (a.status === 'draft' && new Date(a.bidding_start_time) > new Date())
+    )
+    if (upcoming) {
+      displayNextUpcoming = upcoming
+      // We pass this as 'activeDetail' to Hero but with 'upcoming' phase implicit?
+      // Actually LandingHero props: activeAuction, activeDetail, endedDetail, nextUpcomingAuction
+      // It seems 'activeDetail' is for Live/Registration. 
+      // 'nextUpcomingAuction' should be passed separately if needed.
     }
   }
 
+  // Calculate most recent ended auction
   const endedAuctions = allAuctions.filter((auction: any) => auction.status === 'ended')
   const getTimeValue = (value?: string | null) => {
     if (!value) return 0
     const date = new Date(value)
     return Number.isNaN(date.getTime()) ? 0 : date.getTime()
   }
+
   const recentEndedAuction = endedAuctions
     .slice()
     .sort((a: any, b: any) => getTimeValue(b.bidding_end_time) - getTimeValue(a.bidding_end_time))[0] || null
-  const heroEndedAuction = activeDetail ? null : recentEndedAuction
+
+  // If no active auction, we show the ended auction
+  if (!displayActiveDetail && !displayNextUpcoming) {
+    displayEndedDetail = recentEndedAuction
+  }
 
   return (
     <PublicShell>
       <LandingHero
-        activeAuction={activeAuctionPhase}
-        activeDetail={activeDetail}
-        endedDetail={heroEndedAuction}
+        activeAuction={displayActivePhase}
+        activeDetail={displayActiveDetail}
+        endedDetail={displayEndedDetail}
+        nextUpcomingAuction={displayNextUpcoming}
       />
 
       <AuctionGrid
         auctions={allAuctions}
-        activeDetail={activeDetail}
+        activeDetail={displayActiveDetail}
       />
 
       <ShopifyDrops

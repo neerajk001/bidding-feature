@@ -7,66 +7,42 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await finalizeEndedAuctions()
-
     const { id } = await params
 
     if (!id) {
       return NextResponse.json({ error: 'Auction ID is required' }, { status: 400 })
     }
 
-    const { data: auction, error } = await supabaseAdmin
-      .from('auctions')
-      .select(
-        'id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, gallery_images, reel_url, min_increment, base_price, available_sizes'
-      )
-      .eq('id', id)
-      .single()
+    // Call the PostgreSQL function 'get_auction_details'
+    // This function:
+    // 1. Fetches all auction fields
+    // 2. Checks if the auction has ended but is still marked 'live'. If so, it finalizes it (Lazy Finalization).
+    // 3. returns the current highest bid, total bids, and winner info if applicable.
+    // All in one efficient query.
 
-    if (error || !auction) {
+    const { data, error } = await supabaseAdmin.rpc('get_auction_details', {
+      p_auction_id: id
+    })
+
+    if (error) {
+      // If the error message indicates "Auction not found" (from our RPC), return 404
+      if (error.message.includes('Auction not found')) {
+        return NextResponse.json({ error: 'Auction not found' }, { status: 404 })
+      }
+      console.error('RPC Error fetching auction:', error)
+      return NextResponse.json({ error: 'Failed to load auction details' }, { status: 500 })
+    }
+
+    // The RPC returns a JSON object directly.
+    // Ensure we handle the case where the RPC itself returns an error object inside the JSON
+    // (though in our SQL we throw exceptions which Supabase catches as `error`)
+
+    if (!data) {
       return NextResponse.json({ error: 'Auction not found' }, { status: 404 })
     }
 
-    const { data: highestBid } = await supabaseAdmin
-      .from('bids')
-      .select('amount, size, bidder:bidder_id(name)')
-      .eq('auction_id', id)
-      .order('amount', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const { count } = await supabaseAdmin
-      .from('bids')
-      .select('id', { count: 'exact', head: true })
-      .eq('auction_id', id)
-
-    const { data: winner } = await supabaseAdmin
-      .from('winners')
-      .select('winning_amount, declared_at, bidder:bidder_id(name)')
-      .eq('auction_id', id)
-      .maybeSingle()
-
-    const winningAmount = winner?.winning_amount ?? null
-    const winnerBidder = winner?.bidder
-    const winnerName = Array.isArray(winnerBidder) ? winnerBidder[0]?.name ?? null : (winnerBidder as any)?.name ?? null
-
-    const highestBidder = highestBid?.bidder
-    const highestBidderName = Array.isArray(highestBidder) ? highestBidder[0]?.name ?? null : (highestBidder as any)?.name ?? null
-
-    const useWinner = auction.status === 'ended' && winningAmount !== null
-
     return NextResponse.json(
-      {
-        ...auction,
-        current_highest_bid: useWinner ? winningAmount : highestBid?.amount ?? null,
-        highest_bidder_name: useWinner ? winnerName : highestBidderName,
-        highest_bid_size: highestBid?.size ?? null,
-        total_bids: count ?? 0,
-        winner_name: winnerName,
-        winning_amount: winningAmount,
-        winner_declared_at: winner?.declared_at ?? null
-      },
+      data,
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

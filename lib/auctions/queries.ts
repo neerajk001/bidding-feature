@@ -3,7 +3,7 @@ import { finalizeEndedAuctions } from '@/lib/auctions/finalizeEndedAuctions'
 
 export async function getAuctions(includeEnded: boolean = false) {
     try {
-        await finalizeEndedAuctions()
+        // await finalizeEndedAuctions() (removed to prevent crashes, handled by lazy SQL now)
 
         const statuses = includeEnded ? ['live', 'ended'] : ['live']
 
