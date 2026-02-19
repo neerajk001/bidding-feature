@@ -56,39 +56,41 @@ type HeroCta = {
 }
 
 export default function LandingHero({ activeAuction, activeDetail, endedDetail, nextUpcomingAuction }: LandingHeroProps) {
-    const heroRef = useRef<HTMLElement>(null)
-    const [isRegistered, setIsRegistered] = useState<boolean | null>(null)
+    const isLive = activeAuction?.phase === 'live'
+    const isRegistration = activeAuction?.phase === 'registration'
 
-    // Check if user is registered for the active live auction
-    useEffect(() => {
-        const checkRegistration = async () => {
-            // Only check if we have a live auction
-            if (activeAuction?.phase !== 'live' || !activeDetail?.id) {
-                // If not live, registration status doesn't matter for this specific logic
-                // Set to true so we don't interfere with standard display
-                setIsRegistered(true)
-                return
-            }
+    // Determine effective state
+    // We want to show the Live auction to EVERYONE (guests included).
+    // Previously we hid it for non-registered users, which caused the "blank card" issue.
 
-            const userId = localStorage.getItem('user_id')
-            if (!userId) {
-                // Guest user -> Not registered
-                setIsRegistered(false)
-                return
-            }
+    let effectiveDetail = activeDetail
+    let effectiveVariant: HeroVariant = 'empty'
 
-            try {
-                const res = await fetch(`/api/check-registration?user_id=${userId}&auction_id=${activeDetail.id}`)
-                const data = await res.json()
-                setIsRegistered(!!data.registered)
-            } catch (error) {
-                console.error('Failed to check registration:', error)
-                setIsRegistered(false)
-            }
+    if (activeDetail) {
+        if (isLive) {
+            effectiveVariant = 'live'
+        } else if (isRegistration) {
+            effectiveVariant = 'registration'
+        } else {
+            effectiveVariant = 'upcoming'
         }
+    } else if (endedDetail) {
+        effectiveDetail = endedDetail
+        effectiveVariant = 'closed'
+    } else {
+        effectiveVariant = 'empty'
+    }
 
-        checkRegistration()
-    }, [activeAuction, activeDetail])
+    const detail = effectiveDetail
+
+    // Force upcoming if we replaced the live auction
+    // The logic above handles it. But wait, `isRegistered` starts as null.
+    // Ideally we want to avoid layout shift. 
+    // If we defaults `isRegistered` to null, we show Live. Then it snaps to upcoming.
+    // If we default to false, we show Upcoming. Then snaps to Live.
+    // Since most users are guests, defaulting to false might be smoother for them?
+    // But logged in users would see a flash of upcoming.
+    // Let's stick to null (Live) and swap if needed. 
 
     // State for realtime bid updates
     const [liveBidData, setLiveBidData] = useState<{ amount: number, total: number } | null>(null)
@@ -127,6 +129,8 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
     const displayPrice = liveBidData?.amount ?? activeDetail?.current_highest_bid ?? 0
     const displayTotalBids = liveBidData?.total ?? activeDetail?.total_bids ?? 0
 
+    const heroRef = useRef<HTMLElement>(null)
+
     useEffect(() => {
         const hero = heroRef.current
         if (!hero) return
@@ -152,63 +156,6 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
             window.removeEventListener('scroll', handleScroll)
         }
     }, [])
-
-    const isLive = activeAuction?.phase === 'live'
-    const isRegistration = activeAuction?.phase === 'registration'
-
-    // Determine effective state based on registration
-    // If Live AND Not Registered -> Show Next Upcoming
-    const showLive = isLive && (isRegistered === true || isRegistered === null) // Optimistically show live while checking? or wait?
-    // User requested: "if someone didnt registered... replace with upcoming"
-    // So if isRegistered is false, we force upcoming.
-
-    // Better logic:
-    // Base State
-    let effectiveDetail = activeDetail
-    let effectiveVariant: HeroVariant = 'empty'
-
-    if (activeDetail) {
-        if (isLive) {
-            // If checking (null), show Live (or loading? lets show Live). 
-            // If check finishes and is false, show Upcoming.
-            if (isRegistered === false) {
-                // Not registered. Fallback to next upcoming.
-                if (nextUpcomingAuction) {
-                    effectiveDetail = nextUpcomingAuction
-                    effectiveVariant = 'upcoming'
-                } else {
-                    // No upcoming? Show empty or keep showing live (as locked)?
-                    // "replace with upcoming" implies there is one. 
-                    // If none, maybe show "Curating Next Lot".
-                    effectiveDetail = null
-                    effectiveVariant = 'empty'
-                }
-            } else {
-                effectiveVariant = 'live'
-            }
-        } else if (isRegistration) {
-            effectiveVariant = 'registration'
-        } else {
-            effectiveVariant = 'upcoming'
-        }
-    } else if (endedDetail) {
-        effectiveDetail = endedDetail
-        effectiveVariant = 'closed'
-    } else {
-        effectiveVariant = 'empty'
-    }
-
-    // Force upcoming if we replaced the live auction
-    // The logic above handles it. But wait, `isRegistered` starts as null.
-    // Ideally we want to avoid layout shift. 
-    // If we defaults `isRegistered` to null, we show Live. Then it snaps to upcoming.
-    // If we default to false, we show Upcoming. Then snaps to Live.
-    // Since most users are guests, defaulting to false might be smoother for them?
-    // But logged in users would see a flash of upcoming.
-    // Let's stick to null (Live) and swap if needed. 
-
-    // Re-calculating helpers based on effectiveDetail and effectiveVariant
-    const detail = effectiveDetail
 
     const heroEyebrow = effectiveVariant === 'live'
         ? 'Live Auction'
@@ -298,7 +245,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
 
     const cardSummary = effectiveVariant === 'live'
         ? (effectiveDetail?.current_highest_bid
-            ? `Current lead at ${formatCurrency(effectiveDetail.current_highest_bid)}.`
+            ? `Current lead at ${formatCurrency(displayPrice)}.`
             : 'Bidding is open. Be the first to place a bid.')
         : effectiveVariant === 'registration'
             ? `Registration closes ${formatDateTime(effectiveDetail?.registration_end_time)}.`

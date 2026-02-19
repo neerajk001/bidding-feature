@@ -51,8 +51,7 @@ async function getShopifyDrops() {
 }
 
 export default async function HomePage() {
-  const [activeState, allAuctionsRaw, shopifyDrops] = await Promise.all([
-    getActiveAuctionState(),
+  const [allAuctionsRaw, shopifyDrops] = await Promise.all([
     getAuctions(true),
     getShopifyDrops()
   ])
@@ -61,33 +60,39 @@ export default async function HomePage() {
   const allAuctions = Array.isArray(allAuctionsRaw) ? allAuctionsRaw : []
 
   console.log('Homepage Debug:', {
-    activeState,
     allAuctionsCount: allAuctions.length,
     statuses: allAuctions.map((a: any) => ({ io: a.id, st: a.status, end: a.bidding_end_time })),
     dropsCount: shopifyDrops?.length
   })
 
   // Determine what to show in Hero
-  // Priority: 
-  // 1. Live Auction (activeState.exists && phase='live')
-  // 2. Registration Auction (activeState.exists && phase='registration')
-  // 3. Upcoming Auction (status='upcoming' or 'draft' but usually filtered out)
-  // 4. Recently Ended Auction
-
   let displayActiveDetail = null
   let displayActivePhase = null
   let displayEndedDetail = null
   let displayNextUpcoming = null
 
-  if (activeState && (activeState as any).exists && (activeState as any).auction_id) {
-    const detail = await getAuctionDetail((activeState as any).auction_id)
-    if (detail) {
-      displayActiveDetail = detail
-      displayActivePhase = activeState
+  // 1. Find a Live Auction (Status='live')
+  // We prefer one that is currently in bidding window, but if not, logic handles it.
+  const liveAuction = allAuctions.find((a: any) => a.status === 'live')
+
+  if (liveAuction) {
+    displayActiveDetail = liveAuction
+
+    // Determine phase
+    const now = new Date().toISOString()
+    const isRegistration = now < liveAuction.bidding_start_time
+
+    displayActivePhase = {
+      exists: true,
+      auction_id: liveAuction.id,
+      phase: (isRegistration ? 'registration' : 'live') as 'registration' | 'live',
+      cta: isRegistration ? 'Register Now' : 'Place Bid'
     }
   }
 
-  // If no active auction (Live or Registration), look for next upcoming
+  // 2. Fallback: If no Live auction, look for Upcoming (Drafts/Upcoming)
+  // (In our system status='live' handles active. Upcoming usually means future live).
+  // If we found a live auction, we don't look for upcoming as primary.
   if (!displayActiveDetail) {
     const upcoming = allAuctions.find((a: any) =>
       a.status === 'upcoming' ||
@@ -95,14 +100,11 @@ export default async function HomePage() {
     )
     if (upcoming) {
       displayNextUpcoming = upcoming
-      // We pass this as 'activeDetail' to Hero but with 'upcoming' phase implicit?
-      // Actually LandingHero props: activeAuction, activeDetail, endedDetail, nextUpcomingAuction
-      // It seems 'activeDetail' is for Live/Registration. 
-      // 'nextUpcomingAuction' should be passed separately if needed.
     }
   }
 
-  // Calculate most recent ended auction
+  // 3. Recently Ended
+  // We calculate this always to pass as backup or if needed
   const endedAuctions = allAuctions.filter((auction: any) => auction.status === 'ended')
   const getTimeValue = (value?: string | null) => {
     if (!value) return 0
