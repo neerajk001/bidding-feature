@@ -439,15 +439,18 @@ export default function AuctionDetailPage() {
                 {/* Left Column - Image & Details */}
                 <div className="flex flex-col gap-6">
 
-                  {/* Compact Image Container */}
+                  {/* Compact Image Container - fixed 16:9 so reel doesn't stretch on desktop */}
                   <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                    <div className="aspect-[16/9] relative">
-                      <AuctionMediaCarousel
-                        banner={auction.banner_image}
-                        gallery={auction.gallery_images}
-                        reel={auction.reel_url}
-                        title={auction.title}
-                      />
+                    <div className="aspect-[16/9] relative overflow-hidden">
+                      <div className="absolute inset-0">
+                        <AuctionMediaCarousel
+                          banner={auction.banner_image}
+                          gallery={auction.gallery_images}
+                          reel={auction.reel_url}
+                          title={auction.title}
+                          fillParent
+                        />
+                      </div>
                     </div>
                   </div>
 

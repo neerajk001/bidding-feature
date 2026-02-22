@@ -463,16 +463,18 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                                     </div>
                                 </div>
 
-                                {/* Media Section - Enhanced */}
-                                <div className="relative lg:w-[45%] aspect-[3/4] lg:aspect-auto bg-gray-100 border-t lg:border-t-0 lg:border-l border-secondary/10 overflow-hidden group">
+                                {/* Media Section - full height of column so image/reel fill the space */}
+                                <div className="relative lg:w-[45%] min-h-0 aspect-[3/4] lg:aspect-auto lg:min-h-0 bg-gray-100 border-t lg:border-t-0 lg:border-l border-secondary/10 overflow-hidden group">
                                     {/* Vintage texture overlay */}
                                     <div className="absolute inset-0 bg-secondary/5 opacity-20 mix-blend-multiply z-10 pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'6\' height=\'6\' viewBox=\'0 0 6 6\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23000000\' fill-opacity=\'0.05\' fill-rule=\'evenodd\'%3E%3Cpath d=\'M5 0h1L0 6V5zM6 5v1H5z\'/%3E%3C/g%3E%3C/svg%3E")' }} />
-                                    <HeroMedia
-                                        detail={detail}
-                                        heroVariant={effectiveVariant}
-                                        heroArtLabel={heroArtLabel}
-                                        heroArtBadge={heroArtBadge}
-                                    />
+                                    <div className="absolute inset-0 w-full h-full">
+                                        <HeroMedia
+                                            detail={detail}
+                                            heroVariant={effectiveVariant}
+                                            heroArtLabel={heroArtLabel}
+                                            heroArtBadge={heroArtBadge}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

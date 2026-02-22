@@ -7,6 +7,8 @@ interface AuctionMediaCarouselProps {
     gallery?: string[] | null
     reel?: string | null
     title: string
+    /** When true, carousel fills its container (e.g. 16:9 on desktop) instead of using aspect-square; avoids stretched reel layout */
+    fillParent?: boolean
 }
 
 type Slide = {
@@ -15,7 +17,7 @@ type Slide = {
     id: string
 }
 
-export default function AuctionMediaCarousel({ banner, gallery, reel, title }: AuctionMediaCarouselProps) {
+export default function AuctionMediaCarousel({ banner, gallery, reel, title, fillParent }: AuctionMediaCarouselProps) {
     const [currentIndex, setCurrentIndex] = useState(0)
     const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -84,17 +86,17 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
     const currentSlide = slides[currentIndex]
 
     return (
-        <div className="relative w-full overflow-hidden rounded-xl bg-gray-100 aspect-[3/4] lg:aspect-square mb-4 group">
-            <div className="w-full h-full flex items-center justify-center bg-zinc-100">
+        <div className={`relative w-full overflow-hidden rounded-xl bg-gray-100 mb-4 group ${fillParent ? 'h-full min-h-0' : 'aspect-[3/4] lg:aspect-square'}`}>
+            <div className="w-full h-full flex items-center justify-center bg-zinc-100 min-h-0">
                 {currentSlide.type === 'image' ? (
                     <img
                         key={currentSlide.id}
                         src={currentSlide.src}
                         alt={`${title} - view ${currentIndex + 1}`}
-                        className="w-full h-full object-contain max-h-[600px]"
+                        className={`w-full h-full object-contain ${fillParent ? 'max-h-full' : 'max-h-[600px]'}`}
                     />
                 ) : (
-                    <div className="relative w-full h-full flex items-center justify-center">
+                    <div className="relative w-full h-full flex items-center justify-center min-h-0">
                         <video
                             key={currentSlide.id}
                             ref={videoRef}
@@ -102,7 +104,7 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title }: A
                             controls
                             playsInline
                             preload="metadata"
-                            className="w-full h-full object-contain max-h-[600px]"
+                            className={`w-full h-full object-contain ${fillParent ? 'max-h-full' : 'max-h-[600px]'}`}
                             onEnded={() => {
                                 console.log('Video ended, advancing slide')
                                 nextSlide()
