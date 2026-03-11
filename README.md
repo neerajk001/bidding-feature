@@ -146,7 +146,6 @@ Content-Type: application/json
 ## Documentation
 
 - 📖 [POSTMAN_API_TESTING.md](POSTMAN_API_TESTING.md) - API testing guide
-- 📖 [SHOPIFY_INTEGRATION.md](SHOPIFY_INTEGRATION.md) - Shopify setup
 - 📖 [QUICKSTART.md](QUICKSTART.md) - Step-by-step tutorial
 
 ---

@@ -1,0 +1,30 @@
+export interface AuctionSummary {
+    id: string
+    title: string
+    product_id: string
+    status: string
+    registration_end_time: string
+    bidding_start_time: string
+    bidding_end_time: string
+    min_increment: number
+    base_price?: number | null
+    banner_image?: string | null
+    current_highest_bid?: number | null
+    total_bids?: number | null
+    highest_bidder_name?: string | null
+    winner_name?: string | null
+    winning_amount?: number | null
+    winner_declared_at?: string | null
+    winners_by_size?: { size: string | null; winning_amount: number; winner_name?: string | null; declared_at?: string | null }[] | null
+    highest_bids_by_size?: { size: string; amount: number; bid_count: number; bidder_name: string | null }[] | null
+    gallery_images?: string[] | null
+    reel_url?: string | null
+    registration_count?: number
+}
+
+export interface ActiveAuctionResponse {
+    exists: boolean
+    auction_id?: string
+    phase?: 'registration' | 'live'
+    cta?: string
+}

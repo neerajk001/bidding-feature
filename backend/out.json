@@ -1,0 +1,1 @@
+{"e1":"duplicate key value violates unique constraint \"idx_winners_unique_auction\"","e2":"duplicate key value violates unique constraint \"idx_winners_unique_auction\"","details1":"Key (auction_id)=(8c50ce3f-418b-40c6-9d71-53023f735d4f) already exists.","details2":"Key (auction_id)=(8c50ce3f-418b-40c6-9d71-53023f735d4f) already exists.","code1":"23505","code2":"23505"}

@@ -2,13 +2,15 @@
 /node_modules
 /.pnp
 .pnp.js
+node_modules/
 
 # testing
 /coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
+.cache/
 
 # production
 /build
