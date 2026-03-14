@@ -11,7 +11,12 @@ function getBidderName(bidder: BidderRow | null | undefined): string | null | un
     return (single as BidderNameRow)?.name ?? undefined
 }
 
+function hasSupabaseEnv(): boolean {
+    return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
+
 export async function getAuctions(includeEnded: boolean = false) {
+    if (!hasSupabaseEnv()) return []
     try {
         // await finalizeEndedAuctions() (removed to prevent crashes, handled by lazy SQL now)
 
@@ -111,6 +116,7 @@ export async function getAuctions(includeEnded: boolean = false) {
 }
 
 export async function getActiveAuctionState() {
+    if (!hasSupabaseEnv()) return { exists: false }
     try {
         const now = new Date().toISOString()
 
@@ -161,6 +167,7 @@ export async function getActiveAuctionState() {
 }
 
 export async function getAuctionDetail(id: string) {
+    if (!hasSupabaseEnv()) return null
     try {
         const { data: auction, error } = await supabaseAdmin
             .from('auctions')
