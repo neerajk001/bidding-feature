@@ -51,16 +51,14 @@ jobs:
           APP_DIR: ${{ secrets.APP_DIR }}
           IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
 
-      # Restore newlines if SSH key was stored with literal \n (common when pasting into GitHub Secrets)
-      - name: Prepare SSH key
+      # Restore newlines if SSH key was stored with literal \n; trim APP_DIR/IMAGE_PREFIX (secrets often have trailing newline)
+      - name: Prepare SSH key and env
         shell: bash
         run: |
           KEY="$SSH_PRIVATE_KEY"
-          # If secret contains literal \n, convert to real newlines
           if [[ "$KEY" == *'\n'* ]]; then
             KEY="${KEY//\\n/$'\n'}"
           fi
-          # Sanity check: key must have BEGIN and END lines (content is masked in logs)
           if ! printf '%s' "$KEY" | grep -q "BEGIN OPENSSH PRIVATE KEY"; then
             echo "::error::SSH key missing 'BEGIN OPENSSH PRIVATE KEY'. Paste the full key including header/footer."
             exit 1
@@ -72,16 +70,22 @@ jobs:
           echo "SSH_KEY<<EOF" >> $GITHUB_ENV
           printf '%s' "$KEY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+
+          trim() { printf '%s' "$1" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
+          echo "APP_DIR=$(trim "$APP_DIR")" >> $GITHUB_ENV
+          echo "IMAGE_PREFIX=$(trim "$IMAGE_PREFIX")" >> $GITHUB_ENV
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+          IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          APP_DIR: ${{ secrets.APP_DIR }}
-          IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
+          APP_DIR: ${{ env.APP_DIR }}
+          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
