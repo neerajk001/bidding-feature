@@ -27,13 +27,15 @@ jobs:
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           APP_DIR: ${{ secrets.APP_DIR }}
           IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
+          set -e
           mkdir -p ~/.ssh
-          key="${{ secrets.SSH_PRIVATE_KEY }}"
+          key="$SSH_PRIVATE_KEY"
           [[ "$key" == *'\n'* ]] && key="${key//\\n/$'\n'}"
           printf '%s\n' "$key" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -42,16 +44,14 @@ jobs:
           IMAGE_PREFIX="$(printf '%s' "$IMAGE_PREFIX" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
 
           ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key "${SSH_USER}@${SSH_HOST}" "set -e
-            export APP_DIR='$APP_DIR'
-            export IMAGE_PREFIX='$IMAGE_PREFIX'
-            export GHCR_USERNAME='$GHCR_USERNAME'
-            export GHCR_TOKEN='$GHCR_TOKEN'
-            cd \"\$APP_DIR\"
-            [ -f docker-compose.prod.yml ] || { echo docker-compose.prod.yml not found; exit 1; }
-            echo \"\$GHCR_TOKEN\" | docker login ghcr.io -u \"\$GHCR_USERNAME\" --password-stdin
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker image prune -f
-            echo Deployment complete"
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          export APP_DIR='$APP_DIR'
+          export IMAGE_PREFIX='$IMAGE_PREFIX'
+          export GHCR_USERNAME='$GHCR_USERNAME'
+          export GHCR_TOKEN='$GHCR_TOKEN'
+          cd \"\$APP_DIR\"
+          [ -f docker-compose.prod.yml ] || { echo docker-compose.prod.yml not found; exit 1; }
+          echo \"\$GHCR_TOKEN\" | docker login ghcr.io -u \"\$GHCR_USERNAME\" --password-stdin
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          docker image prune -f
+          echo Deployment complete"
