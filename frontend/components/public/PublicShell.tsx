@@ -3,7 +3,8 @@
 import { type ReactNode, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import logo from './logo.png'
+
+const logoSrc = '/logo.png'
 
 export default function PublicShell({ children }: { children: ReactNode }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -14,7 +15,7 @@ export default function PublicShell({ children }: { children: ReactNode }) {
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur-md border border-secondary/20 shadow-sm rounded-xl">
           <Link href="/" className="flex items-center gap-2 flex-shrink-0">
             <span className="flex items-center gap-2">
-              <Image src={logo} alt="Indu Heritage" className="h-10 w-auto" priority />
+              <Image src={logoSrc} alt="Indu Heritage" width={215} height={178} className="h-10 w-auto" priority />
               <span className="sr-only">Indu Heritage</span>
             </span>
           </Link>
@@ -93,7 +94,7 @@ export default function PublicShell({ children }: { children: ReactNode }) {
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-start gap-8 lg:gap-12">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <Image src={logo} alt="Indu Heritage" className="h-8 w-auto opacity-80" />
+              <Image src={logoSrc} alt="Indu Heritage" width={215} height={178} className="h-8 w-auto opacity-80" />
               <span className="sr-only">Indu Heritage</span>
             </div>
             <p className="text-sm text-text/70 max-w-xs leading-relaxed font-body">
