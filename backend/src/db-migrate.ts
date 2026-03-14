@@ -15,3 +15,4 @@ async function run() {
     console.log('We cannot execute raw SQL directly through the JS client without an RPC or the connection string.');
 }
 run()
+

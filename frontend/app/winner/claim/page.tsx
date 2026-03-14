@@ -32,7 +32,7 @@ function formatDateTime(iso: string | null) {
   return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function loadRazorpayScript(): Promise<void> {
+function loadRazorpayScript(): Promise<void> {  
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'))
   if (window.Razorpay) return Promise.resolve()
   return new Promise((resolve, reject) => {
