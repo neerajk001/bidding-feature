@@ -27,9 +27,8 @@ jobs:
         run: |
           key="${{ secrets.SSH_PRIVATE_KEY }}"
           [[ "$key" == *'\n'* ]] && key="${key//\\n/$'\n'}"
-          # Use a unique delimiter so key content can't contain it (avoids "Matching delimiter not found 'EOF'")
           echo "SSH_KEY<<DEPLOY_SSH_KEY_END" >> $GITHUB_ENV
-          printf '%s' "$key" >> $GITHUB_ENV
+          printf '%s\n' "$key" >> $GITHUB_ENV
           echo "DEPLOY_SSH_KEY_END" >> $GITHUB_ENV
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
