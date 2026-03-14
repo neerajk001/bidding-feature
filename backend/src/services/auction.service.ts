@@ -85,7 +85,8 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
                   size,
                   payment_due_at: paymentDueAt,
                   payment_status: 'pending',
-                  claim_token: crypto.randomUUID()
+                  claim_token: crypto.randomUUID(),
+                  forfeited_bidder_ids: []  // Fix #10: reset escalation history on re-finalize
                 },
                 { onConflict: 'auction_id,size' }
               )
@@ -93,6 +94,9 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
             if (winnerError) {
               errors.push(`Failed to save winner for ${auction.id} size ${size}: ${winnerError.message}`)
             }
+          } else {
+            // Fix #9: log sizes with no bids so admin is aware the slot went unfilled
+            console.log(`[AUCTION] No bids for auction ${auction.id} size ${size} — no winner declared`)
           }
         }
       } else {
@@ -124,7 +128,8 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
                 size: null,
                 payment_due_at: paymentDueAt,
                 payment_status: 'pending',
-                claim_token: crypto.randomUUID()
+                claim_token: crypto.randomUUID(),
+                forfeited_bidder_ids: []  // Fix #10: reset escalation history on re-finalize
               },
               { onConflict: 'auction_id,size' }
             )

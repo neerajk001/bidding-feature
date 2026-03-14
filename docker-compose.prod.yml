@@ -1,0 +1,43 @@
+services:
+  backend:
+    image: ${IMAGE_PREFIX:-ghcr.io/owner/repo}-backend:latest
+    container_name: auction-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - auction-net
+
+  frontend:
+    image: ${IMAGE_PREFIX:-ghcr.io/owner/repo}-frontend:latest
+    container_name: auction-frontend
+    env_file:
+      - ./frontend/.env.local
+    environment:
+      NODE_ENV: production
+      BACKEND_URL: ${BACKEND_URL:-http://backend:3001}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:3001}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - auction-net
+
+networks:
+  auction-net:
+    driver: bridge

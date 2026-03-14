@@ -23,6 +23,7 @@ const backendApiRewrites = () => {
 }
 
 const nextConfig = {
+    output: 'standalone',
     images: {
         remotePatterns: [
             {
