@@ -39,7 +39,7 @@ export async function checkSupabaseHealth(): Promise<{ success: boolean; error?:
     lastHealthCheck = { success: true, timestamp: now }
     return { success: true }
   } catch (err: unknown) {
-    const e = err as { cause?: { code?: string }; message?: string }
+    const e = err as { cause?: { code?: string }; message?: string; code?: string }
     const errorMessage = e?.cause?.code === 'ENOTFOUND'
       ? 'Cannot reach Supabase server. Please check your network connection or verify your Supabase project is active.'
       : e?.message || 'Unknown connection error'
@@ -51,9 +51,9 @@ export async function checkSupabaseHealth(): Promise<{ success: boolean; error?:
     }
 
     console.error('Supabase health check failed:', {
-      message: err?.message,
-      code: err?.code || err?.cause?.code,
-      details: err?.toString(),
+      message: e?.message,
+      code: e?.code || e?.cause?.code,
+      details: err != null ? String(err) : '',
     })
 
     return { success: false, error: errorMessage }

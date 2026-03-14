@@ -1,7 +1,15 @@
 import { supabaseAdmin } from '@/lib/supabase/admin'
 
-type BidderRow = { name?: string } | { name?: string }[]
-type WinnerRow = { size: string | null; winning_amount: number; bidder: BidderRow | BidderRow[]; declared_at: string | null }
+/** Supabase can return bidder as single object or array; use this when reading .name */
+type BidderNameRow = { name?: string }
+type BidderRow = BidderNameRow | BidderNameRow[]
+type WinnerRow = { size: string | null; winning_amount: number; bidder: BidderRow; declared_at: string | null }
+
+function getBidderName(bidder: BidderRow | null | undefined): string | null | undefined {
+    if (!bidder) return undefined
+    const single = Array.isArray(bidder) ? bidder[0] : bidder
+    return (single as BidderNameRow)?.name ?? undefined
+}
 
 export async function getAuctions(includeEnded: boolean = false) {
     try {
@@ -56,14 +64,14 @@ export async function getAuctions(includeEnded: boolean = false) {
 
                 const winner = winners && winners.length > 0 ? winners[0] : null
                 const winningAmount = winner?.winning_amount ?? null
-                const winnerName = Array.isArray(winner?.bidder) ? (winner.bidder[0] as BidderRow)?.name : (winner?.bidder as BidderRow)?.name
+                const winnerName = getBidderName(winner?.bidder)
                 const displayAmount = winningAmount ?? highestBid?.amount ?? null
-                const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as BidderRow)?.name : (highestBid?.bidder as BidderRow)?.name) ?? null
+                const displayName = winnerName ?? getBidderName(highestBid?.bidder) ?? null
 
                 const winners_by_size = winners && winners.length > 0 ? winners.map((w: WinnerRow) => ({
                     size: w.size,
                     winning_amount: w.winning_amount,
-                    winner_name: Array.isArray(w.bidder) ? (w.bidder[0] as BidderRow)?.name : (w.bidder as BidderRow)?.name,
+                    winner_name: getBidderName(w.bidder),
                     declared_at: w.declared_at
                 })) : null
 
@@ -198,7 +206,7 @@ export async function getAuctionDetail(id: string) {
                 winners_by_size = data.map((w: WinnerRow) => ({
                     size: w.size,
                     winning_amount: w.winning_amount,
-                    winner_name: Array.isArray(w.bidder) ? (w.bidder[0] as BidderRow)?.name : (w.bidder as BidderRow)?.name,
+                    winner_name: getBidderName(w.bidder),
                     declared_at: w.declared_at
                 }))
             }
@@ -207,10 +215,10 @@ export async function getAuctionDetail(id: string) {
         return {
             ...auction,
             current_highest_bid: winner?.winning_amount ?? highestBid?.amount ?? null,
-            highest_bidder_name: (Array.isArray(winner?.bidder) ? (winner.bidder[0] as BidderRow)?.name : (winner?.bidder as BidderRow)?.name) ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as BidderRow)?.name : (highestBid?.bidder as BidderRow)?.name) ?? null,
+            highest_bidder_name: getBidderName(winner?.bidder) ?? getBidderName(highestBid?.bidder) ?? null,
             total_bids: count ?? 0,
             registration_count: registrationCount ?? 0,
-            winner_name: Array.isArray(winner?.bidder) ? (winner.bidder[0] as BidderRow)?.name : (winner?.bidder as BidderRow)?.name,
+            winner_name: getBidderName(winner?.bidder) ?? undefined,
             winning_amount: winner?.winning_amount ?? null,
             winner_declared_at: winner?.declared_at ?? null,
             winners_by_size,

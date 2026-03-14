@@ -185,13 +185,13 @@ export default function AuctionDetailPage() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${auction.id}` },
-        (payload: { new: Record<string, unknown> }) => {
+        (payload: { new: { amount: number; size?: string } }) => {
           const newBid = payload.new
           // Optimistically update the UI immediately
           setAuction((prev) => {
             if (!prev) return null
             const newAmount = Number(newBid.amount)
-            const bidSize = newBid.size
+            const bidSize = newBid.size ?? undefined
 
             // Update highest_bids_by_size for multi-size auctions
             let updatedHighestBidsBySize = prev.highest_bids_by_size
@@ -245,7 +245,7 @@ export default function AuctionDetailPage() {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'auctions', filter: `id=eq.${auction.id}` },
-        (payload: { new: Record<string, unknown> }) => {
+        (payload: { new: { bidding_end_time: string; status: string } }) => {
           const updatedAuction = payload.new
           setAuction((prev) => {
             if (!prev) return null
