@@ -23,38 +23,35 @@ jobs:
     environment: production
 
     steps:
-      - name: Prepare SSH key
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+          IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
+          mkdir -p ~/.ssh
           key="${{ secrets.SSH_PRIVATE_KEY }}"
           [[ "$key" == *'\n'* ]] && key="${key//\\n/$'\n'}"
-          echo "SSH_KEY<<DEPLOY_SSH_KEY_END" >> $GITHUB_ENV
-          printf '%s\n' "$key" >> $GITHUB_ENV
-          echo "DEPLOY_SSH_KEY_END" >> $GITHUB_ENV
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          printf '%s\n' "$key" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
 
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ env.SSH_KEY }}
-          envs: GHCR_USERNAME,GHCR_TOKEN,APP_DIR,IMAGE_PREFIX
-          script_stop: true
-          command_timeout: 10m
-          script: |
-            set -e
-            APP_DIR="$(printf '%s' "$APP_DIR" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-            cd "$APP_DIR"
-            [ -f docker-compose.prod.yml ] || { echo "docker-compose.prod.yml not found in $APP_DIR"; exit 1; }
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-            export IMAGE_PREFIX="$(printf '%s' "$IMAGE_PREFIX" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          APP_DIR="$(printf '%s' "$APP_DIR" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          IMAGE_PREFIX="$(printf '%s' "$IMAGE_PREFIX" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key "${SSH_USER}@${SSH_HOST}" "set -e
+            export APP_DIR='$APP_DIR'
+            export IMAGE_PREFIX='$IMAGE_PREFIX'
+            export GHCR_USERNAME='$GHCR_USERNAME'
+            export GHCR_TOKEN='$GHCR_TOKEN'
+            cd \"\$APP_DIR\"
+            [ -f docker-compose.prod.yml ] || { echo docker-compose.prod.yml not found; exit 1; }
+            echo \"\$GHCR_TOKEN\" | docker login ghcr.io -u \"\$GHCR_USERNAME\" --password-stdin
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -f
-            echo "Deployment complete"
+            echo Deployment complete"
         env:
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          APP_DIR: ${{ secrets.APP_DIR }}
-          IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
