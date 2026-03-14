@@ -9,7 +9,7 @@ export default function AuditLogsPage() {
           Audit Logs
         </h1>
         <p className="text-lg text-gray-600 mb-6">
-          This feature is coming soon. Here you'll be able to view admin action history, 
+          This feature is coming soon. Here you&apos;ll be able to view admin action history, 
           bid logs, system events, and track all changes made in the system.
         </p>
         <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-800 px-4 py-2 rounded-md">

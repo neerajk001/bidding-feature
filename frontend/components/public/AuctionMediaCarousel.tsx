@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
+import Image from 'next/image'
 
 interface AuctionMediaCarouselProps {
     banner?: string | null
@@ -89,10 +90,12 @@ export default function AuctionMediaCarousel({ banner, gallery, reel, title, fil
         <div className={`relative w-full overflow-hidden rounded-xl bg-gray-100 mb-4 group ${fillParent ? 'h-full min-h-0' : 'aspect-[3/4] lg:aspect-square'}`}>
             <div className="w-full h-full flex items-center justify-center bg-zinc-100 min-h-0">
                 {currentSlide.type === 'image' ? (
-                    <img
+                    <Image
                         key={currentSlide.id}
                         src={currentSlide.src}
                         alt={`${title} - view ${currentIndex + 1}`}
+                        width={600}
+                        height={600}
                         className={`w-full h-full object-contain ${fillParent ? 'max-h-full' : 'max-h-[600px]'}`}
                     />
                 ) : (

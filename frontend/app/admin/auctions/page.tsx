@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { adminStyles, cn } from '@/lib/admin-styles'
 import { fetchApi, parseJsonFromResponse } from '@/lib/api'
 
@@ -95,8 +96,8 @@ export default function AdminAuctionsPage() {
           folder
         })
       })
-    } catch (err: any) {
-      const msg = err?.message?.toLowerCase?.() || ''
+    } catch (err: unknown) {
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
       if (msg.includes('fetch') || msg.includes('network') || msg.includes('failed'))
         throw new Error('Upload service unavailable. Start the backend (port 3001): cd backend && npm run dev')
       throw err
@@ -363,7 +364,7 @@ export default function AdminAuctionsPage() {
               ].map((tab) => (
                 <button
                   key={tab.key}
-                  onClick={() => setStatusFilter(tab.key as any)}
+                  onClick={() => setStatusFilter(tab.key as 'all' | 'draft' | 'live' | 'ended')}
                   className={`px-3 sm:px-4 py-2.5 sm:py-2 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${
                     statusFilter === tab.key
                       ? 'border-orange-500 text-orange-600'
@@ -393,9 +394,11 @@ export default function AdminAuctionsPage() {
                     {/* Left: Media Thumbnails */}
                     <div className="lg:w-40 flex lg:flex-col gap-2 p-3 lg:p-0 lg:bg-gray-50 shrink-0 overflow-x-auto lg:overflow-visible">
                       {auction.banner_image && (
-                        <img
+                        <Image
                           src={auction.banner_image}
                           alt={auction.title}
+                          width={128}
+                          height={128}
                           className="w-20 h-20 lg:w-full lg:h-32 object-cover rounded lg:rounded-none lg:rounded-tl-lg border lg:border-0 border-gray-200 shrink-0"
                         />
                       )}
@@ -615,9 +618,11 @@ export default function AdminAuctionsPage() {
                 Paste a URL or select from your device gallery. Max 2MB.
               </span>
               {formData.banner_image && (
-                <img
+                <Image
                   src={formData.banner_image}
                   alt="Banner preview"
+                  width={128}
+                  height={128}
                   className="w-32 h-32 object-cover rounded border border-gray-200 mt-2"
                 />
               )}
@@ -642,9 +647,11 @@ export default function AdminAuctionsPage() {
                   <div className="flex gap-4 flex-wrap mt-3">
                     {galleryPreviews.map((src, idx) => (
                       <div key={idx} className="relative w-24 h-24">
-                        <img
+                        <Image
                           src={src}
                           alt={`Gallery ${idx}`}
+                          width={96}
+                          height={96}
                           className="w-full h-full object-cover rounded border border-gray-200"
                         />
                         <button

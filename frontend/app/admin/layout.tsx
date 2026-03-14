@@ -12,7 +12,7 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const isLoginPage = pathname === '/admin/login'
 
   // Redirect to login if not authenticated (except on login page)

@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { ActiveAuctionResponse, AuctionSummary } from './types'
 import HeroMedia from './HeroMedia'
@@ -55,7 +54,7 @@ type HeroCta = {
     href: string
 }
 
-export default function LandingHero({ activeAuction, activeDetail, endedDetail, nextUpcomingAuction }: LandingHeroProps) {
+export default function LandingHero({ activeAuction, activeDetail, endedDetail, nextUpcomingAuction: _nextUpcomingAuction }: LandingHeroProps) {
     const isLive = activeAuction?.phase === 'live'
     const isRegistration = activeAuction?.phase === 'registration'
 
@@ -105,7 +104,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${activeDetail.id}` },
-                (payload: any) => {
+                (payload: { new: Record<string, unknown> }) => {
                     const newBid = payload.new
                     setLiveBidData(prev => {
                         const newAmount = Number(newBid.amount)
@@ -123,6 +122,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
         return () => {
             supabase.removeChannel(channel)
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- subscription keyed by phase and id
     }, [activeAuction?.phase, activeDetail?.id])
 
     // Use live data if available, otherwise fall back to prop data
@@ -241,7 +241,6 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
 
     const winnersBySize = (endedDetail?.winners_by_size ?? []).filter((w) => w && w.winning_amount !== null && w.winning_amount !== undefined)
     const hasWinnersBySize = winnersBySize.length > 0
-    const summaryWinners = winnersBySize.slice(0, 2)
     const winnersSummary = hasWinnersBySize
         ? `Bidding has concluded across all sizes. See the winning bids below.`
         : ''
@@ -454,7 +453,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                                     {/* Metrics or Steps */}
                                     {effectiveVariant === 'empty' ? (
                                         <div className="space-y-2.5 mb-6">
-                                            {emptySteps.map((step, idx) => (
+                                            {emptySteps.map((step) => (
                                                 <div
                                                     className="flex items-center gap-4 p-3 bg-white rounded-xl border border-secondary/10 hover:border-primary/20 hover:shadow-sm transition-all duration-300 group"
                                                     key={step.label}

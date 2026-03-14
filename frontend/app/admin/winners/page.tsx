@@ -74,9 +74,9 @@ export default function WinnersPage() {
 
       setWinners(data.winners || [])
       setError('')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching winners:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
@@ -96,8 +96,8 @@ export default function WinnersPage() {
       } else {
         await fetchWinners()
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setActioningId(null)
     }
@@ -111,11 +111,11 @@ export default function WinnersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
-      if (!ok) throw new Error((data as any).error || 'Failed to resend')
+      if (!ok) throw new Error((data as { error?: string }).error || 'Failed to resend')
       setResendMsg({ id: winner.id, text: `Email resent to ${winner.bidder.email || 'bidder'}`, ok: true })
       await fetchWinners()
-    } catch (err: any) {
-      setResendMsg({ id: winner.id, text: err.message, ok: false })
+    } catch (err: unknown) {
+      setResendMsg({ id: winner.id, text: err instanceof Error ? err.message : String(err), ok: false })
     } finally {
       setResendingId(null)
     }
@@ -248,7 +248,7 @@ export default function WinnersPage() {
                 ].map((tab) => (
                   <button
                     key={tab.key}
-                    onClick={() => setPaymentFilter(tab.key as any)}
+                    onClick={() => setPaymentFilter(tab.key as 'all' | 'pending' | 'paid' | 'verified')}
                     style={{
                       padding: '0.5rem 1rem',
                       fontSize: '0.875rem',
@@ -397,7 +397,7 @@ export default function WinnersPage() {
                               </td>
                               <td style={{ maxWidth: '200px', fontSize: '0.8rem' }}>
                                 {winner.razorpay_payment_id && <div style={{ marginBottom: '2px' }} title={winner.razorpay_payment_id}>Razorpay: {winner.razorpay_payment_id.slice(0, 15)}…</div>}
-                                {winner.payment_proof_note && <div style={{ marginBottom: '2px', fontStyle: 'italic', color: '#475569' }} title={winner.payment_proof_note}>"{winner.payment_proof_note.slice(0, 30)}{winner.payment_proof_note.length > 30 ? '…' : ''}"</div>}
+                                {winner.payment_proof_note && <div style={{ marginBottom: '2px', fontStyle: 'italic', color: '#475569' }} title={winner.payment_proof_note}>&quot;{winner.payment_proof_note.slice(0, 30)}{winner.payment_proof_note.length > 30 ? '…' : ''}&quot;</div>}
                                 {winner.payment_proof_url && <div><a href={winner.payment_proof_url} target="_blank" rel="noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>View Proof</a></div>}
                                 {winner.instagram_handle && <div style={{ marginTop: 2 }}>@{winner.instagram_handle.replace(/^@/, '')}</div>}
                                 {!winner.razorpay_payment_id && !winner.payment_proof_note && !winner.payment_proof_url && !winner.instagram_handle && <span style={{ color: '#94a3b8' }}>No proof added</span>}

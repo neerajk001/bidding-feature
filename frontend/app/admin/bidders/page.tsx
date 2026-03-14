@@ -59,9 +59,9 @@ export default function BiddersPage() {
 
       setBidders(data.bidders || [])
       setError('')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching bidders:', err)
-      setError(err.message)
+      setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }

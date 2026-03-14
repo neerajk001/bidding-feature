@@ -32,7 +32,7 @@ export default function AuctionRegistrationPage({
   /**
  * Called when user successfully verifies their phone via Clerk
    */
-  const handleVerificationSuccess = async (payload: {
+  const handleVerificationSuccess = async (_payload: {
     userId: string
     idToken: string
     name: string
@@ -48,7 +48,7 @@ export default function AuctionRegistrationPage({
       setStep('success')
       
       // Example: Auto-register for auction
-      // await registerForAuction(payload.userId)
+      // await registerForAuction(_payload.userId)
       
     } catch (error) {
       console.error('Post-verification error:', error)
@@ -60,7 +60,7 @@ export default function AuctionRegistrationPage({
   /**
    * Register the verified user for the auction
    */
-  const registerForAuction = async (name: string, email: string, phone: string) => {
+  const _registerForAuction = async (name: string, email: string, phone: string) => {
     try {
       const response = await fetch('/api/register-bidder', {
         method: 'POST',
@@ -86,9 +86,9 @@ export default function AuctionRegistrationPage({
       } else {
         throw new Error(data.error || 'Registration failed')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Registration error:', error)
-      setErrorMessage(error.message || 'Failed to register for auction')
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to register for auction')
       setStep('error')
     }
   }
@@ -119,7 +119,7 @@ export default function AuctionRegistrationPage({
           {bidderId && (
             <>
               <p className="text-lg text-gray-700 mb-4">
-                You're registered for <strong>{auctionTitle}</strong>
+                You&apos;re registered for <strong>{auctionTitle}</strong>
               </p>
               <div className="bg-white rounded p-4 mb-6 text-left">
                 <p className="text-sm text-gray-600 mb-2">Registration Details:</p>
@@ -198,7 +198,7 @@ export default function AuctionRegistrationPage({
           <ul className="text-sm text-blue-800 space-y-1">
             <li>• Verify your phone number once with Clerk</li>
             <li>• No need to verify again for future auctions</li>
-            <li>• You'll receive SMS confirmation when you win</li>
+            <li>• You&apos;ll receive SMS confirmation when you win</li>
             <li>• Your information is kept secure</li>
           </ul>
         </div>

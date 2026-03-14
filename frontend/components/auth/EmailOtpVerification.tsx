@@ -14,7 +14,7 @@ interface EmailOtpVerificationProps {
  * One-time verification: Once verified, user can register for any auction
  */
 export default function EmailOtpVerification({
-  auctionId,
+  auctionId: _auctionId,
   onVerificationComplete,
   onError
 }: EmailOtpVerificationProps) {
@@ -97,9 +97,9 @@ export default function EmailOtpVerification({
         alert(`DEV MODE - Your OTP: ${checkData.dev_otp}\n\nThis will be removed once email domain is configured.`)
       }
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error sending OTP:', err)
-      const errorMessage = err.message || 'Failed to send verification code'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send verification code'
       setError(errorMessage)
       if (onError) onError(errorMessage)
     } finally {
@@ -148,9 +148,9 @@ export default function EmailOtpVerification({
         })
       }, 500)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error verifying OTP:', err)
-      const errorMessage = err.message || 'Verification failed'
+      const errorMessage = err instanceof Error ? err.message : 'Verification failed'
       setError(errorMessage)
       if (onError) onError(errorMessage)
     } finally {
@@ -183,9 +183,9 @@ export default function EmailOtpVerification({
 
       setSuccess('New verification code sent! Please check your inbox.')
       setCooldown(60)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resending OTP:', err)
-      setError(err.message || 'Failed to resend verification code')
+      setError(err instanceof Error ? err.message : 'Failed to resend verification code')
     } finally {
       setLoading(false)
     }

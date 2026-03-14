@@ -9,7 +9,7 @@ export default function EmailManagementPage() {
           Email Management
         </h1>
         <p className="text-lg text-gray-600 mb-6">
-          This feature is coming soon. Here you'll be able to manage email templates, 
+          This feature is coming soon. Here you&apos;ll be able to manage email templates, 
           trigger winner notifications, and view email delivery logs.
         </p>
         <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-800 px-4 py-2 rounded-md">

@@ -90,9 +90,9 @@ export default function PhoneOtpVerification({
       setStep('otp')
       setCooldown(30)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error sending OTP:', err)
-      const errorMessage = err.message || 'Failed to send OTP'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send OTP'
       setError(errorMessage)
       if (onVerificationError) {
         onVerificationError(errorMessage)
@@ -149,9 +149,9 @@ export default function PhoneOtpVerification({
         phone: normalizedPhone
       })
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error verifying OTP:', err)
-      const errorMessage = err.message || 'Invalid OTP. Please try again.'
+      const errorMessage = err instanceof Error ? err.message : 'Invalid OTP. Please try again.'
       setError(errorMessage)
       if (onVerificationError) {
         onVerificationError(errorMessage)
@@ -187,9 +187,9 @@ export default function PhoneOtpVerification({
 
       setCooldown(30)
       setError('')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error resending OTP:', err)
-      setError(err.message || 'Failed to resend OTP')
+      setError(err instanceof Error ? err.message : 'Failed to resend OTP')
     } finally {
       setLoading(false)
     }

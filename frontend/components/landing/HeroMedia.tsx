@@ -11,7 +11,7 @@ interface HeroMediaProps {
     heroArtBadge: string
 }
 
-export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBadge }: HeroMediaProps) {
+export default function HeroMedia({ detail, heroVariant: _heroVariant, heroArtLabel, heroArtBadge }: HeroMediaProps) {
     // Combine banner_image and gallery_images
     const images = [
         detail?.banner_image,
@@ -68,6 +68,7 @@ export default function HeroMedia({ detail, heroVariant, heroArtLabel, heroArtBa
         return () => {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nextSlide is stable
     }, [currentIndex, shouldScroll, totalItems, items])
 
     // If no media, show placeholder

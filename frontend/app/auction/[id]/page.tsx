@@ -185,7 +185,7 @@ export default function AuctionDetailPage() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${auction.id}` },
-        (payload: any) => {
+        (payload: { new: Record<string, unknown> }) => {
           const newBid = payload.new
           // Optimistically update the UI immediately
           setAuction((prev) => {
@@ -245,7 +245,7 @@ export default function AuctionDetailPage() {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'auctions', filter: `id=eq.${auction.id}` },
-        (payload: any) => {
+        (payload: { new: Record<string, unknown> }) => {
           const updatedAuction = payload.new
           setAuction((prev) => {
             if (!prev) return null
@@ -265,6 +265,7 @@ export default function AuctionDetailPage() {
         clearTimeout(refreshTimeoutRef.current)
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- subscription keyed by auction id
   }, [auction?.id, auction?.status, auction?.bidding_end_time])
 
   const refreshAuction = async () => {
@@ -302,11 +303,6 @@ export default function AuctionDetailPage() {
     if (phase === 'live') return 'Auction live'
     if (phase === 'ended') return 'Auction ended'
     return 'Loading'
-  }, [phase])
-
-  const pillClass = useMemo(() => {
-    if (phase === 'live') return 'pill pill-live'
-    return 'pill pill-neutral'
   }, [phase])
 
   const countdownTarget = useMemo(() => {

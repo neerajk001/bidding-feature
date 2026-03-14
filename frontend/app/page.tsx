@@ -2,7 +2,7 @@
 import PublicShell from '@/components/public/PublicShell'
 import LandingHero from '@/components/landing/LandingHero'
 import AuctionGrid from '@/components/landing/AuctionGrid'
-import { getAuctions, getActiveAuctionState, getAuctionDetail } from '@/lib/auctions/queries'
+import { getAuctions } from '@/lib/auctions/queries'
 
 // Disable caching for real-time auction updates
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,7 @@ export default async function HomePage() {
 
   console.log('Homepage Debug:', {
     allAuctionsCount: allAuctions.length,
-    statuses: allAuctions.map((a: any) => ({ io: a.id, st: a.status, end: a.bidding_end_time }))
+    statuses: allAuctions.map((a: { id: string; status: string; bidding_end_time: string }) => ({ io: a.id, st: a.status, end: a.bidding_end_time }))
   })
 
   // Determine what to show in Hero
@@ -29,7 +29,7 @@ export default async function HomePage() {
 
   // 1. Find a Live Auction (Status='live')
   // We prefer one that is currently in bidding window, but if not, logic handles it.
-  const liveAuction = allAuctions.find((a: any) => a.status === 'live')
+  const liveAuction = allAuctions.find((a: { status: string }) => a.status === 'live')
 
   if (liveAuction) {
     displayActiveDetail = liveAuction
@@ -50,7 +50,7 @@ export default async function HomePage() {
   // (In our system status='live' handles active. Upcoming usually means future live).
   // If we found a live auction, we don't look for upcoming as primary.
   if (!displayActiveDetail) {
-    const upcoming = allAuctions.find((a: any) =>
+    const upcoming = allAuctions.find((a: { status: string; bidding_start_time: string }) =>
       a.status === 'upcoming' ||
       (a.status === 'draft' && new Date(a.bidding_start_time) > new Date())
     )
@@ -61,7 +61,7 @@ export default async function HomePage() {
 
   // 3. Recently Ended
   // We calculate this always to pass as backup or if needed
-  const endedAuctions = allAuctions.filter((auction: any) => auction.status === 'ended')
+  const endedAuctions = allAuctions.filter((auction: { status: string }) => auction.status === 'ended')
   const getTimeValue = (value?: string | null) => {
     if (!value) return 0
     const date = new Date(value)
@@ -70,7 +70,7 @@ export default async function HomePage() {
 
   const recentEndedAuction = endedAuctions
     .slice()
-    .sort((a: any, b: any) => getTimeValue(b.bidding_end_time) - getTimeValue(a.bidding_end_time))[0] || null
+    .sort((a: { bidding_end_time?: string | null }, b: { bidding_end_time?: string | null }) => getTimeValue(b.bidding_end_time) - getTimeValue(a.bidding_end_time))[0] || null
 
   // If no active auction, we show the ended auction
   if (!displayActiveDetail && !displayNextUpcoming) {

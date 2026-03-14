@@ -50,7 +50,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
 
       if (!bidSizesError) {
         for (const row of bidSizes || []) {
-          const trimmed = String((row as any).size ?? '').trim()
+          const trimmed = String((row as { size?: string | null }).size ?? '').trim()
           if (trimmed) sizeSet.add(trimmed)
         }
       }

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { adminStyles, cn } from '@/lib/admin-styles'
-import { fetchApi, parseJsonFromResponse } from '@/lib/api'
+import { fetchApi } from '@/lib/api'
 
 interface Bidder {
   id: string
@@ -68,6 +68,7 @@ export default function AuctionDetailPage() {
   useEffect(() => {
     fetchAuctionData()
     setupRealtimeSubscription()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run on auctionId only
   }, [auctionId])
 
   const toLocalISO = (isoString: string) => {

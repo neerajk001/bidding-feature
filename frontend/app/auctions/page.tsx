@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import PublicShell from '@/components/public/PublicShell'
 
 interface AuctionSummary {
@@ -88,9 +89,11 @@ export default function AuctionsPage() {
                 <Link href={`/auction/${auction.id}`} key={auction.id} className="group flex flex-col bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-md transition-all duration-300">
                   <div className="aspect-[3/4] relative bg-zinc-100 overflow-hidden">
                     {auction.banner_image ? (
-                      <img
+                      <Image
                         src={auction.banner_image}
                         alt={auction.title}
+                        width={400}
+                        height={533}
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                     ) : (

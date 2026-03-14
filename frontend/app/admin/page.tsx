@@ -16,7 +16,6 @@ const ArchiveIcon = ({ className = "w-5 h-5" }) => <svg {...SVGProps} className=
 const LayoutGridIcon = ({ className = "w-5 h-5" }) => <svg {...SVGProps} className={className}><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /></svg>
 const GavelIcon = ({ className = "w-5 h-5" }) => <svg {...SVGProps} className={className}><path d="m14.5 12.5-8 8a2.11 2.11 0 1 1-3-3l8-8" /><path d="m16 16 6-6" /><path d="m8 8 6-6" /><path d="m9 7 8 8" /><path d="m21 11-8-8" /></svg>
 const MailIcon = ({ className = "w-5 h-5" }) => <svg {...SVGProps} className={className}><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
-const InfoIcon = ({ className = "w-5 h-5" }) => <svg {...SVGProps} className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
 const ArrowRightIcon = ({ className = "w-4 h-4" }) => <svg {...SVGProps} className={className}><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
 
 interface DashboardStats {
@@ -273,7 +272,7 @@ export default function AdminDashboard() {
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-bold text-zinc-900 mb-1">Trigger Winner Email Notifications</h3>
               <p className="text-xs sm:text-sm text-zinc-500 leading-snug">
-                Manually dispatch emails to unpaid winners who haven't been notified yet. The system automatically runs this every 5 minutes in production environments.
+                Manually dispatch emails to unpaid winners who haven&apos;t been notified yet. The system automatically runs this every 5 minutes in production environments.
               </p>
               {emailTriggerMessage && (
                 <div className={`mt-3 px-3 py-2 rounded-md text-xs font-semibold border inline-flex ${emailTriggerMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>

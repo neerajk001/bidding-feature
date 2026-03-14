@@ -1,5 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin'
-import { finalizeEndedAuctions } from '@/lib/auctions/finalizeEndedAuctions'
+
+type BidderRow = { name?: string } | { name?: string }[]
+type WinnerRow = { size: string | null; winning_amount: number; bidder: BidderRow | BidderRow[]; declared_at: string | null }
 
 export async function getAuctions(includeEnded: boolean = false) {
     try {
@@ -54,14 +56,14 @@ export async function getAuctions(includeEnded: boolean = false) {
 
                 const winner = winners && winners.length > 0 ? winners[0] : null
                 const winningAmount = winner?.winning_amount ?? null
-                const winnerName = Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name
+                const winnerName = Array.isArray(winner?.bidder) ? (winner.bidder[0] as BidderRow)?.name : (winner?.bidder as BidderRow)?.name
                 const displayAmount = winningAmount ?? highestBid?.amount ?? null
-                const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null
+                const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as BidderRow)?.name : (highestBid?.bidder as BidderRow)?.name) ?? null
 
-                const winners_by_size = winners && winners.length > 0 ? winners.map((w: any) => ({
+                const winners_by_size = winners && winners.length > 0 ? winners.map((w: WinnerRow) => ({
                     size: w.size,
                     winning_amount: w.winning_amount,
-                    winner_name: Array.isArray(w.bidder) ? (w.bidder[0] as any)?.name : (w.bidder as any)?.name,
+                    winner_name: Array.isArray(w.bidder) ? (w.bidder[0] as BidderRow)?.name : (w.bidder as BidderRow)?.name,
                     declared_at: w.declared_at
                 })) : null
 
@@ -87,12 +89,13 @@ export async function getAuctions(includeEnded: boolean = false) {
         )
 
         return auctionsWithBids
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error as { message?: string; details?: string; hint?: string; code?: string; cause?: { code?: string } }
         console.error('getAuctions error:', {
-            message: error?.message || 'Unknown error',
-            details: error?.details || error?.toString(),
-            hint: error?.hint || '',
-            code: error?.code || error?.cause?.code || ''
+            message: err?.message || 'Unknown error',
+            details: err?.details || (error != null ? String(error) : ''),
+            hint: err?.hint || '',
+            code: err?.code || err?.cause?.code || ''
         })
         // Return empty array to allow page to render gracefully
         return []
@@ -138,11 +141,12 @@ export async function getActiveAuctionState() {
             cta: 'Place Bid'
         }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error as { message?: string; details?: string; code?: string; cause?: { code?: string } }
         console.error('getActiveAuctionState error:', {
-            message: error?.message || 'Unknown error',
-            details: error?.details || error?.toString(),
-            code: error?.code || error?.cause?.code || ''
+            message: err?.message || 'Unknown error',
+            details: err?.details || (error != null ? String(error) : ''),
+            code: err?.code || err?.cause?.code || ''
         })
         return { exists: false }
     }
@@ -191,10 +195,10 @@ export async function getAuctionDetail(id: string) {
 
             if (data && data.length > 0) {
                 winner = data[0]
-                winners_by_size = data.map((w: any) => ({
+                winners_by_size = data.map((w: WinnerRow) => ({
                     size: w.size,
                     winning_amount: w.winning_amount,
-                    winner_name: Array.isArray(w.bidder) ? (w.bidder[0] as any)?.name : (w.bidder as any)?.name,
+                    winner_name: Array.isArray(w.bidder) ? (w.bidder[0] as BidderRow)?.name : (w.bidder as BidderRow)?.name,
                     declared_at: w.declared_at
                 }))
             }
@@ -203,10 +207,10 @@ export async function getAuctionDetail(id: string) {
         return {
             ...auction,
             current_highest_bid: winner?.winning_amount ?? highestBid?.amount ?? null,
-            highest_bidder_name: (Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name) ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null,
+            highest_bidder_name: (Array.isArray(winner?.bidder) ? (winner.bidder[0] as BidderRow)?.name : (winner?.bidder as BidderRow)?.name) ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as BidderRow)?.name : (highestBid?.bidder as BidderRow)?.name) ?? null,
             total_bids: count ?? 0,
             registration_count: registrationCount ?? 0,
-            winner_name: Array.isArray(winner?.bidder) ? (winner.bidder[0] as any)?.name : (winner?.bidder as any)?.name,
+            winner_name: Array.isArray(winner?.bidder) ? (winner.bidder[0] as BidderRow)?.name : (winner?.bidder as BidderRow)?.name,
             winning_amount: winner?.winning_amount ?? null,
             winner_declared_at: winner?.declared_at ?? null,
             winners_by_size,
@@ -214,11 +218,12 @@ export async function getAuctionDetail(id: string) {
             base_price: auction.base_price ?? null
         }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error as { message?: string; details?: string; code?: string; cause?: { code?: string } }
         console.error('getAuctionDetail error:', {
-            message: error?.message || 'Unknown error',
-            details: error?.details || error?.toString(),
-            code: error?.code || error?.cause?.code || ''
+            message: err?.message || 'Unknown error',
+            details: err?.details || (error != null ? String(error) : ''),
+            code: err?.code || err?.cause?.code || ''
         })
         return null
     }
