@@ -3,7 +3,7 @@ services:
     image: ${IMAGE_PREFIX:-ghcr.io/owner/repo}-backend:latest
     container_name: auction-backend
     env_file:
-      - ./backend/.env
+      - /var/www/bidding-feature/backend/.env
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -23,7 +23,7 @@ services:
     image: ${IMAGE_PREFIX:-ghcr.io/owner/repo}-frontend:latest
     container_name: auction-frontend
     env_file:
-      - ./frontend/.env.local
+    - /var/www/bidding-feature/frontend/.env.local
     environment:
       NODE_ENV: production
       BACKEND_URL: ${BACKEND_URL:-http://backend:3001}

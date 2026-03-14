@@ -1,3 +1,8 @@
+# Deploy over SSH: if you see "handshake failed: unable to authenticate, attempted methods [none publickey]"
+# 1. SSH_PRIVATE_KEY: Paste the *entire* PEM (including -----BEGIN ... KEY----- and -----END ... KEY-----)
+#    with real line breaks. If you stored it as one line with \n, the workflow will try to fix it.
+# 2. On the server: ensure the matching *public* key is in ~/.ssh/authorized_keys for SSH_USER.
+# 3. If the key has a passphrase, add secret SSH_PASSPHRASE and passphrase: ${{ secrets.SSH_PASSPHRASE }} to the action.
 name: Deploy Production
 
 on:
@@ -46,6 +51,30 @@ jobs:
           APP_DIR: ${{ secrets.APP_DIR }}
           IMAGE_PREFIX: ${{ secrets.IMAGE_PREFIX }}
 
+      # Restore newlines if SSH key was stored with literal \n (common when pasting into GitHub Secrets)
+      - name: Prepare SSH key
+        shell: bash
+        run: |
+          KEY="$SSH_PRIVATE_KEY"
+          # If secret contains literal \n, convert to real newlines
+          if [[ "$KEY" == *'\n'* ]]; then
+            KEY="${KEY//\\n/$'\n'}"
+          fi
+          # Sanity check: key must have BEGIN and END lines (content is masked in logs)
+          if ! printf '%s' "$KEY" | grep -q "BEGIN OPENSSH PRIVATE KEY"; then
+            echo "::error::SSH key missing 'BEGIN OPENSSH PRIVATE KEY'. Paste the full key including header/footer."
+            exit 1
+          fi
+          if ! printf '%s' "$KEY" | grep -q "END OPENSSH PRIVATE KEY"; then
+            echo "::error::SSH key missing 'END OPENSSH PRIVATE KEY'. Paste the full key including header/footer."
+            exit 1
+          fi
+          echo "SSH_KEY<<EOF" >> $GITHUB_ENV
+          printf '%s' "$KEY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -56,9 +85,10 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ env.SSH_KEY }}
           envs: GHCR_USERNAME,GHCR_TOKEN,APP_DIR,IMAGE_PREFIX
           script_stop: true
+          command_timeout: 10m
           script: |
             set -e
             cd "$APP_DIR"
