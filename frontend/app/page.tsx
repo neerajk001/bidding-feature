@@ -6,7 +6,23 @@ import AuctionGrid from '@/components/landing/AuctionGrid'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-async function fetchAuctionsFromApi(): Promise<any[]> {
+/** Auction shape returned by GET /api/auctions */
+interface ApiAuction {
+  id: string
+  status: string
+  bidding_start_time: string
+  bidding_end_time: string
+  title?: string
+  product_id?: string
+  banner_image?: string | null
+  min_increment?: number
+  base_price?: number | null
+  current_highest_bid?: number | null
+  highest_bidder_name?: string | null
+  total_bids?: number
+}
+
+async function fetchAuctionsFromApi(): Promise<ApiAuction[]> {
   const base =
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -18,7 +34,7 @@ async function fetchAuctionsFromApi(): Promise<any[]> {
   const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true`
   try {
     const res = await fetch(url, { cache: 'no-store' })
-    const data = await res.json()
+    const data = (await res.json()) as { auctions?: ApiAuction[] }
     if (!res.ok) return []
     return Array.isArray(data?.auctions) ? data.auctions : []
   } catch (err) {
