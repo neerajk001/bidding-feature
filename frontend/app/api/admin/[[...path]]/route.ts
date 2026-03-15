@@ -29,37 +29,37 @@ async function getRequestBody(request: NextRequest): Promise<ArrayBuffer | strin
   return text.length > 0 ? text : undefined
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
-  return proxy(request, undefined, params)
+export async function GET(request: NextRequest, ctx: { params: Promise<{ path?: string[] }> }) {
+  return proxy(request, undefined, ctx)
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
-  return proxy(request, await getRequestBody(request), params)
+export async function POST(request: NextRequest, ctx: { params: Promise<{ path?: string[] }> }) {
+  return proxy(request, await getRequestBody(request), ctx)
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
-  return proxy(request, await getRequestBody(request), params)
+export async function PUT(request: NextRequest, ctx: { params: Promise<{ path?: string[] }> }) {
+  return proxy(request, await getRequestBody(request), ctx)
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
-  return proxy(request, await getRequestBody(request), params)
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ path?: string[] }> }) {
+  return proxy(request, await getRequestBody(request), ctx)
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
-  return proxy(request, undefined, params)
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ path?: string[] }> }) {
+  return proxy(request, undefined, ctx)
 }
 
 async function proxy(
   request: NextRequest,
   body: ArrayBuffer | string | undefined,
-  { params }: { params: Promise<{ path?: string[] }> }
+  ctx: { params: Promise<{ path?: string[] }> }
 ) {
   const token = getSessionToken(request)
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { path } = await params
+  const { path } = await ctx.params
   const pathSegments = path && path.length > 0 ? path : []
   const backendPath = pathSegments.length ? pathSegments.join('/') : ''
   const url = `${apiBase}/admin/${backendPath}${request.nextUrl.search}`
