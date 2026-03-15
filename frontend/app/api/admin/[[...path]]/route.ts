@@ -6,8 +6,16 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
-function getApiBase() {
-  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+function getApiBase(): string {
+  const backendUrl =
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : '')
+  if (!backendUrl) {
+    throw new Error(
+      'BACKEND_URL or NEXT_PUBLIC_API_URL must be set (server env). Admin API proxy cannot reach the backend.'
+    )
+  }
   return `${backendUrl.replace(/\/$/, '')}/api`
 }
 
@@ -64,27 +72,36 @@ async function proxy(
   const { path } = await ctx.params
   const pathSegments = path && path.length > 0 ? path : []
   const backendPath = pathSegments.length ? pathSegments.join('/') : ''
-  const url = `${getApiBase()}/admin/${backendPath}${request.nextUrl.search}`
 
   const headers = new Headers()
   headers.set('Authorization', `Bearer ${token}`)
   const contentType = request.headers.get('content-type')
   if (contentType) headers.set('Content-Type', contentType)
 
-  const res = await fetch(url, {
-    method: request.method,
-    headers,
-    body: body ?? undefined,
-  })
-
-  const responseBody = await res.text()
   try {
-    const json = JSON.parse(responseBody)
-    return NextResponse.json(json, { status: res.status })
-  } catch {
-    return new NextResponse(responseBody, {
-      status: res.status,
-      headers: { 'Content-Type': res.headers.get('Content-Type') || 'text/plain' },
+    const apiBase = getApiBase()
+    const url = `${apiBase}/admin/${backendPath}${request.nextUrl.search}`
+    const res = await fetch(url, {
+      method: request.method,
+      headers,
+      body: body ?? undefined,
     })
+
+    const responseBody = await res.text()
+    try {
+      const json = JSON.parse(responseBody)
+      return NextResponse.json(json, { status: res.status })
+    } catch {
+      return new NextResponse(responseBody, {
+        status: res.status,
+        headers: { 'Content-Type': res.headers.get('Content-Type') || 'text/plain' },
+      })
+    }
+  } catch (err) {
+    console.error('Admin backend proxy error:', err)
+    return NextResponse.json(
+      { error: 'Backend unreachable', message: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 502 }
+    )
   }
 }

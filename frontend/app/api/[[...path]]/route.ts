@@ -5,8 +5,16 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
-const getApiBase = () => {
-  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const getApiBase = (): string => {
+  const backendUrl =
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : '')
+  if (!backendUrl) {
+    throw new Error(
+      'BACKEND_URL or NEXT_PUBLIC_API_URL must be set (server env). Public API proxy cannot reach the backend.'
+    )
+  }
   return `${backendUrl.replace(/\/$/, '')}/api`
 }
 
@@ -61,14 +69,14 @@ async function proxy(
 
   const pathSegments = path && path.length > 0 ? path : []
   const backendPath = pathSegments.join('/')
-  const apiBase = getApiBase()
-  const url = `${apiBase}/${backendPath}${request.nextUrl.search}`
 
   const headers = new Headers()
   const contentType = request.headers.get('content-type')
   if (contentType) headers.set('Content-Type', contentType)
 
   try {
+    const apiBase = getApiBase()
+    const url = `${apiBase}/${backendPath}${request.nextUrl.search}`
     const res = await fetch(url, {
       method: request.method,
       headers,
