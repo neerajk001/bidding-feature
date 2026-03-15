@@ -6,8 +6,10 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
-const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-const apiBase = `${backendUrl.replace(/\/$/, '')}/api`
+function getApiBase() {
+  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  return `${backendUrl.replace(/\/$/, '')}/api`
+}
 
 // NextAuth session cookie names (dev vs prod HTTPS)
 const SESSION_COOKIE_NAMES = ['next-auth.session-token', '__Secure-next-auth.session-token']
@@ -62,7 +64,7 @@ async function proxy(
   const { path } = await ctx.params
   const pathSegments = path && path.length > 0 ? path : []
   const backendPath = pathSegments.length ? pathSegments.join('/') : ''
-  const url = `${apiBase}/admin/${backendPath}${request.nextUrl.search}`
+  const url = `${getApiBase()}/admin/${backendPath}${request.nextUrl.search}`
 
   const headers = new Headers()
   headers.set('Authorization', `Bearer ${token}`)
