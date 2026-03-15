@@ -6,7 +6,7 @@ const backendApiRewrites = () => {
     const base = `${backendUrl}/api`
     return [
         { source: '/api/health', destination: `${base}/health` },
-        { source: '/api/admin/:path*', destination: `${base}/admin/:path*` },
+        // /api/admin/* is handled by app/api/admin/[[...path]]/route.ts so session is forwarded to backend
         { source: '/api/auctions', destination: `${base}/auctions` },
         { source: '/api/auction/:path*', destination: `${base}/auction/:path*` },
         { source: '/api/auth/check-user', destination: `${base}/auth/check-user` },

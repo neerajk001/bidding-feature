@@ -55,12 +55,35 @@ export async function isAdminEmail(email?: string | null): Promise<boolean> {
   return false
 }
 
+// NextAuth JWT cookie names (frontend proxy sends Bearer token when rewrites would omit cookies)
+const SESSION_COOKIE_NAMES = ['next-auth.session-token', '__Secure-next-auth.session-token']
+
 export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const token = await getToken({
-      req: { headers: req.headers, cookies: req.cookies } as any,
-      secret: env.nextAuthSecret
-    })
+    let token: { email?: string } | null = null
+
+    const authHeader = req.headers.authorization
+    if (authHeader?.startsWith('Bearer ')) {
+      const jwt = authHeader.slice(7).trim()
+      if (jwt) {
+        const syntheticCookies: Record<string, string> = {}
+        SESSION_COOKIE_NAMES.forEach((name) => {
+          syntheticCookies[name] = jwt
+        })
+        token = await getToken({
+          req: { headers: {}, cookies: syntheticCookies } as any,
+          secret: env.nextAuthSecret
+        })
+      }
+    }
+
+    if (!token) {
+      token = await getToken({
+        req: { headers: req.headers, cookies: req.cookies } as any,
+        secret: env.nextAuthSecret
+      })
+    }
+
     const email = token?.email as string | undefined
 
     if (!token || !(await isAdminEmail(email))) {
