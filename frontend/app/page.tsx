@@ -1,28 +1,13 @@
 import PublicShell from '@/components/public/PublicShell'
 import LandingHero from '@/components/landing/LandingHero'
 import AuctionGrid from '@/components/landing/AuctionGrid'
+import type { AuctionSummary } from '@/components/landing/types'
 
 // Disable caching for real-time auction updates
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-/** Auction shape returned by GET /api/auctions */
-interface ApiAuction {
-  id: string
-  status: string
-  bidding_start_time: string
-  bidding_end_time: string
-  title?: string
-  product_id?: string
-  banner_image?: string | null
-  min_increment?: number
-  base_price?: number | null
-  current_highest_bid?: number | null
-  highest_bidder_name?: string | null
-  total_bids?: number
-}
-
-async function fetchAuctionsFromApi(): Promise<ApiAuction[]> {
+async function fetchAuctionsFromApi(): Promise<AuctionSummary[]> {
   const base =
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -34,7 +19,7 @@ async function fetchAuctionsFromApi(): Promise<ApiAuction[]> {
   const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true`
   try {
     const res = await fetch(url, { cache: 'no-store' })
-    const data = (await res.json()) as { auctions?: ApiAuction[] }
+    const data = (await res.json()) as { auctions?: AuctionSummary[] }
     if (!res.ok) return []
     return Array.isArray(data?.auctions) ? data.auctions : []
   } catch (err) {
