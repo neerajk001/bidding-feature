@@ -1,17 +1,34 @@
-
 import PublicShell from '@/components/public/PublicShell'
 import LandingHero from '@/components/landing/LandingHero'
 import AuctionGrid from '@/components/landing/AuctionGrid'
-import { getAuctions } from '@/lib/auctions/queries'
 
 // Disable caching for real-time auction updates
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+async function fetchAuctionsFromApi(): Promise<any[]> {
+  const base =
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : '')
+  if (!base) {
+    console.warn('HomePage: BACKEND_URL / NEXT_PUBLIC_API_URL not set, auctions will be empty')
+    return []
+  }
+  const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true`
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    const data = await res.json()
+    if (!res.ok) return []
+    return Array.isArray(data?.auctions) ? data.auctions : []
+  } catch (err) {
+    console.error('HomePage: failed to fetch auctions from API', err)
+    return []
+  }
+}
+
 export default async function HomePage() {
-  const [allAuctionsRaw] = await Promise.all([
-    getAuctions(true)
-  ])
+  const allAuctionsRaw = await fetchAuctionsFromApi()
 
   // Ensure allAuctions is an array
   const allAuctions = Array.isArray(allAuctionsRaw) ? allAuctionsRaw : []
