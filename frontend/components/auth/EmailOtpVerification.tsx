@@ -83,6 +83,10 @@ export default function EmailOtpVerification({
       })
 
       if (checkData.verified) {
+        if (!checkData.user_id) {
+          throw new Error('Verified account found but user ID is missing')
+        }
+
         // User already verified, proceed directly
         setSuccess('Email already verified! Redirecting...')
         setTimeout(() => {
@@ -149,6 +153,10 @@ export default function EmailOtpVerification({
 
       if (!ok) {
         throw new Error(data.error || 'Verification failed')
+      }
+
+      if (!data.user_id) {
+        throw new Error('Verification succeeded but user ID is missing')
       }
 
       setSuccess('Email verified successfully!')
