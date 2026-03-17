@@ -9,6 +9,23 @@ interface EmailOtpVerificationProps {
   onError?: (error: string) => void
 }
 
+interface SendEmailOtpResponse {
+  success?: boolean
+  verified?: boolean
+  user_id?: string
+  message?: string
+  dev_otp?: string
+  error?: string
+}
+
+interface VerifyEmailOtpResponse {
+  success?: boolean
+  user_id?: string
+  email_verified?: boolean
+  message?: string
+  error?: string
+}
+
 /**
  * Email OTP Verification Component
  * Two-step process: Send OTP → Verify OTP → Create verified user
@@ -56,7 +73,7 @@ export default function EmailOtpVerification({
     }
 
     try {
-      const { ok, data: checkData } = await fetchApi<any>('/api/auth/send-email-otp', {
+      const { ok, data: checkData } = await fetchApi<SendEmailOtpResponse>('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,7 +136,7 @@ export default function EmailOtpVerification({
     }
 
     try {
-      const { ok, data } = await fetchApi<any>('/api/auth/verify-email-otp', {
+      const { ok, data } = await fetchApi<VerifyEmailOtpResponse>('/api/auth/verify-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -163,7 +180,7 @@ export default function EmailOtpVerification({
     setSuccess('')
 
     try {
-      const { ok, data } = await fetchApi<any>('/api/auth/send-email-otp', {
+      const { ok, data } = await fetchApi<SendEmailOtpResponse>('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

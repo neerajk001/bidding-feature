@@ -17,6 +17,20 @@ interface PhoneOtpVerificationProps {
   supportingText?: string
 }
 
+interface SendPhoneOtpResponse {
+  success?: boolean
+  verified?: boolean
+  user_id?: string
+  error?: string
+  details?: string
+}
+
+interface VerifyPhoneOtpResponse {
+  success?: boolean
+  user_id?: string
+  error?: string
+}
+
 export default function PhoneOtpVerification({
   onVerificationSuccess,
   onVerificationError,
@@ -55,7 +69,7 @@ export default function PhoneOtpVerification({
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
       // Check if phone needs verification
-      const { ok, data: checkData } = await fetchApi<any>('/api/auth/send-otp', {
+      const { ok, data: checkData } = await fetchApi<SendPhoneOtpResponse>('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalizedPhone, name, email })
@@ -115,7 +129,7 @@ export default function PhoneOtpVerification({
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
       // Send to backend to create/update user
-      const { ok, data } = await fetchApi<any>('/api/auth/verify-otp', {
+      const { ok, data } = await fetchApi<VerifyPhoneOtpResponse>('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -166,7 +180,7 @@ export default function PhoneOtpVerification({
     try {
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
-      const { ok, data: checkData } = await fetchApi<any>('/api/auth/send-otp', {
+      const { ok, data: checkData } = await fetchApi<SendPhoneOtpResponse>('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalizedPhone, name, email })
