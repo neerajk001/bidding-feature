@@ -84,13 +84,23 @@ async function proxy(
     })
 
     const responseBody = await res.text()
+    const responseContentType = res.headers.get('Content-Type') || ''
     try {
       const json = JSON.parse(responseBody)
       return NextResponse.json(json, { status: res.status })
     } catch {
+      if (!res.ok) {
+        return NextResponse.json(
+          {
+            error: responseBody || `Request failed with status ${res.status}`,
+            status: res.status,
+          },
+          { status: res.status }
+        )
+      }
       return new NextResponse(responseBody, {
         status: res.status,
-        headers: { 'Content-Type': res.headers.get('Content-Type') || 'text/plain' },
+        headers: { 'Content-Type': responseContentType || 'text/plain' },
       })
     }
   } catch (err) {

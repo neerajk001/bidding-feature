@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { fetchApi } from '../../lib/api'
 
 interface EmailOtpVerificationProps {
   auctionId: string
@@ -55,16 +56,14 @@ export default function EmailOtpVerification({
     }
 
     try {
-      const checkResponse = await fetch('/api/auth/send-email-otp', {
+      const { ok, data: checkData } = await fetchApi<any>('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           email: email.trim(),
           name: name.trim()
         })
       })
-
-      const checkData = await checkResponse.json()
 
       if (checkData.verified) {
         // User already verified, proceed directly
@@ -79,7 +78,7 @@ export default function EmailOtpVerification({
         return
       }
 
-      if (!checkResponse.ok) {
+      if (!ok) {
         throw new Error(
           checkData.error === 'Too many OTP requests. Please try again after 1 hour.'
             ? 'Too many requests. Please wait before requesting another code.'
@@ -120,7 +119,7 @@ export default function EmailOtpVerification({
     }
 
     try {
-      const response = await fetch('/api/auth/verify-email-otp', {
+      const { ok, data } = await fetchApi<any>('/api/auth/verify-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,9 +130,7 @@ export default function EmailOtpVerification({
         })
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.error || 'Verification failed')
       }
 
@@ -166,18 +163,16 @@ export default function EmailOtpVerification({
     setSuccess('')
 
     try {
-      const response = await fetch('/api/auth/send-email-otp', {
+      const { ok, data } = await fetchApi<any>('/api/auth/send-email-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           email: email.trim(),
           name: name.trim()
         })
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.error || 'Failed to resend code')
       }
 

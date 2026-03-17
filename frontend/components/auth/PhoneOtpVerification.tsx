@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useEffect } from 'react'
+import { fetchApi } from '../../lib/api'
 
 interface PhoneOtpVerificationProps {
   onVerificationSuccess: (payload: {
@@ -54,13 +55,11 @@ export default function PhoneOtpVerification({
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
       // Check if phone needs verification
-      const checkResponse = await fetch('/api/auth/send-otp', {
+      const { ok, data: checkData } = await fetchApi<any>('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalizedPhone, name, email })
       })
-
-      const checkData = await checkResponse.json()
 
       if (checkData.verified) {
         // User already verified
@@ -74,7 +73,7 @@ export default function PhoneOtpVerification({
         return
       }
 
-      if (!checkResponse.ok) {
+      if (!ok) {
         // Handle API error with details if available
         const errorMsg = checkData.details 
           ? `${checkData.error}\n\n${checkData.details}`
@@ -116,7 +115,7 @@ export default function PhoneOtpVerification({
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
       // Send to backend to create/update user
-      const response = await fetch('/api/auth/verify-otp', {
+      const { ok, data } = await fetchApi<any>('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,9 +126,7 @@ export default function PhoneOtpVerification({
         })
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
+      if (!ok) {
         // Handle API error with specific messages
         const errorMsg = data.error || 'Verification failed'
         setError(errorMsg)
@@ -169,15 +166,13 @@ export default function PhoneOtpVerification({
     try {
       const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
-      const checkResponse = await fetch('/api/auth/send-otp', {
+      const { ok, data: checkData } = await fetchApi<any>('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: normalizedPhone, name, email })
       })
 
-      const checkData = await checkResponse.json()
-
-      if (!checkResponse.ok) {
+      if (!ok) {
         const errorMsg = checkData.details 
           ? `${checkData.error}\n\n${checkData.details}`
           : (checkData.error || 'Failed to resend OTP')
