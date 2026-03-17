@@ -28,7 +28,7 @@ services:
       NODE_ENV: production
       BACKEND_URL: ${BACKEND_URL:-http://backend:3001}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:3001}
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
     ports:
       - "3000:3000"
     depends_on:

@@ -9,6 +9,20 @@ dotenv.config({ path: path.resolve(process.cwd(), '..', 'frontend', '.env') })
 dotenv.config({ path: path.resolve(process.cwd(), '..', '.env.local') })
 dotenv.config({ path: path.resolve(process.cwd(), '..', '.env') })
 
+function normalizeUrl(value: string): string {
+  return value.trim().replace(/\/$/, '')
+}
+
+const resolvedPublicAppUrl = normalizeUrl(
+  process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || ''
+)
+
+const publicAppUrl = resolvedPublicAppUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '')
+
+if (process.env.NODE_ENV === 'production' && (!publicAppUrl || /localhost|127\.0\.0\.1/i.test(publicAppUrl))) {
+  console.error('[ENV] PUBLIC_APP_URL is missing or points to localhost in production. Winner email links will be invalid.')
+}
+
 export const env = {
   // Supabase
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -38,6 +52,6 @@ export const env = {
   
   // API
   apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
-  publicAppUrl: process.env.PUBLIC_APP_URL || 'http://localhost:3000',
+  publicAppUrl,
   port: Number(process.env.PORT || 3001)
 }

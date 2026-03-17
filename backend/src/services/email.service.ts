@@ -17,6 +17,16 @@ export async function sendWinnerEmail(params: {
     return false
   }
 
+  if (!appBaseUrl) {
+    console.error('[email] PUBLIC_APP_URL is not configured. Cannot build winner claim link.')
+    return false
+  }
+
+  if (process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/i.test(appBaseUrl)) {
+    console.error(`[email] PUBLIC_APP_URL is invalid for production: ${appBaseUrl}`)
+    return false
+  }
+
   const { to, winnerName, auctionTitle, winningAmount, claimToken, size, isEscalation } = params
   const claimUrl = `${appBaseUrl}/winner/claim?token=${encodeURIComponent(claimToken)}`
   const subject = isEscalation
