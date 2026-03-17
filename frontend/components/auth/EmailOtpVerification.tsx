@@ -86,11 +86,12 @@ export default function EmailOtpVerification({
         if (!checkData.user_id) {
           throw new Error('Verified account found but user ID is missing')
         }
+        const userId = checkData.user_id
 
         // User already verified, proceed directly
         setSuccess('Email already verified! Redirecting...')
         setTimeout(() => {
-          onVerificationComplete(checkData.user_id, {
+          onVerificationComplete(userId, {
             name: name.trim(),
             email: email.trim(),
             phone: phone.trim() || undefined
@@ -158,12 +159,13 @@ export default function EmailOtpVerification({
       if (!data.user_id) {
         throw new Error('Verification succeeded but user ID is missing')
       }
+      const userId = data.user_id
 
       setSuccess('Email verified successfully!')
       
       // Call parent callback with user info
       setTimeout(() => {
-        onVerificationComplete(data.user_id, {
+        onVerificationComplete(userId, {
           name: name.trim(),
           email: email.trim(),
           phone: phone.trim() || undefined
