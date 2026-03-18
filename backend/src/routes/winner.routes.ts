@@ -20,6 +20,7 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
       .from('winners')
       .select(`
         id, auction_id, winning_amount, payment_due_at, payment_status, size,
+        payment_completed_at, payment_proof_note, razorpay_order_id, razorpay_payment_id,
         auction:auctions(title),
         bidder:bidders(name)
       `)
@@ -40,7 +41,11 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
         auction_title: w.auction?.title,
         winning_amount: w.winning_amount,
         payment_due_at: w.payment_due_at,
-        size: w.size
+        size: w.size,
+        payment_completed_at: w.payment_completed_at,
+        payment_proof_note: w.payment_proof_note,
+        razorpay_order_id: w.razorpay_order_id,
+        razorpay_payment_id: w.razorpay_payment_id
       })
     }
 
@@ -100,12 +105,7 @@ router.post('/winner/create-order', async (req: Request, res: Response) => {
 
     if (!orderId) {
       const receipt = `winner_${w.id.replace(/-/g, '_').slice(0, 24)}`
-      const order = await new Promise<any>((resolve, reject) => {
-        razorpay.orders.create(
-          { amount: amountPaise, currency: 'INR', receipt },
-          (err: any, order: any) => (err ? reject(err) : resolve(order))
-        )
-      })
+      const order = await (razorpay.orders as any).create({ amount: amountPaise, currency: 'INR', receipt })
       orderId = order.id
       await supabaseAdmin.from('winners').update({ razorpay_order_id: orderId }).eq('id', w.id)
     }
@@ -156,25 +156,38 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
     }
 
     if (razorpay) {
-      let payment = await new Promise<any>((resolve, reject) => {
-        ;(razorpay.payments as any).fetch(razorpay_payment_id, (err: any, p: any) => (err ? reject(err) : resolve(p)))
-      })
+      let payment = await (razorpay.payments as any).fetch(razorpay_payment_id)
 
       // Many accounts return "authorized" first. Capture it here so proof is persisted immediately.
       if (payment?.status === 'authorized') {
-        const amountPaise = Math.round(Number((w as any).winning_amount || 0) * 100)
+        const amountPaise = Number(payment.amount)
         if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
           return res.status(400).json({ error: 'Invalid winner amount for payment capture.' })
         }
 
-        payment = await new Promise<any>((resolve, reject) => {
-          ;(razorpay.payments as any).capture(
+        try {
+          payment = await (razorpay.payments as any).capture(
             razorpay_payment_id,
             amountPaise,
-            'INR',
-            (err: any, p: any) => (err ? reject(err) : resolve(p))
+            payment.currency || 'INR'
           )
-        })
+        } catch (captureError) {
+          console.warn('[winner.verify-payment] capture attempt failed, re-fetching payment status', captureError)
+          payment = await (razorpay.payments as any).fetch(razorpay_payment_id)
+        }
+      }
+
+      if (!payment || payment.status !== 'captured') {
+        // Fallback: sometimes capture settles with delay; verify from order payment list.
+        try {
+          const orderPayments = await (razorpay.orders as any).fetchPayments(razorpay_order_id)
+          const items = Array.isArray(orderPayments?.items) ? orderPayments.items : []
+          const capturedById = items.find((p: any) => String(p?.id) === String(razorpay_payment_id) && p?.status === 'captured')
+          const anyCaptured = items.find((p: any) => p?.status === 'captured')
+          payment = capturedById || anyCaptured || payment
+        } catch (orderFetchError) {
+          console.warn('[winner.verify-payment] order payment lookup failed', orderFetchError)
+        }
       }
 
       if (!payment || payment.status !== 'captured') {
@@ -201,7 +214,13 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
       return res.status(500).json({ error: result.error || 'Failed to update' })
     }
 
-    return res.json({ success: true, message: 'Payment confirmed. You will receive a confirmation email shortly.' })
+    return res.json({
+      success: true,
+      message: 'Payment confirmed. You will receive a confirmation email shortly.',
+      payment_status: 'completed',
+      razorpay_payment_id,
+      razorpay_order_id
+    })
   } catch (e: any) {
     console.error('Winner verify-payment error:', e)
     return res.status(500).json({ error: e?.message || 'Internal server error' })

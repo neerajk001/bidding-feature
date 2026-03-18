@@ -55,6 +55,10 @@ function ClaimContent() {
     auction_title?: string
     winning_amount?: number
     payment_due_at?: string | null
+    payment_completed_at?: string | null
+    payment_proof_note?: string | null
+    razorpay_order_id?: string | null
+    razorpay_payment_id?: string | null
     size?: string | null
     bidder_name?: string
     razorpay_key_id?: string
@@ -125,7 +129,14 @@ function ClaimContent() {
             })
             const verifyJson = await verifyRes.json()
             if (!verifyRes.ok) throw new Error(verifyJson.error || 'Verification failed')
-            setData((prev) => (prev ? { ...prev, status: 'completed' } : null))
+            setData((prev) => (prev ? {
+              ...prev,
+              status: 'completed',
+              payment_completed_at: new Date().toISOString(),
+              payment_proof_note: 'Verified via Razorpay API',
+              razorpay_payment_id: verifyJson.razorpay_payment_id || prev.razorpay_payment_id,
+              razorpay_order_id: verifyJson.razorpay_order_id || prev.razorpay_order_id
+            } : null))
             setError('')
           } catch (e: unknown) {
             setError(e instanceof Error ? e.message : 'Payment verification failed')
@@ -181,6 +192,16 @@ function ClaimContent() {
             {data.size && <p className="text-sm text-gray-500">Size: {data.size}</p>}
             <p className="text-xl font-bold text-primary mt-2">{data.winning_amount != null && formatCurrency(data.winning_amount)}</p>
             <p className="text-sm text-gray-600 mt-2">Payment due by: {formatDateTime(data.payment_due_at ?? null)}</p>
+
+            {isCompleted && (
+              <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-900 space-y-1">
+                <p className="font-semibold">Payment proof</p>
+                {data.payment_completed_at && <p>Paid at: {formatDateTime(data.payment_completed_at)}</p>}
+                {data.razorpay_payment_id && <p>Payment ID: {data.razorpay_payment_id}</p>}
+                {data.razorpay_order_id && <p>Order ID: {data.razorpay_order_id}</p>}
+                {data.payment_proof_note && <p>Note: {data.payment_proof_note}</p>}
+              </div>
+            )}
           </div>
         )}
 
