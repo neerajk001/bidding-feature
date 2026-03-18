@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase'
 import { requireAdmin } from '../middleware/auth'
 import { sendPaymentConfirmedEmail, sendWinnerEmail } from '../services/email.service'
+import { getLastWinnerEmailError } from '../services/email.service'
 import { finalizeEndedAuctions } from '../services/auction.service'
 
 const router = express.Router()
@@ -948,7 +949,11 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
     })
 
     if (!emailSent) {
-      return res.status(500).json({ error: 'Email service failed. Check RESEND_API_KEY and domain verification in Resend dashboard.' })
+      const detail = getLastWinnerEmailError()
+      return res.status(500).json({
+        error: 'Email service failed. Check RESEND_API_KEY and domain verification in Resend dashboard.',
+        details: detail || 'Unknown email provider failure'
+      })
     }
 
     // Mark as sent
@@ -1085,7 +1090,8 @@ router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
             .eq('id', w.id)
           sent++
         } else {
-          errors.push(`Winner ${w.id}: Resend API call failed (check RESEND_API_KEY and domain verification)`)
+          const detail = getLastWinnerEmailError()
+          errors.push(`Winner ${w.id}: Resend API call failed (check RESEND_API_KEY and domain verification). ${detail || ''}`.trim())
           failed++
         }
       } catch (err: any) {

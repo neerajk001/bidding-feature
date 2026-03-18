@@ -137,7 +137,7 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
 
     const { data: winner, error } = await supabaseAdmin
       .from('winners')
-      .select('id, payment_status, razorpay_order_id')
+      .select('id, payment_status, razorpay_order_id, winning_amount')
       .eq('claim_token', token.trim())
       .single()
 
@@ -156,12 +156,31 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
     }
 
     if (razorpay) {
-      const payment = await new Promise<any>((resolve, reject) => {
+      let payment = await new Promise<any>((resolve, reject) => {
         ;(razorpay.payments as any).fetch(razorpay_payment_id, (err: any, p: any) => (err ? reject(err) : resolve(p)))
       })
 
+      // Many accounts return "authorized" first. Capture it here so proof is persisted immediately.
+      if (payment?.status === 'authorized') {
+        const amountPaise = Math.round(Number((w as any).winning_amount || 0) * 100)
+        if (!Number.isFinite(amountPaise) || amountPaise <= 0) {
+          return res.status(400).json({ error: 'Invalid winner amount for payment capture.' })
+        }
+
+        payment = await new Promise<any>((resolve, reject) => {
+          ;(razorpay.payments as any).capture(
+            razorpay_payment_id,
+            amountPaise,
+            'INR',
+            (err: any, p: any) => (err ? reject(err) : resolve(p))
+          )
+        })
+      }
+
       if (!payment || payment.status !== 'captured') {
-        return res.status(400).json({ error: 'Payment not captured. Please try again or contact support.' })
+        return res.status(400).json({
+          error: `Payment is ${payment?.status || 'unknown'}. Please wait a minute and retry verification.`
+        })
       }
 
       if (String(payment.order_id) !== String(razorpay_order_id)) {
@@ -176,7 +195,7 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
         .eq('id', w.id)
     }
 
-    const result = await markWinnerPaidRazorpay(w.id, razorpay_payment_id)
+    const result = await markWinnerPaidRazorpay(w.id, razorpay_payment_id, razorpay_order_id)
     
     if (!result.ok) {
       return res.status(500).json({ error: result.error || 'Failed to update' })
@@ -230,7 +249,7 @@ router.post('/winner/webhook', async (req: Request, res: Response) => {
       .maybeSingle()
 
     if (winner) {
-      await markWinnerPaidRazorpay(winner.id, payment.id)
+      await markWinnerPaidRazorpay(winner.id, payment.id, payment.order_id)
     }
 
     return res.status(200).send('OK')

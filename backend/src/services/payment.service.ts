@@ -2,7 +2,11 @@ import { supabaseAdmin } from '../config/supabase'
 import { sendPaymentConfirmedEmail } from './email.service'
 
 /** Mark winner as paid (Razorpay), send confirmation email. Idempotent if already completed. */
-export async function markWinnerPaidRazorpay(winnerId: string, paymentId: string): Promise<{ ok: boolean; error?: string }> {
+export async function markWinnerPaidRazorpay(
+  winnerId: string,
+  paymentId: string,
+  orderId?: string
+): Promise<{ ok: boolean; error?: string }> {
   const { data: winner, error: fetchErr } = await supabaseAdmin
     .from('winners')
     .select('id, payment_status, bidder_id, auction_id')
@@ -15,14 +19,21 @@ export async function markWinnerPaidRazorpay(winnerId: string, paymentId: string
   if (w.payment_status === 'completed') return { ok: true }
 
   const now = new Date().toISOString()
+  const updates: Record<string, unknown> = {
+    payment_status: 'completed',
+    payment_completed_at: now,
+    payment_verified_by_admin: true,
+    razorpay_payment_id: paymentId,
+    payment_proof_note: 'Verified via Razorpay API'
+  }
+
+  if (orderId) {
+    updates.razorpay_order_id = orderId
+  }
+
   const { error: upErr } = await supabaseAdmin
     .from('winners')
-    .update({
-      payment_status: 'completed',
-      payment_completed_at: now,
-      payment_verified_by_admin: true,
-      razorpay_payment_id: paymentId
-    })
+    .update(updates)
     .eq('id', winnerId)
 
   if (upErr) return { ok: false, error: upErr.message }

@@ -2,6 +2,15 @@ import { resend } from '../config/services'
 import { env } from '../config/env'
 
 const appBaseUrl = env.publicAppUrl
+let lastWinnerEmailError: string | null = null
+
+export function getLastWinnerEmailError(): string | null {
+  return lastWinnerEmailError
+}
+
+function setLastWinnerEmailError(reason: string) {
+  lastWinnerEmailError = reason
+}
 
 export async function sendWinnerEmail(params: {
   to: string
@@ -12,18 +21,23 @@ export async function sendWinnerEmail(params: {
   size?: string | null
   isEscalation?: boolean
 }): Promise<boolean> {
+  setLastWinnerEmailError('')
+
   if (!resend) {
     console.warn('Resend not configured, skipping winner email')
+    setLastWinnerEmailError('RESEND_API_KEY missing or invalid in backend environment')
     return false
   }
 
   if (!appBaseUrl) {
     console.error('[email] PUBLIC_APP_URL is not configured. Cannot build winner claim link.')
+    setLastWinnerEmailError('PUBLIC_APP_URL is missing')
     return false
   }
 
   if (process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/i.test(appBaseUrl)) {
     console.error(`[email] PUBLIC_APP_URL is invalid for production: ${appBaseUrl}`)
+    setLastWinnerEmailError(`PUBLIC_APP_URL is invalid for production: ${appBaseUrl}`)
     return false
   }
 
@@ -66,14 +80,19 @@ export async function sendWinnerEmail(params: {
     if (error) {
       // Resend returned an API-level error (wrong from address, unverified domain, invalid recipient, etc.)
       console.error(`[email] Resend API error sending to ${to}:`, JSON.stringify(error))
+      const reason = (error as any)?.message || (error as any)?.name || JSON.stringify(error)
+      setLastWinnerEmailError(`Resend API rejected request: ${reason}`)
       return false
     }
 
     console.log(`[email] Winner email sent successfully to ${to}, Resend ID: ${data?.id}`)
+    setLastWinnerEmailError('')
     return true
   } catch (e) {
     // Network-level or SDK-level error (very rare with Resend)
     console.error('[email] Winner email send threw an exception:', e)
+    const reason = e instanceof Error ? e.message : String(e)
+    setLastWinnerEmailError(`Email send exception: ${reason}`)
     return false
   }
 }
