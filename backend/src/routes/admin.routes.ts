@@ -9,6 +9,12 @@ import { finalizeEndedAuctions } from '../services/auction.service'
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
+function parseTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NaN
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? Number.NaN : ts
+}
+
 // Custom upload middleware for admin routes (handles any fieldname)
 function maybeUpload(req: Request, res: Response, next: NextFunction) {
   const contentType = req.headers['content-type'] || ''
@@ -200,6 +206,44 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
       }
     } catch (e: any) {
       return res.status(400).json({ error: e.message || 'Invalid date format' })
+    }
+
+    const { data: overlappingAuctions, error: overlapError } = await supabaseAdmin
+      .from('auctions')
+      .select('id, title, bidding_start_time, bidding_end_time')
+      .lt('bidding_start_time', biddingEndUTC)
+      .gt('bidding_end_time', biddingStartUTC)
+      .limit(1)
+
+    if (overlapError) {
+      return res.status(500).json({ error: 'Failed to validate auction time window', details: overlapError.message })
+    }
+
+    if (overlappingAuctions && overlappingAuctions.length > 0) {
+      return res.status(400).json({
+        error: 'Auction time conflicts with an existing auction. Please choose a time after the last auction ends.'
+      })
+    }
+
+    const { data: latestAuction, error: latestAuctionError } = await supabaseAdmin
+      .from('auctions')
+      .select('id, bidding_end_time')
+      .order('bidding_end_time', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (latestAuctionError) {
+      return res.status(500).json({ error: 'Failed to validate latest auction end time', details: latestAuctionError.message })
+    }
+
+    if (latestAuction?.bidding_end_time) {
+      const latestEndTs = parseTimestamp(latestAuction.bidding_end_time)
+      const newStartTs = parseTimestamp(biddingStartUTC)
+      if (!Number.isNaN(latestEndTs) && !Number.isNaN(newStartTs) && newStartTs <= latestEndTs) {
+        return res.status(400).json({
+          error: 'Auction time conflicts with an existing auction. Please choose a time after the last auction ends.'
+        })
+      }
     }
 
     let reelPublicUrl: string | null = reel_url || null

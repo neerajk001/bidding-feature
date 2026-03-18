@@ -18,18 +18,27 @@ function isWithinWindow(nowTs: number, start: string | null | undefined, end: st
   return nowTs >= startTs && nowTs <= endTs
 }
 
+function getAuctionPhase(nowTs: number, start: string | null | undefined, end: string | null | undefined): 'upcoming' | 'live' | 'ended' {
+  const startTs = parseTimestamp(start)
+  const endTs = parseTimestamp(end)
+  if (Number.isNaN(startTs) || Number.isNaN(endTs)) return 'ended'
+  if (nowTs < startTs) return 'upcoming'
+  if (nowTs > endTs) return 'ended'
+  return 'live'
+}
+
 // Public: List auctions
 router.get('/auctions', async (req: Request, res: Response) => {
   try {
     await finalizeEndedAuctions()
+    const nowTs = Date.now()
 
     const includeEnded = req.query.includeEnded === 'true'
-    const statuses = includeEnded ? ['live', 'upcoming', 'ended'] : ['live', 'upcoming']
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
       .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price, available_sizes')
-      .in('status', statuses)
+      .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
 
     if (error) {
@@ -39,6 +48,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
 
     const auctionsWithBids = await Promise.all(
       (auctions || []).map(async (auction: any) => {
+        const derivedStatus = getAuctionPhase(nowTs, auction.bidding_start_time, auction.bidding_end_time)
         const { data: highestBid } = await supabaseAdmin
           .from('bids')
           .select('amount, bidder:bidder_id(name)')
@@ -58,7 +68,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
         let winnerName: string | null = null
         let winnerDeclaredAt: string | null = null
 
-        if (auction.status === 'ended') {
+        if (derivedStatus === 'ended') {
           const { data: winnersRows } = await supabaseAdmin
             .from('winners')
             .select('size, winning_amount, declared_at, bidder:bidder_id(name)')
@@ -86,6 +96,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
 
         return {
           ...auction,
+          status: derivedStatus,
           current_highest_bid: displayAmount,
           highest_bidder_name: displayName,
           total_bids: count ?? 0,
@@ -97,8 +108,12 @@ router.get('/auctions', async (req: Request, res: Response) => {
       })
     )
 
+    const filteredAuctions = includeEnded
+      ? auctionsWithBids
+      : auctionsWithBids.filter((auction: any) => auction.status !== 'ended')
+
     setNoCache(res)
-    return res.json({ success: true, auctions: auctionsWithBids })
+    return res.json({ success: true, auctions: filteredAuctions })
   } catch (error) {
     console.error('API error:', error)
     return res.status(500).json({ error: 'Internal server error' })
@@ -115,7 +130,7 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
       .select('id, status, registration_end_time, bidding_start_time, bidding_end_time')
-      .in('status', ['live', 'upcoming'])
+      .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
 
     if (error) {
@@ -141,7 +156,7 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
     }
 
     const registrationAuction = auctions.find((auction: any) => {
-      if (auction.status === 'ended') return false
+      if (getAuctionPhase(nowTs, auction.bidding_start_time, auction.bidding_end_time) !== 'upcoming') return false
       const startTs = parseTimestamp(auction.bidding_start_time)
       const regEndTs = parseTimestamp(auction.registration_end_time)
       if (Number.isNaN(startTs)) return false
@@ -181,10 +196,14 @@ router.get('/auction/product/:product_id', async (req: Request, res: Response) =
       .from('auctions')
       .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment')
       .eq('product_id', product_id)
-      .eq('status', 'live')
       .single()
 
     if (error || !auction) {
+      return res.status(404).json({ error: 'Auction not found for this product' })
+    }
+
+    const derivedStatus = getAuctionPhase(Date.now(), auction.bidding_start_time, auction.bidding_end_time)
+    if (derivedStatus !== 'live') {
       return res.status(404).json({ error: 'No live auction found for this product' })
     }
 
@@ -198,6 +217,7 @@ router.get('/auction/product/:product_id', async (req: Request, res: Response) =
 
     return res.json({
       ...auction,
+      status: derivedStatus,
       current_highest_bid: highestBid?.amount ?? null,
       highest_bidder_name: Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name ?? null
     })
@@ -229,6 +249,8 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Auction not found' })
     }
 
+    const derivedStatus = getAuctionPhase(Date.now(), auction.bidding_start_time, auction.bidding_end_time)
+
     // Get highest bid
     const { data: highestBid } = await supabaseAdmin
       .from('bids')
@@ -251,7 +273,7 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
     let winnerName: string | null = null
     let winnerDeclaredAt: string | null = null
 
-    if (auction.status === 'ended') {
+    if (derivedStatus === 'ended') {
       const { data: winnersRows } = await supabaseAdmin
         .from('winners')
         .select('size, winning_amount, declared_at, bidder:bidder_id(name)')
@@ -304,6 +326,7 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
 
     const data = {
       ...auction,
+      status: derivedStatus,
       current_highest_bid: displayAmount,
       highest_bidder_name: displayName,
       total_bids: totalBids ?? 0,

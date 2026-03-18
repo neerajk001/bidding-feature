@@ -9,6 +9,15 @@ function parseTimestamp(value: string | null | undefined): number {
   return Number.isNaN(ts) ? Number.NaN : ts
 }
 
+function getAuctionPhase(nowTs: number, start: string | null | undefined, end: string | null | undefined): 'upcoming' | 'live' | 'ended' {
+  const startTs = parseTimestamp(start)
+  const endTs = parseTimestamp(end)
+  if (Number.isNaN(startTs) || Number.isNaN(endTs)) return 'ended'
+  if (nowTs < startTs) return 'upcoming'
+  if (nowTs > endTs) return 'ended'
+  return 'live'
+}
+
 // Register bidder
 router.post('/register-bidder', async (req: Request, res: Response) => {
   try {
@@ -158,11 +167,7 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Bidder is not registered for this auction' })
     }
 
-    // 2. Validate auction status and timing
-    if (auction.status !== 'live') {
-      return res.status(400).json({ error: 'Auction is not live' })
-    }
-
+    // 2. Validate timing window (server-side authority)
     const nowTs = Date.now()
     const startTs = parseTimestamp(auction.bidding_start_time)
     const endTs = parseTimestamp(auction.bidding_end_time)
@@ -171,11 +176,13 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Auction timing is invalid. Contact admin.' })
     }
 
-    if (nowTs < startTs) {
+    const phase = getAuctionPhase(nowTs, auction.bidding_start_time, auction.bidding_end_time)
+
+    if (phase === 'upcoming') {
       return res.status(400).json({ error: 'Bidding has not started yet' })
     }
 
-    if (nowTs > endTs) {
+    if (phase === 'ended') {
       return res.status(400).json({ error: 'Bidding has ended' })
     }
 
