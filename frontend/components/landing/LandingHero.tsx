@@ -73,6 +73,9 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
         } else {
             effectiveVariant = 'upcoming'
         }
+    } else if (_nextUpcomingAuction) {
+        effectiveDetail = _nextUpcomingAuction
+        effectiveVariant = 'upcoming'
     } else if (endedDetail) {
         effectiveDetail = endedDetail
         effectiveVariant = 'closed'

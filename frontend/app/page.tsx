@@ -7,6 +7,23 @@ import type { AuctionSummary } from '@/components/landing/types'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+function parseTimestamp(value?: string | null): number {
+  if (!value) return Number.NaN
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? Number.NaN : ts
+}
+
+function getStartTimestamp(auction: AuctionSummary): number {
+  return parseTimestamp(auction.bidding_start_time)
+}
+
+function isLiveByTime(auction: AuctionSummary, nowTs: number): boolean {
+  const startTs = parseTimestamp(auction.bidding_start_time)
+  const endTs = parseTimestamp(auction.bidding_end_time)
+  if (Number.isNaN(startTs) || Number.isNaN(endTs)) return false
+  return nowTs >= startTs && nowTs <= endTs
+}
+
 async function fetchAuctionsFromApi(): Promise<AuctionSummary[]> {
   const base =
     process.env.BACKEND_URL ||
@@ -45,34 +62,54 @@ export default async function HomePage() {
   let displayEndedDetail = null
   let displayNextUpcoming = null
 
-  // 1. Find a Live Auction (Status='live')
-  // We prefer one that is currently in bidding window, but if not, logic handles it.
-  const liveAuction = allAuctions.find((a: { status: string }) => a.status === 'live')
+  const nowTs = Date.now()
+
+  const sortedNonEnded = allAuctions
+    .filter((auction: AuctionSummary) => auction.status !== 'ended')
+    .slice()
+    .sort((a: AuctionSummary, b: AuctionSummary) => {
+      const aStart = getStartTimestamp(a)
+      const bStart = getStartTimestamp(b)
+      if (Number.isNaN(aStart) && Number.isNaN(bStart)) return 0
+      if (Number.isNaN(aStart)) return 1
+      if (Number.isNaN(bStart)) return -1
+      return aStart - bStart
+    })
+
+  // 1. Prefer auctions that are actually live by clock window.
+  const liveAuction = sortedNonEnded.find((auction: AuctionSummary) => isLiveByTime(auction, nowTs)) || null
 
   if (liveAuction) {
     displayActiveDetail = liveAuction
-
-    // Determine phase
-    const now = new Date().toISOString()
-    const isRegistration = now < liveAuction.bidding_start_time
-
     displayActivePhase = {
       exists: true,
       auction_id: liveAuction.id,
-      phase: (isRegistration ? 'registration' : 'live') as 'registration' | 'live',
-      cta: isRegistration ? 'Register Now' : 'Place Bid'
+      phase: 'live' as const,
+      cta: 'Place Bid'
     }
   }
 
-  // 2. Fallback: If no Live auction, look for Upcoming (Drafts/Upcoming)
-  // (In our system status='live' handles active. Upcoming usually means future live).
-  // If we found a live auction, we don't look for upcoming as primary.
+  // 2. Fallback to nearest future auction by start time.
   if (!displayActiveDetail) {
-    const upcoming = allAuctions.find((a: { status: string; bidding_start_time: string }) =>
-      a.status === 'upcoming' ||
-      (a.status === 'draft' && new Date(a.bidding_start_time) > new Date())
-    )
+    const upcoming = sortedNonEnded.find((auction: AuctionSummary) => {
+      const startTs = parseTimestamp(auction.bidding_start_time)
+      return !Number.isNaN(startTs) && startTs > nowTs
+    })
+
     if (upcoming) {
+      displayActiveDetail = upcoming
+
+      const registrationEndTs = parseTimestamp(upcoming.registration_end_time)
+      const isRegistrationOpen = !Number.isNaN(registrationEndTs) && nowTs < registrationEndTs
+      if (isRegistrationOpen) {
+        displayActivePhase = {
+          exists: true,
+          auction_id: upcoming.id,
+          phase: 'registration' as const,
+          cta: 'Register Now'
+        }
+      }
+
       displayNextUpcoming = upcoming
     }
   }

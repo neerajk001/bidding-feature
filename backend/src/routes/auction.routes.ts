@@ -5,6 +5,19 @@ import { setNoCache } from '../middleware/cache'
 
 const router = express.Router()
 
+function parseTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NaN
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? Number.NaN : ts
+}
+
+function isWithinWindow(nowTs: number, start: string | null | undefined, end: string | null | undefined): boolean {
+  const startTs = parseTimestamp(start)
+  const endTs = parseTimestamp(end)
+  if (Number.isNaN(startTs) || Number.isNaN(endTs)) return false
+  return nowTs >= startTs && nowTs <= endTs
+}
+
 // Public: List auctions
 router.get('/auctions', async (req: Request, res: Response) => {
   try {
@@ -17,7 +30,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
       .from('auctions')
       .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price, available_sizes')
       .in('status', statuses)
-      .order('bidding_start_time', { ascending: false })
+      .order('bidding_start_time', { ascending: true })
 
     if (error) {
       console.error('Supabase error:', error)
@@ -97,13 +110,13 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
   try {
     await finalizeEndedAuctions()
 
-    const now = new Date().toISOString()
+    const nowTs = Date.now()
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, registration_end_time, bidding_start_time, bidding_end_time')
-      .eq('status', 'live')
-      .order('bidding_start_time', { ascending: false })
+      .select('id, status, registration_end_time, bidding_start_time, bidding_end_time')
+      .in('status', ['live', 'upcoming'])
+      .order('bidding_start_time', { ascending: true })
 
     if (error) {
       console.error('Supabase error:', error)
@@ -115,9 +128,7 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
       return res.json({ exists: false })
     }
 
-    const liveAuction = auctions.find((auction: any) => {
-      return now >= auction.bidding_start_time && now <= auction.bidding_end_time
-    })
+    const liveAuction = auctions.find((auction: any) => isWithinWindow(nowTs, auction.bidding_start_time, auction.bidding_end_time))
 
     if (liveAuction) {
       setNoCache(res)
@@ -130,7 +141,11 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
     }
 
     const registrationAuction = auctions.find((auction: any) => {
-      return now < auction.registration_end_time && now < auction.bidding_start_time
+      if (auction.status === 'ended') return false
+      const startTs = parseTimestamp(auction.bidding_start_time)
+      const regEndTs = parseTimestamp(auction.registration_end_time)
+      if (Number.isNaN(startTs)) return false
+      return nowTs < startTs && !Number.isNaN(regEndTs) && nowTs < regEndTs
     })
 
     if (registrationAuction) {
