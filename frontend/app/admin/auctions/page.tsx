@@ -11,12 +11,42 @@ interface Auction {
   title: string
   product_id: string
   status: string
+  registration_end_time: string
   bidding_start_time: string
   bidding_end_time: string
   min_increment: number
   base_price?: number | null
   banner_image?: string | null
   reel_url?: string | null
+}
+
+function parseTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NaN
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? Number.NaN : ts
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return 'TBD'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'TBD'
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date)
+}
+
+function getTimeWindowState(auction: Auction): 'upcoming' | 'live' | 'ended' | 'unknown' {
+  const nowTs = Date.now()
+  const startTs = parseTimestamp(auction.bidding_start_time)
+  const endTs = parseTimestamp(auction.bidding_end_time)
+
+  if (Number.isNaN(startTs) || Number.isNaN(endTs)) return 'unknown'
+  if (nowTs < startTs) return 'upcoming'
+  if (nowTs > endTs) return 'ended'
+  return 'live'
 }
 
 export default function AdminAuctionsPage() {
@@ -389,6 +419,26 @@ export default function AdminAuctionsPage() {
               {auctions
                 .filter(auction => statusFilter === 'all' || auction.status === statusFilter)
                 .map((auction) => (
+                (() => {
+                  const timeWindowState = getTimeWindowState(auction)
+                  const timeWindowBadgeClass =
+                    timeWindowState === 'live'
+                      ? 'bg-green-100 text-green-700'
+                      : timeWindowState === 'upcoming'
+                        ? 'bg-blue-100 text-blue-700'
+                        : timeWindowState === 'ended'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-600'
+                  const timeWindowLabel =
+                    timeWindowState === 'live'
+                      ? 'Live Window'
+                      : timeWindowState === 'upcoming'
+                        ? 'Not Started'
+                        : timeWindowState === 'ended'
+                          ? 'Ended by Time'
+                          : 'Time Unknown'
+
+                  return (
                 <div key={auction.id} className="bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow overflow-hidden">
                   <div className="flex flex-col lg:flex-row items-stretch">
                     {/* Left: Media Thumbnails */}
@@ -426,10 +476,13 @@ export default function AdminAuctionsPage() {
                           }`}>
                             {auction.status}
                           </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase whitespace-nowrap ${timeWindowBadgeClass}`}>
+                            {timeWindowLabel}
+                          </span>
                         </div>
 
                         {/* Info Row - Horizontal Layout */}
-                        <div className="flex items-center gap-4 lg:gap-6 text-sm">
+                        <div className="flex flex-wrap items-center gap-3 lg:gap-5 text-sm">
                           <div className="whitespace-nowrap">
                             <span className="text-gray-500 font-semibold">ID:</span>{' '}
                             <span className="font-mono text-black">{auction.product_id}</span>
@@ -445,9 +498,17 @@ export default function AdminAuctionsPage() {
                             </div>
                           )}
                           <div className="whitespace-nowrap">
-                            <span className="text-gray-500 font-semibold">Date:</span>{' '}
+                            <span className="text-gray-500 font-semibold">Reg Ends:</span>{' '}
+                            <span className="text-black">{formatDateTime(auction.registration_end_time)}</span>
+                          </div>
+                          <div className="whitespace-nowrap">
+                            <span className="text-gray-500 font-semibold">Starts:</span>{' '}
+                            <span className="text-black">{formatDateTime(auction.bidding_start_time)}</span>
+                          </div>
+                          <div className="whitespace-nowrap">
+                            <span className="text-gray-500 font-semibold">Ends:</span>{' '}
                             <span className="text-black">
-                              {new Date(auction.bidding_start_time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                              {formatDateTime(auction.bidding_end_time)}
                             </span>
                           </div>
                         </div>
@@ -482,6 +543,8 @@ export default function AdminAuctionsPage() {
                     </div>
                   </div>
                 </div>
+                  )
+                })()
               ))}
             </div>
           )}

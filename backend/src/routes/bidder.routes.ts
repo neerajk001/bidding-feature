@@ -3,6 +3,12 @@ import { supabaseAdmin } from '../config/supabase'
 
 const router = express.Router()
 
+function parseTimestamp(value: string | null | undefined): number {
+  if (!value) return Number.NaN
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? Number.NaN : ts
+}
+
 // Register bidder
 router.post('/register-bidder', async (req: Request, res: Response) => {
   try {
@@ -140,20 +146,36 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Auction not found' })
     }
 
+    // Ensure bidder belongs to this auction to prevent cross-auction or crafted requests.
+    const { data: bidder, error: bidderError } = await supabaseAdmin
+      .from('bidders')
+      .select('id')
+      .eq('id', bidder_id)
+      .eq('auction_id', auction_id)
+      .maybeSingle()
+
+    if (bidderError || !bidder) {
+      return res.status(400).json({ error: 'Bidder is not registered for this auction' })
+    }
+
     // 2. Validate auction status and timing
     if (auction.status !== 'live') {
       return res.status(400).json({ error: 'Auction is not live' })
     }
 
-    const now = new Date()
-    const startTime = new Date(auction.bidding_start_time)
-    const endTime = new Date(auction.bidding_end_time)
+    const nowTs = Date.now()
+    const startTs = parseTimestamp(auction.bidding_start_time)
+    const endTs = parseTimestamp(auction.bidding_end_time)
 
-    if (now < startTime) {
+    if (Number.isNaN(startTs) || Number.isNaN(endTs)) {
+      return res.status(400).json({ error: 'Auction timing is invalid. Contact admin.' })
+    }
+
+    if (nowTs < startTs) {
       return res.status(400).json({ error: 'Bidding has not started yet' })
     }
 
-    if (now > endTime) {
+    if (nowTs > endTs) {
       return res.status(400).json({ error: 'Bidding has ended' })
     }
 
@@ -218,13 +240,13 @@ router.post('/place-bid', async (req: Request, res: Response) => {
     }
 
     // 6. Anti-sniping: extend auction if bid placed within last 5 minutes
-    const timeRemaining = endTime.getTime() - now.getTime()
+    const timeRemaining = endTs - nowTs
     const fiveMinutes = 5 * 60 * 1000
     let extended = false
     let newEndTime = null
 
     if (timeRemaining < fiveMinutes) {
-      newEndTime = new Date(now.getTime() + fiveMinutes).toISOString()
+      newEndTime = new Date(nowTs + fiveMinutes).toISOString()
       
       const { error: updateError } = await supabaseAdmin
         .from('auctions')
