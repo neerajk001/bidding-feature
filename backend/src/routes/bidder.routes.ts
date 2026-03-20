@@ -147,7 +147,7 @@ router.post('/place-bid', async (req: Request, res: Response) => {
     // 1. Get auction details
     const { data: auction, error: auctionError } = await supabaseAdmin
       .from('auctions')
-      .select('id, status, bidding_start_time, bidding_end_time, min_increment, base_price')
+      .select('id, status, bidding_start_time, bidding_end_time, min_increment, base_price, available_sizes')
       .eq('id', auction_id)
       .single()
 
@@ -186,8 +186,45 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Bidding has ended' })
     }
 
-    // 3. Get current highest bid for this size (or global if no size)
     const normalizedSize = size ? String(size).trim() : null
+    const configuredSizes = Array.isArray(auction.available_sizes)
+      ? auction.available_sizes.map((s: any) => String(s ?? '').trim()).filter((s: string) => s.length > 0)
+      : []
+
+    if (configuredSizes.length > 0) {
+      if (!normalizedSize) {
+        return res.status(400).json({ error: 'Size is required for this auction.' })
+      }
+
+      if (!configuredSizes.includes(normalizedSize)) {
+        return res.status(400).json({
+          error: 'Selected size is not available for this auction.',
+          allowed_sizes: configuredSizes
+        })
+      }
+
+      const { data: firstBidForAuction } = await supabaseAdmin
+        .from('bids')
+        .select('size')
+        .eq('auction_id', auction_id)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      const lockedBidSize = String((firstBidForAuction as any)?.size ?? '').trim() || null
+
+      if (lockedBidSize && normalizedSize !== lockedBidSize) {
+        return res.status(400).json({
+          error: `Bidding is locked to size ${lockedBidSize} for this auction.`,
+          locked_size: lockedBidSize
+        })
+      }
+    } else if (normalizedSize) {
+      return res.status(400).json({ error: 'Size is not applicable for this auction.' })
+    }
+
+    // 3. Get current highest bid for this size (or global if no size)
     let highestBidQuery = supabaseAdmin
       .from('bids')
       .select('amount')

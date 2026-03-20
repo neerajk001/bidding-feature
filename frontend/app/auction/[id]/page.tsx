@@ -31,6 +31,8 @@ interface AuctionDetail {
   available_sizes?: string[] | null
   gallery_images?: string[] | null
   highest_bid_size?: string | null
+  locked_bid_size?: string | null
+  size_lock_active?: boolean
 }
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; text: string }
@@ -63,6 +65,12 @@ export default function AuctionDetailPage() {
   const [now, setNow] = useState(new Date())
   const [checkingUser, setCheckingUser] = useState(false)
   const [selectedSize, setSelectedSize] = useState<string>('')
+
+  const lockedBidSize = useMemo(() => {
+    if (!auction?.size_lock_active) return null
+    const locked = String(auction.locked_bid_size ?? '').trim()
+    return locked || null
+  }, [auction?.locked_bid_size, auction?.size_lock_active])
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -154,6 +162,23 @@ export default function AuctionDetailPage() {
     verifySavedUser()
   }, [auction])
 
+  useEffect(() => {
+    if (!auction) return
+    const sizes = Array.isArray(auction.available_sizes) ? auction.available_sizes : []
+    if (sizes.length === 0) return
+
+    if (lockedBidSize) {
+      if (selectedSize !== lockedBidSize) {
+        setSelectedSize(lockedBidSize)
+      }
+      return
+    }
+
+    if (!selectedSize || !sizes.includes(selectedSize)) {
+      setSelectedSize(sizes[0])
+    }
+  }, [auction, lockedBidSize, selectedSize])
+
   // Ref for throttling refresh calls
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -192,6 +217,8 @@ export default function AuctionDetailPage() {
             if (!prev) return null
             const newAmount = Number(newBid.amount)
             const bidSize = newBid.size ?? undefined
+            const nextLockedBidSize = prev.locked_bid_size || bidSize || null
+            const nextLockActive = prev.size_lock_active || Boolean(nextLockedBidSize)
 
             // Update highest_bids_by_size for multi-size auctions
             let updatedHighestBidsBySize = prev.highest_bids_by_size
@@ -236,9 +263,15 @@ export default function AuctionDetailPage() {
               current_highest_bid: isHigher ? newAmount : prev.current_highest_bid,
               total_bids: (prev.total_bids || 0) + 1,
               highest_bids_by_size: updatedHighestBidsBySize,
-              highest_bidder_name: prev.highest_bidder_name
+              highest_bidder_name: prev.highest_bidder_name,
+              locked_bid_size: nextLockedBidSize,
+              size_lock_active: nextLockActive
             }
           })
+
+          if (bidSize) {
+            setSelectedSize((prev) => prev || bidSize)
+          }
           scheduleRefresh()
         }
       )
@@ -422,6 +455,15 @@ export default function AuctionDetailPage() {
       setMessage({
         type: 'error',
         text: 'Please select a size.'
+      })
+      setBidSubmitting(false)
+      return
+    }
+
+    if (lockedBidSize && selectedSize !== lockedBidSize) {
+      setMessage({
+        type: 'error',
+        text: `Bidding is locked to size ${lockedBidSize}.`
       })
       setBidSubmitting(false)
       return
@@ -700,20 +742,34 @@ export default function AuctionDetailPage() {
                             <div>
                               <label className="block text-sm font-semibold text-gray-700 mb-2">Select Size</label>
                               <div className="flex gap-2 flex-wrap">
-                                {auction.available_sizes.map(size => (
+                                {auction.available_sizes.map(size => {
+                                  const isLockedOut = Boolean(lockedBidSize) && size !== lockedBidSize
+                                  return (
                                   <button
                                     key={size}
                                     type="button"
-                                    onClick={() => setSelectedSize(size)}
+                                    onClick={() => {
+                                      if (isLockedOut) return
+                                      setSelectedSize(size)
+                                    }}
+                                    disabled={isLockedOut}
                                     className={`px-4 py-2 text-sm rounded-lg font-semibold transition-all border-2 ${selectedSize === size
                                       ? 'bg-orange-500 border-orange-500 text-white'
-                                      : 'border-gray-300 text-gray-700 hover:border-orange-300 hover:bg-orange-50'
+                                      : isLockedOut
+                                        ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-70'
+                                        : 'border-gray-300 text-gray-700 hover:border-orange-300 hover:bg-orange-50'
                                       }`}
                                   >
                                     {size}
                                   </button>
-                                ))}
+                                  )
+                                })}
                               </div>
+                              {lockedBidSize && (
+                                <p className="text-xs text-orange-700 mt-2 font-medium">
+                                  Size locked for this auction: {lockedBidSize}
+                                </p>
+                              )}
                             </div>
                           )}
 
@@ -740,7 +796,7 @@ export default function AuctionDetailPage() {
                             <button
                               type="submit"
                               className="w-full px-6 py-4 bg-linear-to-r from-orange-500 to-orange-600 text-white rounded-lg font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={bidSubmitting}
+                              disabled={bidSubmitting || Boolean(lockedBidSize && selectedSize !== lockedBidSize)}
                             >
                               {bidSubmitting ? 'Placing Bid...' : '🔥 Place Bid Now'}
                             </button>
