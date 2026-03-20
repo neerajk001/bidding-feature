@@ -31,8 +31,6 @@ interface AuctionDetail {
   available_sizes?: string[] | null
   gallery_images?: string[] | null
   highest_bid_size?: string | null
-  locked_bid_size?: string | null
-  size_lock_active?: boolean
 }
 
 type StatusMessage = { type: 'success' | 'error' | 'info'; text: string }
@@ -65,12 +63,7 @@ export default function AuctionDetailPage() {
   const [now, setNow] = useState(new Date())
   const [checkingUser, setCheckingUser] = useState(false)
   const [selectedSize, setSelectedSize] = useState<string>('')
-
-  const lockedBidSize = useMemo(() => {
-    if (!auction?.size_lock_active) return null
-    const locked = String(auction.locked_bid_size ?? '').trim()
-    return locked || null
-  }, [auction?.locked_bid_size, auction?.size_lock_active])
+  const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -162,14 +155,41 @@ export default function AuctionDetailPage() {
     verifySavedUser()
   }, [auction])
 
+  const refreshBidderSizeLock = async (auctionIdParam: string, bidderIdParam: string) => {
+    try {
+      const url = `/api/bidder-size-lock?auction_id=${encodeURIComponent(auctionIdParam)}&bidder_id=${encodeURIComponent(bidderIdParam)}`
+      const res = await fetch(url, { cache: 'no-store' })
+      const data = await res.json()
+      if (res.ok) {
+        const locked = String(data?.locked_size ?? '').trim()
+        setBidderLockedSize(locked || null)
+      }
+    } catch {
+      // Silent failure: backend still enforces lock in place-bid.
+    }
+  }
+
+  useEffect(() => {
+    if (!auction?.id || !bidderId) {
+      setBidderLockedSize(null)
+      return
+    }
+    const sizes = Array.isArray(auction.available_sizes) ? auction.available_sizes : []
+    if (sizes.length === 0) {
+      setBidderLockedSize(null)
+      return
+    }
+    refreshBidderSizeLock(auction.id, bidderId)
+  }, [auction?.id, auction?.available_sizes, bidderId])
+
   useEffect(() => {
     if (!auction) return
     const sizes = Array.isArray(auction.available_sizes) ? auction.available_sizes : []
     if (sizes.length === 0) return
 
-    if (lockedBidSize) {
-      if (selectedSize !== lockedBidSize) {
-        setSelectedSize(lockedBidSize)
+    if (bidderLockedSize) {
+      if (selectedSize !== bidderLockedSize) {
+        setSelectedSize(bidderLockedSize)
       }
       return
     }
@@ -177,7 +197,7 @@ export default function AuctionDetailPage() {
     if (!selectedSize || !sizes.includes(selectedSize)) {
       setSelectedSize(sizes[0])
     }
-  }, [auction, lockedBidSize, selectedSize])
+  }, [auction, bidderLockedSize, selectedSize])
 
   // Ref for throttling refresh calls
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -212,13 +232,11 @@ export default function AuctionDetailPage() {
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${auction.id}` },
         (payload: { new: { amount: number; size?: string } }) => {
           const newBid = payload.new
-          const bidSize = newBid.size ?? undefined
           // Optimistically update the UI immediately
           setAuction((prev) => {
             if (!prev) return null
             const newAmount = Number(newBid.amount)
-            const nextLockedBidSize = prev.locked_bid_size || bidSize || null
-            const nextLockActive = prev.size_lock_active || Boolean(nextLockedBidSize)
+            const bidSize = newBid.size ?? undefined
 
             // Update highest_bids_by_size for multi-size auctions
             let updatedHighestBidsBySize = prev.highest_bids_by_size
@@ -263,15 +281,9 @@ export default function AuctionDetailPage() {
               current_highest_bid: isHigher ? newAmount : prev.current_highest_bid,
               total_bids: (prev.total_bids || 0) + 1,
               highest_bids_by_size: updatedHighestBidsBySize,
-              highest_bidder_name: prev.highest_bidder_name,
-              locked_bid_size: nextLockedBidSize,
-              size_lock_active: nextLockActive
+              highest_bidder_name: prev.highest_bidder_name
             }
           })
-
-          if (bidSize) {
-            setSelectedSize((prev) => prev || bidSize)
-          }
           scheduleRefresh()
         }
       )
@@ -460,10 +472,10 @@ export default function AuctionDetailPage() {
       return
     }
 
-    if (lockedBidSize && selectedSize !== lockedBidSize) {
+    if (bidderLockedSize && selectedSize !== bidderLockedSize) {
       setMessage({
         type: 'error',
-        text: `Bidding is locked to size ${lockedBidSize}.`
+        text: `Your size is locked to ${bidderLockedSize}.`
       })
       setBidSubmitting(false)
       return
@@ -490,6 +502,7 @@ export default function AuctionDetailPage() {
       setBidAmount('')
       setMessage({ type: 'success', text: 'Bid placed successfully.' })
       refreshAuction()
+      await refreshBidderSizeLock(auction.id, bidderId)
     } catch (err) {
       setMessage({
         type: 'error',
@@ -743,7 +756,7 @@ export default function AuctionDetailPage() {
                               <label className="block text-sm font-semibold text-gray-700 mb-2">Select Size</label>
                               <div className="flex gap-2 flex-wrap">
                                 {auction.available_sizes.map(size => {
-                                  const isLockedOut = Boolean(lockedBidSize) && size !== lockedBidSize
+                                  const isLockedOut = Boolean(bidderLockedSize) && size !== bidderLockedSize
                                   return (
                                   <button
                                     key={size}
@@ -765,9 +778,9 @@ export default function AuctionDetailPage() {
                                   )
                                 })}
                               </div>
-                              {lockedBidSize && (
+                              {bidderLockedSize && (
                                 <p className="text-xs text-orange-700 mt-2 font-medium">
-                                  Size locked for this auction: {lockedBidSize}
+                                  Your size is locked for this auction: {bidderLockedSize}
                                 </p>
                               )}
                             </div>
@@ -796,7 +809,7 @@ export default function AuctionDetailPage() {
                             <button
                               type="submit"
                               className="w-full px-6 py-4 bg-linear-to-r from-orange-500 to-orange-600 text-white rounded-lg font-bold text-base hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={bidSubmitting || Boolean(lockedBidSize && selectedSize !== lockedBidSize)}
+                              disabled={bidSubmitting || Boolean(bidderLockedSize && selectedSize !== bidderLockedSize)}
                             >
                               {bidSubmitting ? 'Placing Bid...' : '🔥 Place Bid Now'}
                             </button>

@@ -203,20 +203,21 @@ router.post('/place-bid', async (req: Request, res: Response) => {
         })
       }
 
-      const { data: firstBidForAuction } = await supabaseAdmin
+      const { data: firstBidForBidder } = await supabaseAdmin
         .from('bids')
         .select('size')
         .eq('auction_id', auction_id)
+        .eq('bidder_id', bidder_id)
         .order('created_at', { ascending: true })
         .order('id', { ascending: true })
         .limit(1)
         .maybeSingle()
 
-      const lockedBidSize = String((firstBidForAuction as any)?.size ?? '').trim() || null
+      const lockedBidSize = String((firstBidForBidder as any)?.size ?? '').trim() || null
 
       if (lockedBidSize && normalizedSize !== lockedBidSize) {
         return res.status(400).json({
-          error: `Bidding is locked to size ${lockedBidSize} for this auction.`,
+          error: `Your size is locked to ${lockedBidSize} for this auction.`,
           locked_size: lockedBidSize
         })
       }
@@ -310,6 +311,57 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       message: 'Bid placed successfully',
       extended,
       new_end_time: newEndTime
+    })
+  } catch (error) {
+    console.error('API error:', error)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Get bidder-specific size lock for an auction
+router.get('/bidder-size-lock', async (req: Request, res: Response) => {
+  try {
+    const auction_id = String(req.query.auction_id ?? '').trim()
+    const bidder_id = String(req.query.bidder_id ?? '').trim()
+
+    if (!auction_id || !bidder_id) {
+      return res.status(400).json({ error: 'auction_id and bidder_id are required' })
+    }
+
+    const { data: bidder, error: bidderError } = await supabaseAdmin
+      .from('bidders')
+      .select('id')
+      .eq('id', bidder_id)
+      .eq('auction_id', auction_id)
+      .maybeSingle()
+
+    if (bidderError || !bidder) {
+      return res.status(404).json({ error: 'Bidder not found for this auction' })
+    }
+
+    const { data: firstBid, error: firstBidError } = await supabaseAdmin
+      .from('bids')
+      .select('size')
+      .eq('auction_id', auction_id)
+      .eq('bidder_id', bidder_id)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+
+    if (firstBidError) {
+      console.error('Failed to fetch bidder size lock:', firstBidError)
+      return res.status(500).json({ error: 'Failed to fetch bidder size lock' })
+    }
+
+    const locked_size = String((firstBid as any)?.size ?? '').trim() || null
+
+    return res.json({
+      success: true,
+      auction_id,
+      bidder_id,
+      locked_size,
+      lock_active: Boolean(locked_size)
     })
   } catch (error) {
     console.error('API error:', error)

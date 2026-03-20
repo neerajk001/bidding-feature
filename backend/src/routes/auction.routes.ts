@@ -305,25 +305,6 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
       ? auction.available_sizes.map((s: any) => String(s ?? '').trim()).filter((s: string) => s.length > 0)
       : []
     let highest_bids_by_size: { size: string; amount: number; bidder_name: string | null }[] | null = null
-    let locked_bid_size: string | null = null
-    let size_lock_active = false
-
-    if (sizes.length > 0) {
-      const { data: firstBid } = await supabaseAdmin
-        .from('bids')
-        .select('size')
-        .eq('auction_id', id)
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-
-      const firstBidSize = String((firstBid as any)?.size ?? '').trim()
-      if (firstBidSize && sizes.includes(firstBidSize)) {
-        locked_bid_size = firstBidSize
-      }
-      size_lock_active = Boolean(locked_bid_size) && derivedStatus !== 'ended'
-    }
 
     if (sizes.length > 0) {
       const { data: bids } = await supabaseAdmin
@@ -355,9 +336,7 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
       winning_amount: winningAmount,
       winner_declared_at: winnerDeclaredAt,
       winners_by_size: winnersList,
-      highest_bids_by_size,
-      locked_bid_size,
-      size_lock_active
+      highest_bids_by_size
     }
 
     setNoCache(res)
