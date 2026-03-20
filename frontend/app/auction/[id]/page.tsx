@@ -212,11 +212,11 @@ export default function AuctionDetailPage() {
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${auction.id}` },
         (payload: { new: { amount: number; size?: string } }) => {
           const newBid = payload.new
+          const bidSize = newBid.size ?? undefined
           // Optimistically update the UI immediately
           setAuction((prev) => {
             if (!prev) return null
             const newAmount = Number(newBid.amount)
-            const bidSize = newBid.size ?? undefined
             const nextLockedBidSize = prev.locked_bid_size || bidSize || null
             const nextLockActive = prev.size_lock_active || Boolean(nextLockedBidSize)
 
