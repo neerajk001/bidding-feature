@@ -65,7 +65,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
         return filtered
     }, [auctions, activeDetail])
 
-    const pastAuctions = useMemo(() => {
+    const allPastAuctions = useMemo(() => {
         return auctions
             .filter((auction) => auction.status === 'ended')
             .sort((a, b) => {
@@ -73,8 +73,13 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                 const bTime = new Date(b.bidding_end_time).getTime()
                 return bTime - aTime
             })
-            .slice(0, 6)
     }, [auctions])
+
+    const pastAuctions = useMemo(() => {
+        return allPastAuctions.slice(0, 3)
+    }, [allPastAuctions])
+
+    const hasMorePastAuctions = allPastAuctions.length > pastAuctions.length
 
     const recentEndedAuction = useMemo(() => {
         const ended = auctions.filter((auction) => auction.status === 'ended')
@@ -212,6 +217,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                         )}
                     </div>
                 ) : (
+                    <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {pastAuctions.length > 0 ? (
                             pastAuctions.map((auction) => (
@@ -220,7 +226,7 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                     key={auction.id}
                                     className="group relative flex flex-col bg-white border-2 border-gray-200 rounded-xl overflow-hidden hover:border-gray-400 transition-all duration-300"
                                 >
-                                    <div className="aspect-[4/5] relative bg-gray-100 overflow-hidden">
+                                    <div className="aspect-[5/4] relative bg-gray-100 overflow-hidden">
                                         {auction.banner_image ? (
                                             <div className="relative w-full h-full grayscale group-hover:grayscale-0 transition-all duration-500">
                                                 <Image
@@ -301,6 +307,18 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                             </div>
                         )}
                     </div>
+
+                    {hasMorePastAuctions && (
+                        <div className="mt-6 flex justify-center">
+                            <Link
+                                href="/auctions/past"
+                                className="inline-flex items-center justify-center px-5 py-2.5 rounded-lg text-sm font-semibold border border-gray-300 text-gray-800 hover:bg-gray-50 transition-colors"
+                            >
+                                View All Results
+                            </Link>
+                        </div>
+                    )}
+                    </>
                 )}
 
                 {auctionTab === 'upcoming' && recentEndedAuction && (
@@ -363,12 +381,12 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                 >
                                     View Full Results
                                 </Link>
-                                <button
-                                    onClick={() => setAuctionTab('past')}
+                                <Link
+                                    href="/auctions/past"
                                     className="text-gray-700 hover:text-black underline underline-offset-4 text-sm font-semibold transition-colors"
                                 >
-                                    View all past auctions →
-                                </button>
+                                    View all past auctions
+                                </Link>
                             </div>
                         </div>
                     </div>
@@ -377,3 +395,4 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
         </section>
     )
 }
+

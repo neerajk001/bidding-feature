@@ -165,20 +165,21 @@ export default async function HomePage() {
                 Please read and follow these rules when participating in our exclusive heritage auctions.
               </p>
               <ol className="list-decimal list-inside space-y-4 pl-2">
-                <li><strong>Registration:</strong> You must register before the registration window closes to participate in bidding. Only registered bidders can place bids once the auction goes live.</li>
-                <li><strong>Bidding window:</strong> Bidding is open only during the published start and end times. Bids placed outside this window are not accepted.</li>
-                <li><strong>Minimum increment:</strong> Each new bid must meet or exceed the current highest bid plus the minimum increment stated for that auction.</li>
-                <li><strong>Binding bids:</strong> All bids are final and binding. By placing a bid, you agree to purchase the lot at your bid amount if you win.</li>
-                <li><strong>Winners:</strong> The highest bidder at the close of the auction wins the lot. In multi-size lots, each size has a separate winner.</li>
-                <li><strong>Payment deadline:</strong> Payment must be completed within 12 hours of winning, or the bid will be cancelled.</li>
-                <li><strong>Payment methods:</strong> UPI: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">9096068280-2@ybl</code>. GPay: Scanner will be provided at the time of payment. The winner must share details of payment completed (e.g. UTR or screenshot).</li>
-                <li><strong>Non-payment:</strong> If payment is not done within the 12-hour window, the product will be offered to the second-highest bidder.</li>
-                <li><strong>No cancellation:</strong> Once a bid is placed, it cannot be cancelled, returned, or exchanged.</li>
-                <li><strong>Shipping:</strong> Shipping charges are included. The product will be dispatched within 2–3 working days. Pan-India shipping is available.</li>
-                <li><strong>Winner announcement:</strong> The winner’s Instagram ID will be announced on LIVE. A screenshot will be taken for record.</li>
+                <li><strong>Registration:</strong> You must register before the registration window closes. Only registered bidders can place bids.</li>
+                <li><strong>Verification:</strong> Registration is allowed only after account verification as required by the platform.</li>
+                <li><strong>Bidding window:</strong> Bids are accepted only between the published bidding start and end time.</li>
+                <li><strong>Minimum increment:</strong> Every new bid must be at least the current highest bid plus the configured minimum increment.</li>
+                <li><strong>Size-based lots:</strong> For auctions with sizes, winners are determined separately by size.</li>
+                <li><strong>Anti-sniping:</strong> If a valid bid is placed near closing time, the auction end time may be automatically extended.</li>
+                <li><strong>Binding bids:</strong> All bids are final and legally binding. Do not bid unless you intend to complete payment if you win.</li>
+                <li><strong>Winner payment:</strong> Winners receive a secure payment link and must complete payment within 12 hours.</li>
+                <li><strong>Payment method:</strong> Winner payments are processed through Razorpay checkout. Manual transfer proof is not required for successful online payments.</li>
+                <li><strong>Non-payment:</strong> If payment is not completed within the allowed window, the win is forfeited and the lot may be offered to the next eligible bidder.</li>
+                <li><strong>Shipping and fulfillment:</strong> Shipping is included where stated, and dispatch is typically within 2-3 working days after payment confirmation.</li>
+                <li><strong>No cancellation:</strong> Bids and completed purchases cannot be cancelled, returned, or exchanged unless required by applicable law.</li>
               </ol>
               <p className="text-gray-600 text-sm mt-8">
-                By participating, you agree to these rules and our general terms. Contact us for any clarifications before bidding.
+                By participating, you agree to these auction rules and platform terms. Contact support before bidding if anything is unclear.
               </p>
             </div>
           </div>
@@ -187,3 +188,4 @@ export default async function HomePage() {
     </PublicShell>
   )
 }
+
