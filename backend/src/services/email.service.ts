@@ -3,6 +3,7 @@ import { env } from '../config/env'
 
 const appBaseUrl = env.publicAppUrl
 let lastWinnerEmailError: string | null = null
+const DEFAULT_FROM = 'onboarding@resend.dev'
 
 export function getLastWinnerEmailError(): string | null {
   return lastWinnerEmailError
@@ -10,6 +11,28 @@ export function getLastWinnerEmailError(): string | null {
 
 function setLastWinnerEmailError(reason: string) {
   lastWinnerEmailError = reason
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function getFromEmail(): string {
+  return (env.resendFromEmail || DEFAULT_FROM).trim()
+}
+
+function getReplyToEmail(): string | undefined {
+  const replyTo = (env.resendReplyToEmail || '').trim()
+  return replyTo || undefined
+}
+
+function isResendSandboxSender(fromEmail: string): boolean {
+  return /@resend\.dev$/i.test(fromEmail)
 }
 
 export async function sendWinnerEmail(params: {
@@ -41,15 +64,42 @@ export async function sendWinnerEmail(params: {
     return false
   }
 
+  const fromEmail = getFromEmail()
+  if (process.env.NODE_ENV === 'production' && isResendSandboxSender(fromEmail)) {
+    const reason = 'RESEND_FROM_EMAIL is using resend.dev in production. Use a verified domain sender (for example, no-reply@yourdomain.com).'
+    console.error(`[email] ${reason}`)
+    setLastWinnerEmailError(reason)
+    return false
+  }
+
   const { to, winnerName, auctionTitle, winningAmount, claimToken, size, isEscalation } = params
   const claimUrl = `${appBaseUrl}/winner/claim?token=${encodeURIComponent(claimToken)}`
   const subject = isEscalation
-    ? `You're now the winner – ${auctionTitle} – Pay within 12 hours`
-    : `You won! ${auctionTitle} – Pay within 12 hours`
+    ? `Action needed: complete payment for ${auctionTitle}`
+    : `Action needed: complete your winner payment for ${auctionTitle}`
   const intro = isEscalation
     ? `The previous winner did not complete payment. The item is now offered to you.`
     : `Congratulations! You won this lot.`
-  const sizeInfo = size ? `<p><strong>Size:</strong> ${size}</p>` : ''
+  const sizeInfo = size ? `<p><strong>Size:</strong> ${escapeHtml(size)}</p>` : ''
+
+  const safeWinnerName = escapeHtml(winnerName)
+  const safeAuctionTitle = escapeHtml(auctionTitle)
+  const formattedAmount = Number(winningAmount).toLocaleString('en-IN')
+  const safeClaimUrl = escapeHtml(claimUrl)
+  const textBody = [
+    `Hello ${winnerName},`,
+    '',
+    intro,
+    size ? `Size: ${size}` : undefined,
+    `Winning amount: INR ${formattedAmount}`,
+    'Payment window: 12 hours from this notification.',
+    'Complete payment using your secure winner link:',
+    claimUrl,
+    '',
+    'If you already paid, you can ignore this email.',
+    '',
+    'Indu Heritage Auctions'
+  ].filter(Boolean).join('\n')
 
   try {
     console.log(`[email] Sending winner email to: ${to}, subject: ${subject}`)
@@ -57,22 +107,28 @@ export async function sendWinnerEmail(params: {
     // ⚠️  Resend SDK returns { data, error } — it does NOT throw on API errors.
     // We MUST check the error field, otherwise we'll think emails succeeded when they silently failed.
     const { data, error } = await resend.emails.send({
-      from: env.resendFromEmail || 'onboarding@resend.dev',
+      from: fromEmail,
       to,
       subject,
+      replyTo: getReplyToEmail(),
+      text: textBody,
+      headers: {
+        'X-Entity-Ref-ID': `winner-${claimToken}`,
+        'X-Auto-Response-Suppress': 'All'
+      },
       html: `
         <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto;">
-          <h2 style="color: #2a1a12;">${subject}</h2>
-          <p>Hello ${winnerName},</p>
-          <p>${intro}</p>
+          <h2 style="color: #2a1a12;">Winner payment details</h2>
+          <p>Hello ${safeWinnerName},</p>
+          <p>${escapeHtml(intro)}</p>
           ${sizeInfo}
-          <p><strong>Winning amount: ₹${Number(winningAmount).toLocaleString()}</strong></p>
-          <p>Payment must be completed within <strong>12 hours</strong> or the offer will be cancelled.</p>
-          <p><strong>Payment method:</strong> Secure online payment via Razorpay (UPI, cards, net banking, wallets).</p>
-          <p>Click the button below to complete your payment and optionally share your Instagram handle:</p>
-          <p><a href="${claimUrl}" style="display: inline-block; padding: 12px 24px; background: #800000; color: #fff; text-decoration: none; border-radius: 8px;">Pay Now &amp; Claim Your Item</a></p>
-          <p style="color: #666; font-size: 14px;">Shipping is included. Dispatch in 2–3 working days, Pan-India.</p>
-          <p style="color: #999; font-size: 12px;">Indu Heritage Auctions</p>
+          <p><strong>Auction:</strong> ${safeAuctionTitle}</p>
+          <p><strong>Winning amount:</strong> INR ${formattedAmount}</p>
+          <p><strong>Payment deadline:</strong> within 12 hours</p>
+          <p>Complete payment using the secure link below:</p>
+          <p><a href="${safeClaimUrl}" style="display: inline-block; padding: 12px 24px; background: #800000; color: #fff; text-decoration: none; border-radius: 8px;">Open Payment Link</a></p>
+          <p style="margin-top: 18px; color: #666; font-size: 14px;">If you already completed payment, you can ignore this email.</p>
+          <p style="color: #999; font-size: 12px;">Indu Heritage Auctions • Transactional notice</p>
         </div>
       `
     })
@@ -103,20 +159,42 @@ export async function sendPaymentConfirmedEmail(to: string, winnerName: string, 
     return false
   }
 
+  const fromEmail = getFromEmail()
+  if (process.env.NODE_ENV === 'production' && isResendSandboxSender(fromEmail)) {
+    console.error('[email] RESEND_FROM_EMAIL is using resend.dev in production. Use a verified domain sender.')
+    return false
+  }
+
+  const safeWinnerName = escapeHtml(winnerName)
+  const safeAuctionTitle = escapeHtml(auctionTitle)
+  const textBody = [
+    `Hello ${winnerName},`,
+    '',
+    `We have received your payment for ${auctionTitle}.`,
+    'Your order will be dispatched within 2-3 working days.',
+    '',
+    'Indu Heritage Auctions'
+  ].join('\n')
+
   try {
     console.log(`[email] Sending payment confirmation to: ${to}`)
 
     const { data, error } = await resend.emails.send({
-      from: env.resendFromEmail || 'onboarding@resend.dev',
+      from: fromEmail,
       to,
       subject: `Payment received – ${auctionTitle}`,
+      replyTo: getReplyToEmail(),
+      text: textBody,
+      headers: {
+        'X-Auto-Response-Suppress': 'All'
+      },
       html: `
         <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto;">
           <h2 style="color: #2a1a12;">Payment received</h2>
-          <p>Hello ${winnerName},</p>
-          <p>We have received your payment for <strong>${auctionTitle}</strong>.</p>
-          <p>Your order will be dispatched within 2–3 working days. Pan-India shipping is included.</p>
-          <p style="color: #999; font-size: 12px;">Indu Heritage Auctions</p>
+          <p>Hello ${safeWinnerName},</p>
+          <p>We have received your payment for <strong>${safeAuctionTitle}</strong>.</p>
+          <p>Your order will be dispatched within 2-3 working days. Pan-India shipping is included.</p>
+          <p style="color: #999; font-size: 12px;">Indu Heritage Auctions • Transactional notice</p>
         </div>
       `
     })

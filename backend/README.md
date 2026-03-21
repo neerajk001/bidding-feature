@@ -44,10 +44,12 @@ Get these from: [Supabase Dashboard](https://app.supabase.com/) → Your Project
 #### Email Service (Resend)
 ```env
 RESEND_API_KEY=re_your_api_key
-RESEND_FROM_EMAIL=onboarding@resend.dev
+RESEND_FROM_EMAIL=no-reply@yourdomain.com
+RESEND_REPLY_TO_EMAIL=support@yourdomain.com
 ```
 
 Get API key from: [Resend Dashboard](https://resend.com/api-keys)
+Use a verified sending domain for `RESEND_FROM_EMAIL` to improve inbox delivery.
 
 #### Admin Authentication
 ```env

@@ -49,6 +49,7 @@ export const env = {
   // Resend (optional)
   resendApiKey: process.env.RESEND_API_KEY || '',
   resendFromEmail: process.env.RESEND_FROM_EMAIL || '',
+  resendReplyToEmail: process.env.RESEND_REPLY_TO_EMAIL || '',
   
   // API
   apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
