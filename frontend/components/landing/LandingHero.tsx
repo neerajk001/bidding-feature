@@ -500,7 +500,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                                                     />
                                                 </div>
                                                 <Link href={`/auction/${effectiveDetail.id}`} className="w-full px-6 py-3 rounded-xl bg-primary text-cream font-bold text-base hover:bg-primary/90 transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 text-center transform duration-300 font-display tracking-wide border border-transparent hover:border-secondary">
-                                                    Place Bid via App
+                                                    Place Bid Online
                                                 </Link>
                                             </div>
                                         ) : (

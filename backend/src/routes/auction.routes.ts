@@ -37,7 +37,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, min_increment, base_price, available_sizes')
+      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, gallery_images, min_increment, base_price, available_sizes')
       .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
 

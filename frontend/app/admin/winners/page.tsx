@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { fetchApi } from '@/lib/api'
 
@@ -36,7 +36,6 @@ interface Winner {
   dispatched_at?: string | null
   escalation_done?: boolean
   winner_email_sent_at?: string | null
-  claim_token?: string | null
   bidder: {
     name: string
     phone: string
@@ -50,57 +49,96 @@ interface Winner {
   }
 }
 
-interface AuctionGroup {
-  auction_id: string
-  auction: {
-    title: string
-    product_id: string
-    bidding_start_time?: string | null
-    bidding_end_time?: string | null
-  }
-  winners: Winner[]
+type PaymentFilter = 'all' | 'pending' | 'completed' | 'forfeited'
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return '-'
+  return d.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
-const formatShippingAddressLines = (address?: ShippingAddress | null): string[] => {
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(value)
+}
+
+function paymentStatusLabel(status?: string | null): string {
+  if (!status) return 'pending'
+  return status
+}
+
+function paymentStatusClass(status?: string | null): string {
+  const normalized = paymentStatusLabel(status)
+  if (normalized === 'completed') return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+  if (normalized === 'overdue') return 'bg-amber-100 text-amber-800 border-amber-200'
+  if (normalized === 'forfeited') return 'bg-rose-100 text-rose-800 border-rose-200'
+  return 'bg-indigo-100 text-indigo-800 border-indigo-200'
+}
+
+function toPaymentFilterBucket(status?: string | null): PaymentFilter {
+  if (status === 'completed') return 'completed'
+  if (status === 'forfeited') return 'forfeited'
+  return 'pending'
+}
+
+function formatShippingAddressLines(address?: ShippingAddress | null): string[] {
   if (!address) return []
-  const cityLine = [address.city, address.state, address.postal_code].filter(Boolean).join(', ')
-  return [address.full_name, address.phone, address.line1, address.line2, cityLine, address.country].filter(Boolean) as string[]
-}
-
-const formatShippingAddressSingleLine = (address?: ShippingAddress | null): string => {
-  const lines = formatShippingAddressLines(address)
-  return lines.length > 0 ? lines.join(' | ') : '-'
+  const lineCity = [address.city, address.state, address.postal_code].filter(Boolean).join(', ')
+  return [address.full_name, address.phone, address.line1, address.line2, lineCity, address.country].filter(Boolean) as string[]
 }
 
 export default function WinnersPage() {
   const [winners, setWinners] = useState<Winner[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [auctionFilter, setAuctionFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [actioningId, setActioningId] = useState<string | null>(null)
   const [resendingId, setResendingId] = useState<string | null>(null)
-  const [resendMsg, setResendMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null)
-  const [expandedAuctionId, setExpandedAuctionId] = useState<string | null>(null)
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'paid' | 'verified'>('all')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [openActionId, setOpenActionId] = useState<string | null>(null)
+  const [selectedWinner, setSelectedWinner] = useState<Winner | null>(null)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     fetchWinners()
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3200)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  useEffect(() => {
+    const closeMenu = () => setOpenActionId(null)
+    document.addEventListener('click', closeMenu)
+    return () => document.removeEventListener('click', closeMenu)
   }, [])
 
   const fetchWinners = async () => {
     try {
       setLoading(true)
       const { ok, data } = await fetchApi<{ winners?: Winner[]; error?: string }>('/api/admin/winners')
-
-      if (!ok) {
-        throw new Error(data.error || 'Failed to fetch winners')
-      }
-
+      if (!ok) throw new Error(data.error || 'Failed to fetch winners')
       setWinners(data.winners || [])
       setError('')
     } catch (err: unknown) {
-      console.error('Error fetching winners:', err)
-      setError(err instanceof Error ? err.message : String(err))
+      const text = err instanceof Error ? err.message : String(err)
+      setError(text)
+      setToast({ type: 'error', text })
     } finally {
       setLoading(false)
     }
@@ -114,443 +152,406 @@ export default function WinnersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       })
-      if (!ok) throw new Error(data.error || 'Failed to update')
+      if (!ok) throw new Error(data.error || 'Failed to update winner')
       if (data.winner) {
         setWinners((prev) => prev.map((w) => (w.id === id ? { ...w, ...data.winner } : w)))
       } else {
         await fetchWinners()
       }
+      setToast({ type: 'success', text: 'Winner updated successfully.' })
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err))
+      const text = err instanceof Error ? err.message : String(err)
+      setError(text)
+      setToast({ type: 'error', text })
     } finally {
       setActioningId(null)
+      setOpenActionId(null)
     }
   }
 
   const resendWinnerEmail = async (winner: Winner) => {
     setResendingId(winner.id)
-    setResendMsg(null)
     try {
       const { ok, data } = await fetchApi<{ ok?: boolean; error?: string }>(`/api/admin/winners/${winner.id}/resend-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       })
-      if (!ok) throw new Error((data as { error?: string }).error || 'Failed to resend')
-      setResendMsg({ id: winner.id, text: `Email resent to ${winner.bidder.email || 'bidder'}`, ok: true })
+      if (!ok) throw new Error(data.error || 'Failed to send email')
+      setToast({ type: 'success', text: `Email sent to ${winner.bidder.email || 'bidder'}.` })
       await fetchWinners()
     } catch (err: unknown) {
-      setResendMsg({ id: winner.id, text: err instanceof Error ? err.message : String(err), ok: false })
+      const text = err instanceof Error ? err.message : String(err)
+      setToast({ type: 'error', text })
     } finally {
       setResendingId(null)
+      setOpenActionId(null)
     }
   }
 
-  // Group winners by auction
-  const filteredWinners = winners
-    .filter(w => {
-      if (paymentFilter === 'all') return true
-      if (paymentFilter === 'pending') return !w.payment_status || w.payment_status === 'pending'
-      if (paymentFilter === 'paid') return w.payment_status === 'paid' && !w.payment_verified_by_admin
-      if (paymentFilter === 'verified') return w.payment_verified_by_admin
-      return true
+  const openPaymentProof = (winner: Winner) => {
+    if (winner.payment_proof_url) {
+      window.open(winner.payment_proof_url, '_blank', 'noopener,noreferrer')
+      setOpenActionId(null)
+      return
+    }
+    setSelectedWinner(winner)
+    setOpenActionId(null)
+  }
+
+  const counts = useMemo(() => {
+    const buckets: Record<PaymentFilter, number> = {
+      all: winners.length,
+      pending: 0,
+      completed: 0,
+      forfeited: 0
+    }
+    winners.forEach((winner) => {
+      const bucket = toPaymentFilterBucket(winner.payment_status)
+      buckets[bucket] += 1
     })
-    .filter(w => {
-      if (!searchQuery.trim()) return true
-      const query = searchQuery.toLowerCase()
-      const shippingText = formatShippingAddressSingleLine(w.shipping_address).toLowerCase()
+    return buckets
+  }, [winners])
+
+  const auctionOptions = useMemo(() => {
+    const unique = new Set<string>()
+    winners.forEach((winner) => {
+      if (winner.auction?.title) unique.add(winner.auction.title)
+    })
+    return Array.from(unique).sort((a, b) => a.localeCompare(b))
+  }, [winners])
+
+  const filteredWinners = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase()
+    return winners.filter((winner) => {
+      const bucket = toPaymentFilterBucket(winner.payment_status)
+      if (paymentFilter !== 'all' && bucket !== paymentFilter) return false
+      if (auctionFilter !== 'all' && winner.auction.title !== auctionFilter) return false
+
+      const wonDate = new Date(winner.created_at)
+      if (dateFrom) {
+        const fromDate = new Date(`${dateFrom}T00:00:00`)
+        if (!Number.isNaN(fromDate.getTime()) && wonDate < fromDate) return false
+      }
+      if (dateTo) {
+        const toDate = new Date(`${dateTo}T23:59:59`)
+        if (!Number.isNaN(toDate.getTime()) && wonDate > toDate) return false
+      }
+
+      if (!normalizedSearch) return true
+
+      const shippingText = formatShippingAddressLines(winner.shipping_address).join(' ').toLowerCase()
       return (
-        w.bidder.name.toLowerCase().includes(query) ||
-        w.bidder.phone.includes(query) ||
-        w.bidder.email?.toLowerCase().includes(query) ||
-        w.auction.title.toLowerCase().includes(query) ||
-        shippingText.includes(query)
+        winner.bidder.name.toLowerCase().includes(normalizedSearch) ||
+        winner.bidder.phone.toLowerCase().includes(normalizedSearch) ||
+        winner.bidder.email?.toLowerCase().includes(normalizedSearch) ||
+        winner.auction.title.toLowerCase().includes(normalizedSearch) ||
+        shippingText.includes(normalizedSearch)
       )
     })
+  }, [auctionFilter, dateFrom, dateTo, paymentFilter, searchQuery, winners])
 
-  const exportToCSV = () => {
-    const headers = [
-      'Auction',
-      'Winner Name',
-      'Phone',
-      'Email',
-      'Shipping Address',
-      'Address Submitted At',
-      'Winning Amount',
-      'Size',
-      'Payment Status',
-      'Dispatched',
-      'Email Sent',
-      'Created At'
-    ]
-    const rows = filteredWinners.map(w => [
-      w.auction.title,
-      w.bidder.name,
-      w.bidder.phone,
-      w.bidder.email || '-',
-      formatShippingAddressSingleLine(w.shipping_address),
-      w.shipping_address_submitted_at ? new Date(w.shipping_address_submitted_at).toLocaleString('en-IN') : '-',
-      `₹${w.winning_amount}`,
-      w.size || '-',
-      w.payment_verified_by_admin ? 'Verified' : (w.payment_status || 'Pending'),
-      w.dispatched_at ? 'Yes' : 'No',
-      w.winner_email_sent_at ? 'Yes' : 'No',
-      new Date(w.created_at).toLocaleString()
-    ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `winners-${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-  }
-
-  const groupedWinners = filteredWinners.reduce<AuctionGroup[]>((acc, winner) => {
-    let group = acc.find(g => g.auction_id === winner.auction_id)
-    if (!group) {
-      group = {
-        auction_id: winner.auction_id,
-        auction: winner.auction,
-        winners: []
-      }
-      acc.push(group)
-    }
-    group.winners.push(winner)
-    return acc
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="admin-container">
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}>
-          <div style={{ fontSize: '1.2rem', color: '#666' }}>Loading winners...</div>
-        </div>
-      </div>
-    )
-  }
+  const tabs: Array<{ key: PaymentFilter; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Payment Pending' },
+    { key: 'completed', label: 'Completed' },
+    { key: 'forfeited', label: 'Forfeited' }
+  ]
 
   return (
-    <div className="admin-container" style={{ paddingBottom: '4rem' }}>
-      <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h1 className="admin-title">Auction Winners</h1>
-          <Link href="/admin" className="admin-btn-secondary">
-            Back to Dashboard
-          </Link>
+    <div className="space-y-6 pb-10">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50">
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm shadow-lg ${
+              toast.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
+          >
+            {toast.text}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Winners</h1>
+          <p className="text-sm text-slate-500 mt-1">Track payment completion, dispatch, and communications.</p>
+        </div>
+        <Link
+          href="/admin"
+          className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((tab) => {
+            const isActive = paymentFilter === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setPaymentFilter(tab.key)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+                  isActive
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {counts[tab.key]}
+                </span>
+              </button>
+            )
+          })}
         </div>
 
-        {error && (
-          <div className="admin-alert admin-alert-error">
-            {error}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search winner, phone, email, auction..."
+            className="xl:col-span-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+          />
+          <select
+            value={auctionFilter}
+            onChange={(event) => setAuctionFilter(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-300"
+          >
+            <option value="all">All auctions</option>
+            {auctionOptions.map((auctionTitle) => (
+              <option key={auctionTitle} value={auctionTitle}>
+                {auctionTitle}
+              </option>
+            ))}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+              aria-label="From date"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+              aria-label="To date"
+            />
           </div>
-        )}
+        </div>
+      </section>
 
-        {!error && winners.length === 0 && (
-          <div className="admin-card" style={{ textAlign: 'center', padding: '3rem' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏆</div>
-            <h3 style={{ marginBottom: '0.5rem', color: '#333' }}>No Winners Yet</h3>
-            <p style={{ color: '#666' }}>Winners will appear here once auctions end and winners are determined.</p>
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-5 space-y-3">
+            {[1, 2, 3, 4, 5].map((row) => (
+              <div key={row} className="h-11 rounded-lg bg-slate-100 animate-pulse" />
+            ))}
           </div>
-        )}
-
-        {groupedWinners.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {/* Controls */}
-            <div className="admin-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#333' }}>
-                  Total Winners: {filteredWinners.length} / {winners.length}
-                </h2>
-                <button
-                  onClick={exportToCSV}
-                  className="admin-btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  Export CSV
-                </button>
-              </div>
-
-              {/* Payment Status Filter Tabs */}
-              <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
-                {[
-                  { key: 'all', label: 'All', count: winners.length },
-                  { key: 'pending', label: 'Payment Pending', count: winners.filter(w => !w.payment_status || w.payment_status === 'pending').length },
-                  { key: 'paid', label: 'Paid (Unverified)', count: winners.filter(w => w.payment_status === 'paid' && !w.payment_verified_by_admin).length },
-                  { key: 'verified', label: 'Verified', count: winners.filter(w => w.payment_verified_by_admin).length },
-                ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => setPaymentFilter(tab.key as 'all' | 'pending' | 'paid' | 'verified')}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.875rem',
-                      fontWeight: '600',
-                      borderBottom: paymentFilter === tab.key ? '2px solid #FF6B35' : '2px solid transparent',
-                      color: paymentFilter === tab.key ? '#FF6B35' : '#666',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {tab.label} ({tab.count})
-                  </button>
-                ))}
-              </div>
-
-              {/* Search */}
-              <input
-                type="text"
-                placeholder="Search by winner name, phone, email, or auction..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="admin-input"
-              />
-            </div>
-
-            {filteredWinners.length === 0 ? (
-              <div className="admin-card" style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
-                No winners match your filter criteria.
-              </div>
-            ) : (
-              <div>
-
-            {groupedWinners.map((group) => {
-              const isExpanded = expandedAuctionId === group.auction_id
-
-              return (
-                <div key={group.auction_id} className="admin-card" style={{ padding: 0, overflow: 'hidden' }}>
-                  {/* Auction Header Card */}
-                  <div style={{ padding: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '1.5rem', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderBottom: isExpanded ? '1px solid #edf2f7' : 'none' }}>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <Link href={`/admin/auctions/${group.auction_id}`} className="hover:underline">
-                        <h3 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#1e293b' }}>
-                          {group.auction.title}
-                        </h3>
-                      </Link>
-                      <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                        Product ID: {group.auction.product_id}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                        <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.05em' }}>Start Date</span>
-                        <span style={{ fontSize: '0.9rem', color: '#334155', fontWeight: '500' }}>
-                          {group.auction.bidding_start_time ? new Date(group.auction.bidding_start_time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown'}
-                        </span>
+        ) : filteredWinners.length === 0 ? (
+          <div className="p-10 text-center">
+            <h3 className="text-lg font-medium text-slate-900">No winners found</h3>
+            <p className="text-sm text-slate-500 mt-2">
+              Try changing filters or search terms.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-fixed">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr className="text-left text-xs font-semibold tracking-wide uppercase text-slate-500">
+                  <th className="px-4 py-3 w-[28%]">Winner</th>
+                  <th className="px-4 py-3 w-[15%]">Phone</th>
+                  <th className="px-4 py-3 w-[16%]">Winning Amount</th>
+                  <th className="px-4 py-3 w-[14%]">Payment</th>
+                  <th className="px-4 py-3 w-[12%]">Dispatch</th>
+                  <th className="px-4 py-3 w-[15%]">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredWinners.map((winner) => (
+                  <tr key={winner.id} className="align-middle">
+                    <td className="px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-900 truncate">{winner.bidder.name}</p>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">{winner.bidder.email || '-'}</p>
+                        <p className="text-xs text-slate-400 truncate mt-1">
+                          {winner.auction.title} • {formatDateTime(winner.created_at)}
+                        </p>
                       </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                        <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.05em' }}>End Date</span>
-                        <span style={{ fontSize: '0.9rem', color: '#334155', fontWeight: '500' }}>
-                          {group.auction.bidding_end_time ? new Date(group.auction.bidding_end_time).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown'}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                        <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.05em' }}>Winners</span>
-                        <span style={{ fontSize: '0.9rem', color: '#334155', fontWeight: '700' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#e0e7ff', color: '#4f46e5', borderRadius: '999px', minWidth: '1.5rem', height: '1.5rem', padding: '0 0.4rem', fontSize: '0.8rem' }}>
-                            {group.winners.length}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div style={{ marginLeft: 'auto' }}>
-                      <button
-                        onClick={() => setExpandedAuctionId(isExpanded ? null : group.auction_id)}
-                        className="admin-btn-primary"
-                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.25rem', fontSize: '0.875rem' }}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700 truncate">{winner.bidder.phone}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-base font-semibold text-rose-700">{formatMoney(winner.winning_amount)}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${paymentStatusClass(
+                          winner.payment_status
+                        )}`}
                       >
-                        {isExpanded ? 'Hide Winners' : 'View Winners'}
-                        <svg style={{ width: '1rem', height: '1rem', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                      </button>
-                    </div>
+                        {paymentStatusLabel(winner.payment_status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {winner.dispatched_at ? (
+                        <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                          Dispatched
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="relative" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          onClick={() => setOpenActionId((prev) => (prev === winner.id ? null : winner.id))}
+                          disabled={actioningId === winner.id || resendingId === winner.id}
+                        >
+                          {actioningId === winner.id || resendingId === winner.id ? 'Working...' : 'Actions'}
+                        </button>
 
+                        {openActionId === winner.id && (
+                          <div className="absolute right-0 z-20 mt-2 w-52 rounded-lg border border-slate-200 bg-white shadow-lg py-1">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => {
+                                setSelectedWinner(winner)
+                                setOpenActionId(null)
+                              }}
+                            >
+                              View Details
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:text-slate-400"
+                              onClick={() => resendWinnerEmail(winner)}
+                              disabled={!winner.bidder.email || resendingId === winner.id}
+                            >
+                              Send Email
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:text-slate-400"
+                              onClick={() => patchWinner(winner.id, { dispatched_at: true })}
+                              disabled={winner.payment_status !== 'completed' || Boolean(winner.dispatched_at)}
+                            >
+                              Mark Dispatched
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                              onClick={() => openPaymentProof(winner)}
+                            >
+                              View Payment Proof
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {selectedWinner && (
+        <div className="fixed inset-0 z-40">
+          <div
+            className="absolute inset-0 bg-slate-900/30"
+            onClick={() => setSelectedWinner(null)}
+          />
+          <aside className="absolute right-0 top-0 h-full w-full max-w-md bg-white border-l border-slate-200 shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h2 className="text-base font-semibold text-slate-900">Winner Details</h2>
+              <button
+                type="button"
+                onClick={() => setSelectedWinner(null)}
+                className="rounded-md border border-slate-200 px-2.5 py-1 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto h-[calc(100%-65px)] space-y-5">
+              <section>
+                <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">Winner</h3>
+                <div className="space-y-1 text-sm text-slate-700">
+                  <p><span className="font-medium text-slate-900">Name:</span> {selectedWinner.bidder.name}</p>
+                  <p><span className="font-medium text-slate-900">Phone:</span> {selectedWinner.bidder.phone}</p>
+                  <p className="truncate"><span className="font-medium text-slate-900">Email:</span> {selectedWinner.bidder.email || '-'}</p>
+                  <p><span className="font-medium text-slate-900">Auction:</span> {selectedWinner.auction.title}</p>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">Shipping Address</h3>
+                {formatShippingAddressLines(selectedWinner.shipping_address).length > 0 ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+                    {formatShippingAddressLines(selectedWinner.shipping_address).map((line, idx) => (
+                      <p key={`${selectedWinner.id}-shipping-${idx}`}>{line}</p>
+                    ))}
+                    <p className="text-xs text-slate-500 mt-2">
+                      Submitted: {formatDateTime(selectedWinner.shipping_address_submitted_at)}
+                    </p>
                   </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Address not submitted.</p>
+                )}
+              </section>
 
-                  {/* Expanded Winners Table */}
-                  {isExpanded && (
-                    <div style={{ padding: '1rem', overflowX: 'auto', background: '#fff' }}>
-                      <table className="admin-table" style={{ margin: 0 }}>
-                        <thead style={{ background: '#f1f5f9' }}>
-                          <tr>
-                            <th>Winner Name</th>
-                            <th>Phone</th>
-                            <th>Email</th>
-                            <th>Shipping Address</th>
-                            <th>Size</th>
-                            <th>Winning Amount</th>
-                            <th>Payment Status</th>
-                            <th>Action / Proof</th>
-                            <th>Admin Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.winners.map((winner) => (
-                            <tr key={winner.id}>
-                              <td>
-                                <div style={{ fontWeight: '600', color: '#333' }}>
-                                  {winner.bidder.name}
-                                  {winner.escalation_done && <span style={{ marginLeft: 4, fontSize: '0.7rem', color: '#666' }}>(escalated)</span>}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                                  Won: {new Date(winner.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              </td>
-                              <td>{winner.bidder.phone}</td>
-                              <td>{winner.bidder.email || '-'}</td>
-                              <td style={{ maxWidth: '220px', fontSize: '0.8rem' }}>
-                                {formatShippingAddressLines(winner.shipping_address).length > 0 ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                    {formatShippingAddressLines(winner.shipping_address).map((line, idx) => (
-                                      <div key={`${winner.id}-addr-${idx}`} style={{ color: '#334155' }}>
-                                        {line}
-                                      </div>
-                                    ))}
-                                    {winner.shipping_address_submitted_at && (
-                                      <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.7rem' }}>
-                                        Submitted: {new Date(winner.shipping_address_submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span style={{ color: '#94a3b8' }}>Not submitted</span>
-                                )}
-                              </td>
-                              <td>{winner.size ? <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 'bold' }}>{winner.size}</span> : '—'}</td>
-                              <td>
-                                <div style={{ fontWeight: '700', color: '#FF6B35', fontSize: '1rem' }}>
-                                  ₹{winner.winning_amount.toLocaleString()}
-                                </div>
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-start' }}>
-                                  <span style={{
-                                    padding: '2px 8px',
-                                    borderRadius: 4,
-                                    fontSize: '0.8rem',
-                                    fontWeight: 600,
-                                    background: winner.payment_status === 'completed' ? '#d1fae5' : winner.payment_status === 'forfeited' ? '#fee2e2' : winner.payment_status === 'overdue' ? '#fef3c7' : '#e0e7ff',
-                                    color: winner.payment_status === 'completed' ? '#065f46' : winner.payment_status === 'forfeited' ? '#991b1b' : winner.payment_status === 'overdue' ? '#92400e' : '#3730a3'
-                                  }}>
-                                    {winner.payment_status || 'pending'}
-                                  </span>
-                                  {winner.payment_due_at && winner.payment_status !== 'completed' && winner.payment_status !== 'forfeited' && (
-                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                                      Due: {new Date(winner.payment_due_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td style={{ maxWidth: '200px', fontSize: '0.8rem' }}>
-                                {winner.razorpay_payment_id && <div style={{ marginBottom: '2px' }} title={winner.razorpay_payment_id}>Razorpay: {winner.razorpay_payment_id.slice(0, 15)}…</div>}
-                                {winner.payment_proof_note && <div style={{ marginBottom: '2px', fontStyle: 'italic', color: '#475569' }} title={winner.payment_proof_note}>&quot;{winner.payment_proof_note.slice(0, 30)}{winner.payment_proof_note.length > 30 ? '…' : ''}&quot;</div>}
-                                {winner.payment_proof_url && <div><a href={winner.payment_proof_url} target="_blank" rel="noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>View Proof</a></div>}
-                                {winner.instagram_handle && <div style={{ marginTop: 2 }}>@{winner.instagram_handle.replace(/^@/, '')}</div>}
-                                {!winner.razorpay_payment_id && !winner.payment_proof_note && !winner.payment_proof_url && !winner.instagram_handle && <span style={{ color: '#94a3b8' }}>No proof added</span>}
-                                {winner.dispatched_at && (
-                                  <div style={{ marginTop: '0.4rem', color: '#10b981', fontWeight: 'bold' }}>
-                                    ✓ Dispatched {new Date(winner.dispatched_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                                  </div>
-                                )}
-                              </td>
-                              <td>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minWidth: '160px' }}>
-                                  {/* Mark Paid button */}
-                                  {winner.payment_status === 'pending' || winner.payment_status === 'overdue' ? (
-                                    <button
-                                      type="button"
-                                      className="admin-btn-primary"
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                      disabled={actioningId === winner.id}
-                                      onClick={() => patchWinner(winner.id, { payment_status: 'completed' })}
-                                    >
-                                      {actioningId === winner.id ? '…' : 'Mark paid'}
-                                    </button>
-                                  ) : null}
-
-                                  {/* Mark Dispatched button */}
-                                  {winner.payment_status === 'completed' && !winner.dispatched_at ? (
-                                    <button
-                                      type="button"
-                                      className="admin-btn-secondary"
-                                      style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                                      disabled={actioningId === winner.id}
-                                      onClick={() => patchWinner(winner.id, { dispatched_at: true })}
-                                    >
-                                      {actioningId === winner.id ? '…' : 'Mark dispatched'}
-                                    </button>
-                                  ) : null}
-
-                                  {/* Resend Email button */}
-                                  {winner.bidder.email ? (
-                                    <button
-                                      type="button"
-                                      style={{
-                                        padding: '0.35rem 0.75rem',
-                                        fontSize: '0.8rem',
-                                        background: winner.winner_email_sent_at ? '#f3f4f6' : '#6366f1',
-                                        color: winner.winner_email_sent_at ? '#6b7280' : '#fff',
-                                        border: 'none',
-                                        borderRadius: 6,
-                                        cursor: resendingId === winner.id ? 'not-allowed' : 'pointer',
-                                        fontWeight: 600,
-                                        width: '100%',
-                                        textAlign: 'center'
-                                      }}
-                                      disabled={resendingId === winner.id}
-                                      onClick={() => resendWinnerEmail(winner)}
-                                      title={winner.winner_email_sent_at
-                                        ? `Email sent at ${new Date(winner.winner_email_sent_at).toLocaleString('en-IN')} — click to resend`
-                                        : `Send winner email to ${winner.bidder.email}`}
-                                    >
-                                      {resendingId === winner.id ? '…' : winner.winner_email_sent_at ? '✉ Resend Email' : '✉ Send Email'}
-                                    </button>
-                                  ) : (
-                                    <span style={{ fontSize: '0.75rem', color: '#ef4444', padding: '0.4rem 0', width: '100%', textAlign: 'center', background: '#fef2f2', borderRadius: '4px' }}>No email saved</span>
-                                  )}
-
-                                  {resendMsg?.id === winner.id && (
-                                    <div style={{
-                                      width: '100%',
-                                      marginTop: 4,
-                                      fontSize: '0.7rem',
-                                      color: resendMsg.ok ? '#16a34a' : '#dc2626',
-                                      fontWeight: 500,
-                                      textAlign: 'center'
-                                    }}>
-                                      {resendMsg.text}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+              <section>
+                <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">Payment</h3>
+                <div className="rounded-lg border border-slate-200 p-3 text-sm space-y-2">
+                  <p><span className="font-medium text-slate-900">Winning Amount:</span> {formatMoney(selectedWinner.winning_amount)}</p>
+                  <p><span className="font-medium text-slate-900">Status:</span> {paymentStatusLabel(selectedWinner.payment_status)}</p>
+                  <p><span className="font-medium text-slate-900">Due:</span> {formatDateTime(selectedWinner.payment_due_at)}</p>
+                  <p><span className="font-medium text-slate-900">Completed:</span> {formatDateTime(selectedWinner.payment_completed_at)}</p>
+                  <p className="truncate"><span className="font-medium text-slate-900">Razorpay Order:</span> {selectedWinner.razorpay_order_id || '-'}</p>
+                  <p className="truncate"><span className="font-medium text-slate-900">Razorpay Payment:</span> {selectedWinner.razorpay_payment_id || '-'}</p>
+                  <p className="break-words"><span className="font-medium text-slate-900">Payment Note:</span> {selectedWinner.payment_proof_note || '-'}</p>
+                  {selectedWinner.payment_proof_url ? (
+                    <a
+                      href={selectedWinner.payment_proof_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                    >
+                      Open payment proof
+                    </a>
+                  ) : (
+                    <p><span className="font-medium text-slate-900">Proof URL:</span> -</p>
                   )}
                 </div>
-              )
-            })}
+              </section>
             </div>
-            )}
-          </div>
-        )}
-      </div>
+          </aside>
+        </div>
+      )}
     </div>
   )
 }
