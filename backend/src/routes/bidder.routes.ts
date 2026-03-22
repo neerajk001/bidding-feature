@@ -22,7 +22,7 @@ function getAuctionPhase(nowTs: number, start: string | null | undefined, end: s
 router.post('/register-bidder', async (req: Request, res: Response) => {
   try {
     const body = req.body || {}
-    const { auction_id, name, phone, email } = body
+    const { auction_id, name, phone, email, user_id } = body
 
     if (!auction_id || !name || !phone || !email) {
       return res.status(400).json({ error: 'All fields are required: auction_id, name, phone, email' })
@@ -50,34 +50,45 @@ router.post('/register-bidder', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Registration period has ended' })
     }
 
-    let userId = null
-    let userVerified = false
-
     const normalizedEmail = email.toLowerCase().trim()
+    const normalizedUserId = typeof user_id === 'string' ? user_id.trim() : ''
+    let userId: string | null = null
 
-    const { data: existingUser } = await supabaseAdmin
-      .from('users')
-      .select('id, email_verified')
-      .eq('email', normalizedEmail)
-      .maybeSingle()
+    // Extra verification guard: if caller sends user_id from verification flow,
+    // enforce that email belongs to the same verified user.
+    if (normalizedUserId) {
+      const { data: matchedUser } = await supabaseAdmin
+        .from('users')
+        .select('id, email, email_verified')
+        .eq('id', normalizedUserId)
+        .eq('email', normalizedEmail)
+        .maybeSingle()
 
-    if (existingUser) {
-      userId = existingUser.id
-      userVerified = existingUser.email_verified || false
+      if (!matchedUser || !matchedUser.email_verified) {
+        return res.status(403).json({
+          error: 'Email verification mismatch',
+          requires_verification: true,
+          message: 'Please verify your email again before registering.'
+        })
+      }
 
-      if (!userVerified) {
+      userId = matchedUser.id
+    } else {
+      const { data: existingUser } = await supabaseAdmin
+        .from('users')
+        .select('id, email_verified')
+        .eq('email', normalizedEmail)
+        .maybeSingle()
+
+      if (!existingUser || !existingUser.email_verified) {
         return res.status(403).json({
           error: 'Email not verified',
           requires_verification: true,
           message: 'Please verify your email address before registering for auctions'
         })
       }
-    } else {
-      return res.status(403).json({
-        error: 'Email not verified',
-        requires_verification: true,
-        message: 'Please verify your email address before registering for auctions'
-      })
+
+      userId = existingUser.id
     }
 
     let query = supabaseAdmin

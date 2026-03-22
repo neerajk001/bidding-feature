@@ -143,6 +143,8 @@ create table public.winners (
   payment_proof_url text null,
   payment_verified_by_admin boolean null default false,
   instagram_handle text null,
+  shipping_address jsonb null,
+  shipping_address_submitted_at timestamp with time zone null,
   dispatched_at timestamp with time zone null,
   escalation_done boolean null default false,
   claim_token text null,

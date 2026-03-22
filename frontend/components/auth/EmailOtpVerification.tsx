@@ -7,6 +7,12 @@ interface EmailOtpVerificationProps {
   auctionId: string
   onVerificationComplete: (userId: string, userInfo: { name: string; email: string; phone?: string }) => void
   onError?: (error: string) => void
+  initialValues?: {
+    name?: string
+    email?: string
+    phone?: string
+  }
+  requireOtpForVerifiedUsers?: boolean
 }
 
 interface SendEmailOtpResponse {
@@ -34,11 +40,13 @@ interface VerifyEmailOtpResponse {
 export default function EmailOtpVerification({
   auctionId: _auctionId,
   onVerificationComplete,
-  onError
+  onError,
+  initialValues,
+  requireOtpForVerifiedUsers = false
 }: EmailOtpVerificationProps) {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
+  const [name, setName] = useState(initialValues?.name || '')
+  const [email, setEmail] = useState(initialValues?.email || '')
+  const [phone, setPhone] = useState(initialValues?.phone || '')
   const [otp, setOtp] = useState('')
   const [step, setStep] = useState<'info' | 'otp'>('info')
   const [loading, setLoading] = useState(false)
@@ -53,6 +61,14 @@ export default function EmailOtpVerification({
       return () => clearTimeout(timer)
     }
   }, [cooldown])
+
+  // Keep form prefilled when parent updates saved values, but do not override active OTP step.
+  useEffect(() => {
+    if (step !== 'info') return
+    setName(initialValues?.name || '')
+    setEmail(initialValues?.email || '')
+    setPhone(initialValues?.phone || '')
+  }, [initialValues?.name, initialValues?.email, initialValues?.phone, step])
 
   const sendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,11 +94,19 @@ export default function EmailOtpVerification({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim(),
-          name: name.trim()
+          name: name.trim(),
+          force_otp: requireOtpForVerifiedUsers
         })
       })
 
       if (checkData.verified) {
+        if (requireOtpForVerifiedUsers) {
+          setStep('otp')
+          setSuccess(`Verification code sent to ${email.trim()}. Please check your inbox.`)
+          setCooldown(60)
+          return
+        }
+
         if (!checkData.user_id) {
           throw new Error('Verified account found but user ID is missing')
         }

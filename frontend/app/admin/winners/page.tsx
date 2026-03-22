@@ -4,6 +4,17 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { fetchApi } from '@/lib/api'
 
+interface ShippingAddress {
+  full_name?: string
+  phone?: string
+  line1?: string
+  line2?: string
+  city?: string
+  state?: string
+  postal_code?: string
+  country?: string
+}
+
 interface Winner {
   id: string
   auction_id: string
@@ -20,6 +31,8 @@ interface Winner {
   razorpay_order_id?: string | null
   razorpay_payment_id?: string | null
   instagram_handle?: string | null
+  shipping_address?: ShippingAddress | null
+  shipping_address_submitted_at?: string | null
   dispatched_at?: string | null
   escalation_done?: boolean
   winner_email_sent_at?: string | null
@@ -46,6 +59,17 @@ interface AuctionGroup {
     bidding_end_time?: string | null
   }
   winners: Winner[]
+}
+
+const formatShippingAddressLines = (address?: ShippingAddress | null): string[] => {
+  if (!address) return []
+  const cityLine = [address.city, address.state, address.postal_code].filter(Boolean).join(', ')
+  return [address.full_name, address.phone, address.line1, address.line2, cityLine, address.country].filter(Boolean) as string[]
+}
+
+const formatShippingAddressSingleLine = (address?: ShippingAddress | null): string => {
+  const lines = formatShippingAddressLines(address)
+  return lines.length > 0 ? lines.join(' | ') : '-'
 }
 
 export default function WinnersPage() {
@@ -133,21 +157,38 @@ export default function WinnersPage() {
     .filter(w => {
       if (!searchQuery.trim()) return true
       const query = searchQuery.toLowerCase()
+      const shippingText = formatShippingAddressSingleLine(w.shipping_address).toLowerCase()
       return (
         w.bidder.name.toLowerCase().includes(query) ||
         w.bidder.phone.includes(query) ||
         w.bidder.email?.toLowerCase().includes(query) ||
-        w.auction.title.toLowerCase().includes(query)
+        w.auction.title.toLowerCase().includes(query) ||
+        shippingText.includes(query)
       )
     })
 
   const exportToCSV = () => {
-    const headers = ['Auction', 'Winner Name', 'Phone', 'Email', 'Winning Amount', 'Size', 'Payment Status', 'Dispatched', 'Email Sent', 'Created At']
+    const headers = [
+      'Auction',
+      'Winner Name',
+      'Phone',
+      'Email',
+      'Shipping Address',
+      'Address Submitted At',
+      'Winning Amount',
+      'Size',
+      'Payment Status',
+      'Dispatched',
+      'Email Sent',
+      'Created At'
+    ]
     const rows = filteredWinners.map(w => [
       w.auction.title,
       w.bidder.name,
       w.bidder.phone,
       w.bidder.email || '-',
+      formatShippingAddressSingleLine(w.shipping_address),
+      w.shipping_address_submitted_at ? new Date(w.shipping_address_submitted_at).toLocaleString('en-IN') : '-',
       `₹${w.winning_amount}`,
       w.size || '-',
       w.payment_verified_by_admin ? 'Verified' : (w.payment_status || 'Pending'),
@@ -349,6 +390,7 @@ export default function WinnersPage() {
                             <th>Winner Name</th>
                             <th>Phone</th>
                             <th>Email</th>
+                            <th>Shipping Address</th>
                             <th>Size</th>
                             <th>Winning Amount</th>
                             <th>Payment Status</th>
@@ -370,6 +412,24 @@ export default function WinnersPage() {
                               </td>
                               <td>{winner.bidder.phone}</td>
                               <td>{winner.bidder.email || '-'}</td>
+                              <td style={{ maxWidth: '220px', fontSize: '0.8rem' }}>
+                                {formatShippingAddressLines(winner.shipping_address).length > 0 ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                    {formatShippingAddressLines(winner.shipping_address).map((line, idx) => (
+                                      <div key={`${winner.id}-addr-${idx}`} style={{ color: '#334155' }}>
+                                        {line}
+                                      </div>
+                                    ))}
+                                    {winner.shipping_address_submitted_at && (
+                                      <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.7rem' }}>
+                                        Submitted: {new Date(winner.shipping_address_submitted_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>Not submitted</span>
+                                )}
+                              </td>
                               <td>{winner.size ? <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 'bold' }}>{winner.size}</span> : '—'}</td>
                               <td>
                                 <div style={{ fontWeight: '700', color: '#FF6B35', fontSize: '1rem' }}>

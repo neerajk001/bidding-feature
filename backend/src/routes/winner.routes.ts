@@ -7,6 +7,56 @@ import { markWinnerPaidRazorpay } from '../services/payment.service'
 
 const router = express.Router()
 
+type ShippingAddress = {
+  full_name: string
+  phone: string
+  line1: string
+  line2: string
+  city: string
+  state: string
+  postal_code: string
+  country: string
+}
+
+function cleanText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function normalizeShippingAddress(input: unknown): { address?: ShippingAddress; error?: string } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { error: 'Shipping address is required.' }
+  }
+
+  const raw = input as Record<string, unknown>
+  const address: ShippingAddress = {
+    full_name: cleanText(raw.full_name),
+    phone: cleanText(raw.phone),
+    line1: cleanText(raw.line1),
+    line2: cleanText(raw.line2),
+    city: cleanText(raw.city),
+    state: cleanText(raw.state),
+    postal_code: cleanText(raw.postal_code),
+    country: cleanText(raw.country) || 'India'
+  }
+
+  const requiredFields: Array<keyof ShippingAddress> = ['full_name', 'phone', 'line1', 'city', 'state', 'postal_code']
+  for (const field of requiredFields) {
+    if (!address[field]) {
+      return { error: `Shipping ${field.replace('_', ' ')} is required.` }
+    }
+  }
+
+  if (address.postal_code.length < 4 || address.postal_code.length > 12) {
+    return { error: 'Please enter a valid postal code.' }
+  }
+
+  if (address.phone.length < 8 || address.phone.length > 20) {
+    return { error: 'Please enter a valid phone number.' }
+  }
+
+  return { address }
+}
+
 // Public: get winner claim by token (for payment form)
 router.get('/winner/claim', async (req: Request, res: Response) => {
   try {
@@ -21,6 +71,7 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
       .select(`
         id, auction_id, winning_amount, payment_due_at, payment_status, size,
         payment_completed_at, payment_proof_note, razorpay_order_id, razorpay_payment_id,
+        shipping_address, shipping_address_submitted_at,
         auction:auctions(title),
         bidder:bidders(name)
       `)
@@ -45,7 +96,9 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
         payment_completed_at: w.payment_completed_at,
         payment_proof_note: w.payment_proof_note,
         razorpay_order_id: w.razorpay_order_id,
-        razorpay_payment_id: w.razorpay_payment_id
+        razorpay_payment_id: w.razorpay_payment_id,
+        shipping_address: w.shipping_address,
+        shipping_address_submitted_at: w.shipping_address_submitted_at
       })
     }
 
@@ -57,6 +110,8 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
       payment_due_at: w.payment_due_at,
       size: w.size,
       bidder_name: w.bidder?.name,
+      shipping_address: w.shipping_address,
+      shipping_address_submitted_at: w.shipping_address_submitted_at,
       razorpay_key_id: razorpay ? env.razorpayKeyId : undefined
     })
   } catch (e) {
@@ -72,10 +127,15 @@ router.post('/winner/create-order', async (req: Request, res: Response) => {
       return res.status(503).json({ error: 'Razorpay is not configured' })
     }
 
-    const { token } = req.body || {}
+    const { token, shipping_address } = req.body || {}
     
     if (!token || typeof token !== 'string') {
       return res.status(400).json({ error: 'Token required' })
+    }
+
+    const normalizedShipping = normalizeShippingAddress(shipping_address)
+    if (!normalizedShipping.address) {
+      return res.status(400).json({ error: normalizedShipping.error || 'Invalid shipping address.' })
     }
 
     const { data: winner, error } = await supabaseAdmin
@@ -92,6 +152,20 @@ router.post('/winner/create-order', async (req: Request, res: Response) => {
 
     if (w.payment_status !== 'pending' && w.payment_status !== 'overdue') {
       return res.status(400).json({ error: 'Payment already processed for this offer.' })
+    }
+
+    const shippingSubmittedAt = new Date().toISOString()
+    const { error: shippingUpdateError } = await supabaseAdmin
+      .from('winners')
+      .update({
+        shipping_address: normalizedShipping.address,
+        shipping_address_submitted_at: shippingSubmittedAt
+      })
+      .eq('id', w.id)
+
+    if (shippingUpdateError) {
+      console.error('Failed to save shipping address:', shippingUpdateError)
+      return res.status(500).json({ error: 'Failed to save shipping address' })
     }
 
     const amountRupees = Number(w.winning_amount)
@@ -137,7 +211,7 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
 
     const { data: winner, error } = await supabaseAdmin
       .from('winners')
-      .select('id, payment_status, razorpay_order_id, winning_amount')
+      .select('id, payment_status, razorpay_order_id, winning_amount, shipping_address')
       .eq('claim_token', token.trim())
       .single()
 
@@ -153,6 +227,11 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
 
     if (w.payment_status === 'completed') {
       return res.json({ success: true, message: 'Payment already confirmed.' })
+    }
+
+    const normalizedShipping = normalizeShippingAddress(w.shipping_address)
+    if (!normalizedShipping.address) {
+      return res.status(400).json({ error: 'Please add delivery address before confirming payment.' })
     }
 
     if (razorpay) {

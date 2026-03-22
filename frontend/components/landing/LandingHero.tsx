@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { ActiveAuctionResponse, AuctionSummary } from './types'
 import HeroMedia from './HeroMedia'
+import TermsAndConditionsModal from './TermsAndConditionsModal'
 
 const currencyFormatter = new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -513,6 +514,12 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                                             </div>
                                         )}
                                     </div>
+
+                                    <TermsAndConditionsModal
+                                        showAgreementText={false}
+                                        wrapperClassName="mt-3 flex items-center justify-center"
+                                        triggerClassName="inline-flex items-center text-blue-600 underline underline-offset-2 hover:text-blue-700 text-xs font-medium leading-none"
+                                    />
                                 </div>
 
                                 {/* Media Section - full height of column so image/reel fill the space */}

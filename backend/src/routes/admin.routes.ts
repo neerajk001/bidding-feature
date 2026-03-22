@@ -820,6 +820,8 @@ router.get('/winners', async (_req: Request, res: Response) => {
         razorpay_order_id,
         razorpay_payment_id,
         instagram_handle,
+        shipping_address,
+        shipping_address_submitted_at,
         dispatched_at,
         escalation_done,
         bidder:bidder_id(name, phone, email),

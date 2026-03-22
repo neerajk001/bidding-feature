@@ -196,7 +196,7 @@ router.post('/auth/verify-otp', async (req, res) => {
 router.post('/auth/send-email-otp', async (req, res) => {
     try {
         const body = req.body || {};
-        const { email, name } = body;
+        const { email, name, force_otp } = body;
         if (!email) {
             return res.status(400).json({ error: 'Email is required' });
         }
@@ -210,7 +210,8 @@ router.post('/auth/send-email-otp', async (req, res) => {
             .select('id, email_verified, name')
             .eq('email', normalizedEmail)
             .maybeSingle();
-        if (existingUser && existingUser.email_verified) {
+        const shouldForceOtp = force_otp === true || force_otp === 'true';
+        if (existingUser && existingUser.email_verified && !shouldForceOtp) {
             return res.json({
                 success: true,
                 verified: true,

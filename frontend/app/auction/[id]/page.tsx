@@ -61,7 +61,6 @@ export default function AuctionDetailPage() {
   const [registrationSubmitting, setRegistrationSubmitting] = useState(false)
   const [bidSubmitting, setBidSubmitting] = useState(false)
   const [now, setNow] = useState(new Date())
-  const [checkingUser, setCheckingUser] = useState(false)
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
 
@@ -120,39 +119,14 @@ export default function AuctionDetailPage() {
     const savedEmail = localStorage.getItem('auction_user_email') || ''
     const savedName = localStorage.getItem('auction_user_name') || ''
 
-    if (!savedPhone && !savedEmail) return
+    if (!savedPhone && !savedEmail && !savedName) return
 
-    const verifySavedUser = async () => {
-      setCheckingUser(true)
-      try {
-        const res = await fetch('/api/auth/check-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: savedPhone, email: savedEmail })
-        })
-        const data = await res.json()
-        if (data.verified && data.user) {
-          const verifiedProfile: VerificationProfile = {
-            userId: data.user_id || '',
-            name: data.user.name || savedName,
-            email: data.user.email || savedEmail,
-            phone: data.user.phone || savedPhone
-          }
-          setProfile(verifiedProfile)
-          setRegistrationForm({
-            name: verifiedProfile.name,
-            email: verifiedProfile.email,
-            phone: verifiedProfile.phone
-          })
-        }
-      } catch {
-        // Ignore check errors and fall back to OTP flow
-      } finally {
-        setCheckingUser(false)
-      }
-    }
-
-    verifySavedUser()
+    // Prefill forms, but do not auto-mark verification as complete.
+    setRegistrationForm({
+      name: savedName,
+      email: savedEmail,
+      phone: savedPhone
+    })
   }, [auction])
 
   const refreshBidderSizeLock = async (auctionIdParam: string, bidderIdParam: string) => {
@@ -418,7 +392,8 @@ export default function AuctionDetailPage() {
           auction_id: auction.id,
           name: registrationForm.name,
           email: registrationForm.email,
-          phone: registrationForm.phone
+          phone: registrationForm.phone,
+          user_id: profile?.userId || undefined
         })
       })
 
@@ -877,19 +852,12 @@ export default function AuctionDetailPage() {
                         </div>
                       )}
 
-                      {/* Registration - Checking User */}
-                      {showRegistration && !bidderId && checkingUser && (
-                        <div className="text-center py-8 text-gray-500">
-                          <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-                          <p className="text-sm">Checking your verification status...</p>
-                        </div>
-                      )}
-
                       {/* Registration - OTP Verification */}
-                      {showRegistration && !bidderId && !checkingUser && !profile && (
+                      {showRegistration && !bidderId && !profile && (
                         <div className="flex flex-col gap-4">
                           <EmailOtpVerification
                             auctionId={auction.id}
+                            initialValues={registrationForm}
                             onVerificationComplete={handleVerificationSuccess}
                             onError={handleVerificationError}
                           />
@@ -897,7 +865,7 @@ export default function AuctionDetailPage() {
                       )}
 
                       {/* Registration - Complete Form */}
-                      {showRegistration && !bidderId && !checkingUser && profile && (
+                      {showRegistration && !bidderId && profile && (
                         <form onSubmit={handleRegister} className="flex flex-col gap-4">
                           <div>
                             <label htmlFor="name" className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
@@ -918,20 +886,21 @@ export default function AuctionDetailPage() {
                               name="email"
                               type="email"
                               value={registrationForm.email}
-                              onChange={(event) => setRegistrationForm((prev) => ({ ...prev, email: event.target.value }))}
                               required
-                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                              readOnly
+                              className="w-full px-4 py-3 border-2 border-gray-200 bg-gray-50 text-gray-600 rounded-lg cursor-not-allowed"
                             />
                           </div>
                           <div>
-                            <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-2">Verified Phone</label>
+                            <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-2">Phone</label>
                             <input
                               id="phone"
                               name="phone"
                               type="tel"
                               value={registrationForm.phone}
-                              readOnly
-                              className="w-full px-4 py-3 border-2 border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed"
+                              onChange={(event) => setRegistrationForm((prev) => ({ ...prev, phone: event.target.value }))}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                             />
                           </div>
                           <button
