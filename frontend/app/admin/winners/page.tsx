@@ -123,9 +123,13 @@ export default function WinnersPage() {
   }, [toast])
 
   useEffect(() => {
-    const closeMenu = () => setOpenActionId(null)
-    document.addEventListener('click', closeMenu)
-    return () => document.removeEventListener('click', closeMenu)
+    const closeMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-actions-root="true"]')) return
+      setOpenActionId(null)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    return () => document.removeEventListener('mousedown', closeMenu)
   }, [])
 
   const fetchWinners = async () => {
@@ -417,11 +421,14 @@ export default function WinnersPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="relative" onClick={(event) => event.stopPropagation()}>
+                      <div className="relative" data-actions-root="true" onClick={(event) => event.stopPropagation()}>
                         <button
                           type="button"
                           className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                          onClick={() => setOpenActionId((prev) => (prev === winner.id ? null : winner.id))}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setOpenActionId((prev) => (prev === winner.id ? null : winner.id))
+                          }}
                           disabled={actioningId === winner.id || resendingId === winner.id}
                         >
                           {actioningId === winner.id || resendingId === winner.id ? 'Working...' : 'Actions'}
