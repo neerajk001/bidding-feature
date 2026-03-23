@@ -790,9 +790,6 @@ export default function AuctionDetailPage() {
                             </button>
                           </form>
 
-                          <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            💡 Auction extends automatically on last-minute bids
-                          </div>
                         </div>
                       )}
 

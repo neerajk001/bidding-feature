@@ -295,33 +295,12 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to place bid', details: bidError.message })
     }
 
-    // 6. Anti-sniping: extend auction if bid placed within last 5 minutes
-    const timeRemaining = endTs - nowTs
-    const fiveMinutes = 5 * 60 * 1000
-    let extended = false
-    let newEndTime = null
-
-    if (timeRemaining < fiveMinutes) {
-      newEndTime = new Date(nowTs + fiveMinutes).toISOString()
-      
-      const { error: updateError } = await supabaseAdmin
-        .from('auctions')
-        .update({ bidding_end_time: newEndTime })
-        .eq('id', auction_id)
-
-      if (!updateError) {
-        extended = true
-      }
-    }
-
     return res.status(201).json({
       success: true,
       bid_id: newBid.id,
       amount,
       created_at: newBid.created_at,
-      message: 'Bid placed successfully',
-      extended,
-      new_end_time: newEndTime
+      message: 'Bid placed successfully'
     })
   } catch (error) {
     console.error('API error:', error)

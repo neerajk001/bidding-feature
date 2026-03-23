@@ -99,7 +99,6 @@ export default function TermsAndConditionsModal({
                 <li><strong>Bidding window:</strong> Bids are accepted only between the published bidding start and end time.</li>
                 <li><strong>Minimum increment:</strong> Every new bid must be at least the current highest bid plus the configured minimum increment.</li>
                 <li><strong>Size-based lots:</strong> For auctions with sizes, winners are determined separately by size.</li>
-                <li><strong>Anti-sniping:</strong> If a valid bid is placed near closing time, the auction end time may be automatically extended.</li>
                 <li><strong>Binding bids:</strong> All bids are final and legally binding.</li>
                 <li><strong>Winner payment:</strong> Winners receive a secure payment link and must complete payment within 12 hours.</li>
                 <li><strong>Payment method:</strong> Winner payments are processed through Razorpay checkout.</li>
