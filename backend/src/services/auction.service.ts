@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase'
 import { sendWinnerEmail } from './email.service'
+import { buildPendingWinnerOffer, buildWinnerNotificationUpdate } from './winner-offer.service'
 
 export type FinalizeResult = {
   endedAuctionIds: string[]
@@ -62,7 +63,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
             .eq('auction_id', auction.id)
             .eq('size', size)
             .order('amount', { ascending: false })
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle()
 
@@ -73,19 +74,19 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
 
           const winningAmount = Number(highestBid?.amount ?? 0)
           if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-            const paymentDueAt = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString()
             const { error: winnerError } = await supabaseAdmin
               .from('winners')
               .upsert(
                 {
                   auction_id: auction.id,
-                  bidder_id: highestBid.bidder_id,
-                  winning_amount: winningAmount,
-                  declared_at: nowIso,
-                  size,
-                  payment_due_at: paymentDueAt,
-                  payment_status: 'pending',
-                  claim_token: crypto.randomUUID(),
+                  ...buildPendingWinnerOffer({
+                    bidderId: highestBid.bidder_id,
+                    winningAmount,
+                    declaredAt: nowIso,
+                    size,
+                    claimToken: crypto.randomUUID(),
+                    escalationDone: false
+                  }),
                   forfeited_bidder_ids: []  // Fix #10: reset escalation history on re-finalize
                 },
                 { onConflict: 'auction_id,size' }
@@ -105,7 +106,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
           .select('amount, bidder_id')
           .eq('auction_id', auction.id)
           .order('amount', { ascending: false })
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle()
 
@@ -116,19 +117,19 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
 
         const winningAmount = Number(highestBid?.amount ?? 0)
         if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-          const paymentDueAt = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString()
           const { error: winnerError } = await supabaseAdmin
             .from('winners')
             .upsert(
               {
                 auction_id: auction.id,
-                bidder_id: highestBid.bidder_id,
-                winning_amount: winningAmount,
-                declared_at: nowIso,
-                size: null,
-                payment_due_at: paymentDueAt,
-                payment_status: 'pending',
-                claim_token: crypto.randomUUID(),
+                ...buildPendingWinnerOffer({
+                  bidderId: highestBid.bidder_id,
+                  winningAmount,
+                  declaredAt: nowIso,
+                  size: null,
+                  claimToken: crypto.randomUUID(),
+                  escalationDone: false
+                }),
                 forfeited_bidder_ids: []  // Fix #10: reset escalation history on re-finalize
               },
               { onConflict: 'auction_id,size' }
@@ -177,7 +178,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
               isEscalation: false
             })
             if (sent) {
-              await supabaseAdmin.from('winners').update({ winner_email_sent_at: nowIso }).eq('id', w.id)
+              await supabaseAdmin.from('winners').update(buildWinnerNotificationUpdate()).eq('id', w.id)
             }
           }
         }

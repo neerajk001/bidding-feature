@@ -162,8 +162,6 @@ create index IF not exists idx_winners_auction_id on public.winners using btree 
 
 create index IF not exists idx_winners_bidder_id on public.winners using btree (bidder_id) TABLESPACE pg_default;
 
-create unique INDEX IF not exists idx_winners_unique_auction on public.winners using btree (auction_id) TABLESPACE pg_default;
-
 create unique INDEX IF not exists winners_claim_token_key on public.winners using btree (claim_token) TABLESPACE pg_default
 where
   (claim_token is not null);

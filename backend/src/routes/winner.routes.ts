@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase'
 import { razorpay } from '../config/services'
 import { env } from '../config/env'
 import { markWinnerPaidRazorpay } from '../services/payment.service'
+import { isWinnerPaymentExpired } from '../services/winner-offer.service'
 
 const router = express.Router()
 
@@ -83,6 +84,7 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
     }
 
     const w = winner as any
+    const expired = isWinnerPaymentExpired(w)
 
     if (w.payment_status !== 'pending' && w.payment_status !== 'overdue') {
       return res.json({
@@ -97,6 +99,20 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
         payment_proof_note: w.payment_proof_note,
         razorpay_order_id: w.razorpay_order_id,
         razorpay_payment_id: w.razorpay_payment_id,
+        shipping_address: w.shipping_address,
+        shipping_address_submitted_at: w.shipping_address_submitted_at
+      })
+    }
+
+    if (expired) {
+      return res.json({
+        claim: true,
+        status: 'expired',
+        message: 'This payment window has expired. If you attempted payment, please contact support.',
+        auction_title: w.auction?.title,
+        winning_amount: w.winning_amount,
+        payment_due_at: w.payment_due_at,
+        size: w.size,
         shipping_address: w.shipping_address,
         shipping_address_submitted_at: w.shipping_address_submitted_at
       })
@@ -140,7 +156,7 @@ router.post('/winner/create-order', async (req: Request, res: Response) => {
 
     const { data: winner, error } = await supabaseAdmin
       .from('winners')
-      .select('id, winning_amount, payment_status, razorpay_order_id')
+      .select('id, winning_amount, payment_due_at, payment_status, razorpay_order_id')
       .eq('claim_token', token.trim())
       .single()
 
@@ -149,6 +165,10 @@ router.post('/winner/create-order', async (req: Request, res: Response) => {
     }
 
     const w = winner as any
+
+    if (isWinnerPaymentExpired(w)) {
+      return res.status(400).json({ error: 'This payment window has expired.' })
+    }
 
     if (w.payment_status !== 'pending' && w.payment_status !== 'overdue') {
       return res.status(400).json({ error: 'Payment already processed for this offer.' })
@@ -211,7 +231,7 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
 
     const { data: winner, error } = await supabaseAdmin
       .from('winners')
-      .select('id, payment_status, razorpay_order_id, winning_amount, shipping_address')
+      .select('id, payment_due_at, payment_status, razorpay_order_id, winning_amount, shipping_address')
       .eq('claim_token', token.trim())
       .single()
 
@@ -220,6 +240,10 @@ router.post('/winner/verify-payment', async (req: Request, res: Response) => {
     }
 
     const w = winner as any
+
+    if (isWinnerPaymentExpired(w)) {
+      return res.status(400).json({ error: 'This payment window has expired.' })
+    }
 
     if (w.razorpay_order_id !== razorpay_order_id) {
       return res.status(400).json({ error: 'Order does not match this claim' })

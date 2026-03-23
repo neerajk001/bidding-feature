@@ -6,6 +6,7 @@ import { requireAdmin } from '../middleware/auth'
 import { sendPaymentConfirmedEmail, sendWinnerEmail } from '../services/email.service'
 import { getLastWinnerEmailError } from '../services/email.service'
 import { finalizeEndedAuctions } from '../services/auction.service'
+import { buildPendingWinnerOffer, buildWinnerNotificationUpdate, isWinnerPaymentExpired } from '../services/winner-offer.service'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
@@ -550,7 +551,7 @@ router.put('/auctions/:id', async (req: Request, res: Response) => {
             .eq('auction_id', auctionId)
             .eq('size', size)
             .order('amount', { ascending: false })
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle()
 
@@ -561,19 +562,20 @@ router.put('/auctions/:id', async (req: Request, res: Response) => {
 
           const winningAmount = Number(highestBid?.amount ?? 0)
           if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-            const paymentDueAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
             const { error: winnerError } = await supabaseAdmin
               .from('winners')
               .upsert(
                 {
                   auction_id: auctionId,
-                  bidder_id: highestBid.bidder_id,
-                  winning_amount: winningAmount,
-                  declared_at: nowIso,
-                  size,
-                  payment_due_at: paymentDueAt,
-                  payment_status: 'pending',
-                  claim_token: crypto.randomUUID()
+                  ...buildPendingWinnerOffer({
+                    bidderId: highestBid.bidder_id,
+                    winningAmount,
+                    declaredAt: nowIso,
+                    size,
+                    claimToken: crypto.randomUUID(),
+                    escalationDone: false
+                  }),
+                  forfeited_bidder_ids: []
                 },
                 { onConflict: 'auction_id,size', ignoreDuplicates: true }
               )
@@ -589,7 +591,7 @@ router.put('/auctions/:id', async (req: Request, res: Response) => {
           .select('amount, bidder_id')
           .eq('auction_id', auctionId)
           .order('amount', { ascending: false })
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: true })
           .limit(1)
           .maybeSingle()
 
@@ -600,19 +602,20 @@ router.put('/auctions/:id', async (req: Request, res: Response) => {
 
         const winningAmount = Number(highestBid?.amount ?? 0)
         if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-          const paymentDueAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
           const { error: winnerError } = await supabaseAdmin
             .from('winners')
             .upsert(
               {
                 auction_id: auctionId,
-                bidder_id: highestBid.bidder_id,
-                winning_amount: winningAmount,
-                declared_at: nowIso,
-                size: null,
-                payment_due_at: paymentDueAt,
-                payment_status: 'pending',
-                claim_token: crypto.randomUUID()
+                ...buildPendingWinnerOffer({
+                  bidderId: highestBid.bidder_id,
+                  winningAmount,
+                  declaredAt: nowIso,
+                  size: null,
+                  claimToken: crypto.randomUUID(),
+                  escalationDone: false
+                }),
+                forfeited_bidder_ids: []
               },
               { onConflict: 'auction_id,size', ignoreDuplicates: true }
             )
@@ -908,7 +911,7 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
     // Fetch the winner with bidder + auction info
     const { data: winner, error: fetchErr } = await supabaseAdmin
       .from('winners')
-      .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_status')
+      .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_due_at, payment_status')
       .eq('id', id)
       .single()
 
@@ -918,6 +921,10 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
 
     const w = winner as any
 
+    if (w.payment_status !== 'pending' && w.payment_status !== 'overdue') {
+      return res.status(400).json({ error: `Cannot resend winner payment email for status: ${w.payment_status}` })
+    }
+
     // Ensure claim_token exists (backfill if missing)
     let claimToken = w.claim_token
     if (!claimToken) {
@@ -925,7 +932,7 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
       await supabaseAdmin.from('winners').update({
         claim_token: claimToken,
         payment_status: w.payment_status || 'pending',
-        payment_due_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
+        payment_due_at: null
       }).eq('id', id)
     }
 
@@ -934,6 +941,10 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
 
     if (!(bidder as any)?.email) {
       return res.status(400).json({ error: 'Bidder has no email address registered' })
+    }
+
+    if (isWinnerPaymentExpired(w)) {
+      await supabaseAdmin.from('winners').update({ winner_email_sent_at: null }).eq('id', id)
     }
 
     // Reset winner_email_sent_at so it's queryable as unsent
@@ -959,7 +970,7 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
     }
 
     // Mark as sent
-    await supabaseAdmin.from('winners').update({ winner_email_sent_at: new Date().toISOString() }).eq('id', id)
+    await supabaseAdmin.from('winners').update(buildWinnerNotificationUpdate()).eq('id', id)
 
     return res.json({ ok: true, message: `Email sent to ${(bidder as any).email}` })
   } catch (error: any) {
@@ -996,7 +1007,7 @@ router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
           patch.payment_status = 'pending'
         }
         if (!iw.payment_due_at) {
-          patch.payment_due_at = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
+          patch.payment_due_at = null
         }
         if (Object.keys(patch).length > 0) {
           console.log(`[trigger-winner-emails] Patching winner ${iw.id} with:`, patch)
@@ -1086,9 +1097,10 @@ router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
         console.log(`[trigger-winner-emails] Email send result for winner ${w.id}: ${emailSent}`)
 
         if (emailSent) {
+          const sentAt = new Date().toISOString()
           await supabaseAdmin
             .from('winners')
-            .update({ winner_email_sent_at: now })
+            .update(buildWinnerNotificationUpdate(sentAt))
             .eq('id', w.id)
           sent++
         } else {

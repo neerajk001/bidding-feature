@@ -7,6 +7,7 @@ exports.finalizeEndedAuctions = finalizeEndedAuctions;
 const crypto_1 = __importDefault(require("crypto"));
 const supabase_1 = require("../config/supabase");
 const email_service_1 = require("./email.service");
+const winner_offer_service_1 = require("./winner-offer.service");
 async function finalizeEndedAuctions(now = new Date()) {
     const endedAuctionIds = [];
     const errors = [];
@@ -57,7 +58,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                         .eq('auction_id', auction.id)
                         .eq('size', size)
                         .order('amount', { ascending: false })
-                        .order('created_at', { ascending: false })
+                        .order('created_at', { ascending: true })
                         .limit(1)
                         .maybeSingle();
                     if (highestBidError) {
@@ -66,18 +67,18 @@ async function finalizeEndedAuctions(now = new Date()) {
                     }
                     const winningAmount = Number(highestBid?.amount ?? 0);
                     if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-                        const paymentDueAt = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
                         const { error: winnerError } = await supabase_1.supabaseAdmin
                             .from('winners')
                             .upsert({
                             auction_id: auction.id,
-                            bidder_id: highestBid.bidder_id,
-                            winning_amount: winningAmount,
-                            declared_at: nowIso,
-                            size,
-                            payment_due_at: paymentDueAt,
-                            payment_status: 'pending',
-                            claim_token: crypto_1.default.randomUUID(),
+                            ...(0, winner_offer_service_1.buildPendingWinnerOffer)({
+                                bidderId: highestBid.bidder_id,
+                                winningAmount,
+                                declaredAt: nowIso,
+                                size,
+                                claimToken: crypto_1.default.randomUUID(),
+                                escalationDone: false
+                            }),
                             forfeited_bidder_ids: [] // Fix #10: reset escalation history on re-finalize
                         }, { onConflict: 'auction_id,size' });
                         if (winnerError) {
@@ -96,7 +97,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                     .select('amount, bidder_id')
                     .eq('auction_id', auction.id)
                     .order('amount', { ascending: false })
-                    .order('created_at', { ascending: false })
+                    .order('created_at', { ascending: true })
                     .limit(1)
                     .maybeSingle();
                 if (highestBidError) {
@@ -105,18 +106,18 @@ async function finalizeEndedAuctions(now = new Date()) {
                 }
                 const winningAmount = Number(highestBid?.amount ?? 0);
                 if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-                    const paymentDueAt = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
                     const { error: winnerError } = await supabase_1.supabaseAdmin
                         .from('winners')
                         .upsert({
                         auction_id: auction.id,
-                        bidder_id: highestBid.bidder_id,
-                        winning_amount: winningAmount,
-                        declared_at: nowIso,
-                        size: null,
-                        payment_due_at: paymentDueAt,
-                        payment_status: 'pending',
-                        claim_token: crypto_1.default.randomUUID(),
+                        ...(0, winner_offer_service_1.buildPendingWinnerOffer)({
+                            bidderId: highestBid.bidder_id,
+                            winningAmount,
+                            declaredAt: nowIso,
+                            size: null,
+                            claimToken: crypto_1.default.randomUUID(),
+                            escalationDone: false
+                        }),
                         forfeited_bidder_ids: [] // Fix #10: reset escalation history on re-finalize
                     }, { onConflict: 'auction_id,size' });
                     if (winnerError) {
@@ -157,7 +158,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                             isEscalation: false
                         });
                         if (sent) {
-                            await supabase_1.supabaseAdmin.from('winners').update({ winner_email_sent_at: nowIso }).eq('id', w.id);
+                            await supabase_1.supabaseAdmin.from('winners').update((0, winner_offer_service_1.buildWinnerNotificationUpdate)()).eq('id', w.id);
                         }
                     }
                 }

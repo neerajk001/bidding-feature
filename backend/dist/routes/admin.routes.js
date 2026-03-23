@@ -11,6 +11,7 @@ const auth_1 = require("../middleware/auth");
 const email_service_1 = require("../services/email.service");
 const email_service_2 = require("../services/email.service");
 const auction_service_1 = require("../services/auction.service");
+const winner_offer_service_1 = require("../services/winner-offer.service");
 const router = express_1.default.Router();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 function parseTimestamp(value) {
@@ -478,7 +479,7 @@ router.put('/auctions/:id', async (req, res) => {
                         .eq('auction_id', auctionId)
                         .eq('size', size)
                         .order('amount', { ascending: false })
-                        .order('created_at', { ascending: false })
+                        .order('created_at', { ascending: true })
                         .limit(1)
                         .maybeSingle();
                     if (highestBidError) {
@@ -487,18 +488,19 @@ router.put('/auctions/:id', async (req, res) => {
                     }
                     const winningAmount = Number(highestBid?.amount ?? 0);
                     if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-                        const paymentDueAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
                         const { error: winnerError } = await supabase_1.supabaseAdmin
                             .from('winners')
                             .upsert({
                             auction_id: auctionId,
-                            bidder_id: highestBid.bidder_id,
-                            winning_amount: winningAmount,
-                            declared_at: nowIso,
-                            size,
-                            payment_due_at: paymentDueAt,
-                            payment_status: 'pending',
-                            claim_token: crypto_1.default.randomUUID()
+                            ...(0, winner_offer_service_1.buildPendingWinnerOffer)({
+                                bidderId: highestBid.bidder_id,
+                                winningAmount,
+                                declaredAt: nowIso,
+                                size,
+                                claimToken: crypto_1.default.randomUUID(),
+                                escalationDone: false
+                            }),
+                            forfeited_bidder_ids: []
                         }, { onConflict: 'auction_id,size', ignoreDuplicates: true });
                         if (winnerError) {
                             console.error('Failed to save winner for size', size, winnerError);
@@ -512,7 +514,7 @@ router.put('/auctions/:id', async (req, res) => {
                     .select('amount, bidder_id')
                     .eq('auction_id', auctionId)
                     .order('amount', { ascending: false })
-                    .order('created_at', { ascending: false })
+                    .order('created_at', { ascending: true })
                     .limit(1)
                     .maybeSingle();
                 if (highestBidError) {
@@ -521,18 +523,19 @@ router.put('/auctions/:id', async (req, res) => {
                 }
                 const winningAmount = Number(highestBid?.amount ?? 0);
                 if (highestBid?.bidder_id && Number.isFinite(winningAmount) && winningAmount > 0) {
-                    const paymentDueAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
                     const { error: winnerError } = await supabase_1.supabaseAdmin
                         .from('winners')
                         .upsert({
                         auction_id: auctionId,
-                        bidder_id: highestBid.bidder_id,
-                        winning_amount: winningAmount,
-                        declared_at: nowIso,
-                        size: null,
-                        payment_due_at: paymentDueAt,
-                        payment_status: 'pending',
-                        claim_token: crypto_1.default.randomUUID()
+                        ...(0, winner_offer_service_1.buildPendingWinnerOffer)({
+                            bidderId: highestBid.bidder_id,
+                            winningAmount,
+                            declaredAt: nowIso,
+                            size: null,
+                            claimToken: crypto_1.default.randomUUID(),
+                            escalationDone: false
+                        }),
+                        forfeited_bidder_ids: []
                     }, { onConflict: 'auction_id,size', ignoreDuplicates: true });
                     if (winnerError) {
                         console.error('Failed to save winner:', winnerError);
@@ -796,13 +799,16 @@ router.post('/winners/:id/resend-email', async (req, res) => {
         // Fetch the winner with bidder + auction info
         const { data: winner, error: fetchErr } = await supabase_1.supabaseAdmin
             .from('winners')
-            .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_status')
+            .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_due_at, payment_status')
             .eq('id', id)
             .single();
         if (fetchErr || !winner) {
             return res.status(404).json({ error: 'Winner not found' });
         }
         const w = winner;
+        if (w.payment_status !== 'pending' && w.payment_status !== 'overdue') {
+            return res.status(400).json({ error: `Cannot resend winner payment email for status: ${w.payment_status}` });
+        }
         // Ensure claim_token exists (backfill if missing)
         let claimToken = w.claim_token;
         if (!claimToken) {
@@ -810,13 +816,16 @@ router.post('/winners/:id/resend-email', async (req, res) => {
             await supabase_1.supabaseAdmin.from('winners').update({
                 claim_token: claimToken,
                 payment_status: w.payment_status || 'pending',
-                payment_due_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
+                payment_due_at: null
             }).eq('id', id);
         }
         const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single();
         const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single();
         if (!bidder?.email) {
             return res.status(400).json({ error: 'Bidder has no email address registered' });
+        }
+        if ((0, winner_offer_service_1.isWinnerPaymentExpired)(w)) {
+            await supabase_1.supabaseAdmin.from('winners').update({ winner_email_sent_at: null }).eq('id', id);
         }
         // Reset winner_email_sent_at so it's queryable as unsent
         await supabase_1.supabaseAdmin.from('winners').update({ winner_email_sent_at: null }).eq('id', id);
@@ -838,7 +847,7 @@ router.post('/winners/:id/resend-email', async (req, res) => {
             });
         }
         // Mark as sent
-        await supabase_1.supabaseAdmin.from('winners').update({ winner_email_sent_at: new Date().toISOString() }).eq('id', id);
+        await supabase_1.supabaseAdmin.from('winners').update((0, winner_offer_service_1.buildWinnerNotificationUpdate)()).eq('id', id);
         return res.json({ ok: true, message: `Email sent to ${bidder.email}` });
     }
     catch (error) {
@@ -870,7 +879,7 @@ router.post('/trigger-winner-emails', async (_req, res) => {
                     patch.payment_status = 'pending';
                 }
                 if (!iw.payment_due_at) {
-                    patch.payment_due_at = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+                    patch.payment_due_at = null;
                 }
                 if (Object.keys(patch).length > 0) {
                     console.log(`[trigger-winner-emails] Patching winner ${iw.id} with:`, patch);
@@ -947,9 +956,10 @@ router.post('/trigger-winner-emails', async (_req, res) => {
                 });
                 console.log(`[trigger-winner-emails] Email send result for winner ${w.id}: ${emailSent}`);
                 if (emailSent) {
+                    const sentAt = new Date().toISOString();
                     await supabase_1.supabaseAdmin
                         .from('winners')
-                        .update({ winner_email_sent_at: now })
+                        .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)(sentAt))
                         .eq('id', w.id);
                     sent++;
                 }
