@@ -13,12 +13,12 @@ export default function PublicShell({ children }: { children: ReactNode }) {
     <div className="relative min-h-screen bg-cream text-text font-body selection:bg-primary/20">
       <header className="sticky top-0 z-50 p-2 lg:p-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3 bg-white/90 backdrop-blur-md border border-secondary/20 shadow-sm rounded-xl">
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+          <a href="https://induheritage.com" className="flex items-center gap-2 flex-shrink-0">
             <span className="flex items-center gap-2">
               <Image src={logoSrc} alt="Indu Heritage" width={215} height={178} className="h-10 w-auto" priority />
               <span className="sr-only">Indu Heritage</span>
             </span>
-          </Link>
+          </a>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-6">
