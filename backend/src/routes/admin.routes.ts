@@ -7,6 +7,8 @@ import { sendPaymentConfirmedEmail, sendWinnerEmail } from '../services/email.se
 import { getLastWinnerEmailError } from '../services/email.service'
 import { finalizeEndedAuctions } from '../services/auction.service'
 import { buildPendingWinnerOffer, buildWinnerNotificationUpdate, isWinnerPaymentExpired } from '../services/winner-offer.service'
+import { createDelhiveryShipment } from '../services/delhivery.service'
+import { env } from '../config/env'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
@@ -15,6 +17,48 @@ function parseTimestamp(value: string | null | undefined): number {
   if (!value) return Number.NaN
   const ts = new Date(value).getTime()
   return Number.isNaN(ts) ? Number.NaN : ts
+}
+
+type ShippingAddress = {
+  full_name: string
+  phone: string
+  line1: string
+  line2?: string
+  city: string
+  state: string
+  postal_code: string
+  country?: string
+}
+
+function cleanText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function normalizeShippingAddress(input: unknown): { address?: ShippingAddress; error?: string } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { error: 'Shipping address is required before dispatch.' }
+  }
+
+  const raw = input as Record<string, unknown>
+  const address: ShippingAddress = {
+    full_name: cleanText(raw.full_name),
+    phone: cleanText(raw.phone),
+    line1: cleanText(raw.line1),
+    line2: cleanText(raw.line2),
+    city: cleanText(raw.city),
+    state: cleanText(raw.state),
+    postal_code: cleanText(raw.postal_code),
+    country: cleanText(raw.country) || 'India'
+  }
+
+  const requiredFields: Array<keyof ShippingAddress> = ['full_name', 'phone', 'line1', 'city', 'state', 'postal_code']
+  for (const field of requiredFields) {
+    if (!address[field]) {
+      return { error: `Shipping ${field.replace('_', ' ')} is required before dispatch.` }
+    }
+  }
+
+  return { address }
 }
 
 // Custom upload middleware for admin routes (handles any fieldname)
@@ -826,6 +870,14 @@ router.get('/winners', async (_req: Request, res: Response) => {
         shipping_address,
         shipping_address_submitted_at,
         dispatched_at,
+        delhivery_awb,
+        delhivery_order_id,
+        delhivery_tracking_url,
+        delhivery_status,
+        delhivery_error,
+        delhivery_raw_response,
+        delhivery_last_tracking_update,
+        shipment_triggered_at,
         escalation_done,
         bidder:bidder_id(name, phone, email),
         auction:auction_id(title, product_id, bidding_start_time, bidding_end_time)
@@ -864,18 +916,176 @@ router.patch('/winners/:id', async (req: Request, res: Response) => {
     const id = req.params.id
     const body = req.body || {}
     const { payment_status, dispatched_at } = body
+    const dispatchRequested = dispatched_at === true || dispatched_at === 'true'
     const updates: Record<string, any> = {}
+
+    const { data: currentWinner, error: winnerFetchError } = await supabaseAdmin
+      .from('winners')
+      .select(`
+        id,
+        auction_id,
+        bidder_id,
+        payment_status,
+        shipping_address,
+        razorpay_order_id,
+        dispatched_at,
+        delhivery_awb,
+        delhivery_order_id,
+        delhivery_status,
+        delhivery_tracking_url,
+        auction:auction_id(title)
+      `)
+      .eq('id', id)
+      .single()
+
+    if (winnerFetchError || !currentWinner) {
+      return res.status(404).json({ error: 'Winner not found' })
+    }
+
+    const cw = currentWinner as any
+  const auctionRecord = Array.isArray(cw.auction) ? cw.auction[0] : cw.auction
+
     if (payment_status === 'completed') {
       updates.payment_status = 'completed'
       updates.payment_completed_at = new Date().toISOString()
       updates.payment_verified_by_admin = true
     }
-    if (dispatched_at !== undefined) {
-      updates.dispatched_at = dispatched_at === true || dispatched_at === 'true' ? new Date().toISOString() : dispatched_at || null
+
+    if (dispatchRequested) {
+      const effectivePaymentStatus = payment_status === 'completed' ? 'completed' : cw.payment_status
+      if (effectivePaymentStatus !== 'completed') {
+        return res.status(400).json({ error: 'Dispatch requires completed payment status.' })
+      }
+
+      if (cw.delhivery_awb) {
+        return res.status(200).json({
+          success: true,
+          winner: currentWinner,
+          message: 'Already dispatched'
+        })
+      }
+
+      if (cw.delhivery_status === 'processing') {
+        return res.status(409).json({ error: 'Dispatch is already in progress for this winner.' })
+      }
+
+      const normalizedShipping = normalizeShippingAddress(cw.shipping_address)
+      if (!normalizedShipping.address) {
+        return res.status(400).json({ error: normalizedShipping.error || 'Shipping address is required before dispatch.' })
+      }
+
+      const orderId = cw.delhivery_order_id || cw.razorpay_order_id || `WIN-${cw.id}`
+
+      const { data: existingByOrder } = await supabaseAdmin
+        .from('winners')
+        .select('id, delhivery_awb, delhivery_tracking_url, dispatched_at')
+        .eq('delhivery_order_id', orderId)
+        .not('delhivery_awb', 'is', null)
+        .maybeSingle()
+
+      if (existingByOrder?.delhivery_awb) {
+        return res.status(200).json({
+          success: true,
+          winner: {
+            ...currentWinner,
+            delhivery_order_id: orderId,
+            delhivery_awb: existingByOrder.delhivery_awb,
+            delhivery_tracking_url: existingByOrder.delhivery_tracking_url,
+            dispatched_at: existingByOrder.dispatched_at
+          },
+          message: 'Already dispatched'
+        })
+      }
+
+      if (!env.delhiveryEnabled) {
+        updates.dispatched_at = new Date().toISOString()
+        updates.delhivery_order_id = orderId
+        updates.delhivery_status = 'created'
+        updates.delhivery_last_tracking_update = new Date().toISOString()
+        updates.delhivery_error = null
+        updates.shipment_triggered_at = null
+        updates.delhivery_raw_response = {
+          skipped: true,
+          reason: 'DELHIVERY_ENABLED is false',
+          timestamp: new Date().toISOString(),
+          orderId
+        }
+      } else {
+        const { data: lockRow, error: lockError } = await supabaseAdmin
+          .from('winners')
+          .update({
+            delhivery_status: 'processing',
+            delhivery_order_id: orderId,
+            shipment_triggered_at: new Date().toISOString(),
+            delhivery_error: null
+          })
+          .eq('id', id)
+          .is('delhivery_awb', null)
+          .or('delhivery_status.is.null,delhivery_status.neq.processing')
+          .select('id')
+          .maybeSingle()
+
+        if (lockError) {
+          console.error('Dispatch lock update error:', lockError)
+          return res.status(500).json({ error: 'Failed to acquire dispatch lock' })
+        }
+
+        if (!lockRow) {
+          return res.status(409).json({ error: 'Dispatch is already in progress for this winner.' })
+        }
+
+      const shipment = await createDelhiveryShipment(
+        normalizedShipping.address,
+        auctionRecord?.title || 'Auction Item',
+        orderId,
+        id
+      )
+
+      if (shipment.success && shipment.awb) {
+        updates.dispatched_at = new Date().toISOString()
+        updates.delhivery_awb = shipment.awb
+        updates.delhivery_order_id = orderId
+        updates.delhivery_tracking_url = shipment.trackingUrl || null
+        updates.delhivery_status = 'created'
+        updates.delhivery_raw_response = shipment.rawResponse || null
+        updates.delhivery_last_tracking_update = new Date().toISOString()
+        updates.shipment_triggered_at = new Date().toISOString()
+        updates.delhivery_error = null
+      } else {
+        const failureUpdates: Record<string, any> = {
+          ...updates,
+          dispatched_at: null,
+          delhivery_order_id: orderId,
+          delhivery_status: 'failed',
+          delhivery_error: shipment.error || 'Failed to create Delhivery shipment',
+          delhivery_raw_response: shipment.rawResponse || null,
+          delhivery_last_tracking_update: new Date().toISOString(),
+          shipment_triggered_at: new Date().toISOString()
+        }
+
+        const { data: failedWinner, error: failUpdateError } = await supabaseAdmin
+          .from('winners')
+          .update(failureUpdates)
+          .eq('id', id)
+          .select()
+          .single()
+
+        if (failUpdateError) throw failUpdateError
+        return res.status(502).json({
+          success: false,
+          error: shipment.error || 'Delhivery shipment creation failed. Retry dispatch.',
+          winner: failedWinner
+        })
+      }
+      }
+    } else if (dispatched_at !== undefined) {
+      updates.dispatched_at = dispatched_at || null
     }
+
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'Provide payment_status and/or dispatched_at' })
     }
+
     const { data, error } = await supabaseAdmin
       .from('winners')
       .update(updates)
@@ -900,6 +1110,206 @@ router.patch('/winners/:id', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Patch winner error:', error)
     return res.status(500).json({ error: error?.message || 'Failed to update winner' })
+  }
+})
+
+// POST /admin/winners/retry-failed-shipments - Retry failed Delhivery shipment creations in bulk
+router.post('/winners/retry-failed-shipments', async (req: Request, res: Response) => {
+  try {
+    const body = req.body || {}
+    const winnerIds = Array.isArray(body.winner_ids)
+      ? body.winner_ids.map((id: unknown) => String(id || '').trim()).filter(Boolean)
+      : []
+    const requestedLimit = Number(body.limit)
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.min(Math.floor(requestedLimit), 100)
+      : 25
+
+    let query = supabaseAdmin
+      .from('winners')
+      .select(`
+        id,
+        payment_status,
+        shipping_address,
+        razorpay_order_id,
+        delhivery_order_id,
+        delhivery_status,
+        delhivery_awb,
+        auction:auction_id(title)
+      `)
+      .eq('payment_status', 'completed')
+      .is('delhivery_awb', null)
+      .eq('delhivery_status', 'failed')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (winnerIds.length > 0) {
+      query = query.in('id', winnerIds)
+    }
+
+    const { data: failedWinners, error: failedFetchError } = await query
+    if (failedFetchError) throw failedFetchError
+
+    if (!failedWinners || failedWinners.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No failed shipments found to retry',
+        total: 0,
+        retried: 0,
+        failed: 0,
+        skipped: 0,
+        results: []
+      })
+    }
+
+    const results: Array<Record<string, any>> = []
+
+    for (const winnerRow of failedWinners) {
+      const winner = winnerRow as any
+      const auctionRecord = Array.isArray(winner.auction) ? winner.auction[0] : winner.auction
+      const orderId = winner.delhivery_order_id || winner.razorpay_order_id || `WIN-${winner.id}`
+
+      if (winner.delhivery_awb) {
+        results.push({ id: winner.id, status: 'skipped', reason: 'Already dispatched' })
+        continue
+      }
+
+      const normalizedShipping = normalizeShippingAddress(winner.shipping_address)
+      if (!normalizedShipping.address) {
+        await supabaseAdmin
+          .from('winners')
+          .update({
+            delhivery_status: 'failed',
+            delhivery_error: normalizedShipping.error || 'Shipping address is required before dispatch.',
+            delhivery_last_tracking_update: new Date().toISOString(),
+            delhivery_order_id: orderId
+          })
+          .eq('id', winner.id)
+
+        results.push({
+          id: winner.id,
+          status: 'failed',
+          reason: normalizedShipping.error || 'Invalid shipping address'
+        })
+        continue
+      }
+
+      if (!env.delhiveryEnabled) {
+        await supabaseAdmin
+          .from('winners')
+          .update({
+            dispatched_at: new Date().toISOString(),
+            delhivery_order_id: orderId,
+            delhivery_status: 'created',
+            delhivery_error: null,
+            delhivery_last_tracking_update: new Date().toISOString(),
+            delhivery_raw_response: {
+              skipped: true,
+              reason: 'DELHIVERY_ENABLED is false',
+              timestamp: new Date().toISOString(),
+              orderId
+            }
+          })
+          .eq('id', winner.id)
+
+        results.push({
+          id: winner.id,
+          status: 'skipped',
+          reason: 'Delhivery disabled, marked manual dispatch'
+        })
+        continue
+      }
+
+      const { data: lockRow, error: lockError } = await supabaseAdmin
+        .from('winners')
+        .update({
+          delhivery_status: 'processing',
+          delhivery_order_id: orderId,
+          shipment_triggered_at: new Date().toISOString(),
+          delhivery_error: null
+        })
+        .eq('id', winner.id)
+        .is('delhivery_awb', null)
+        .or('delhivery_status.is.null,delhivery_status.eq.failed')
+        .select('id')
+        .maybeSingle()
+
+      if (lockError) {
+        results.push({ id: winner.id, status: 'failed', reason: 'Failed to acquire retry lock' })
+        continue
+      }
+
+      if (!lockRow) {
+        results.push({ id: winner.id, status: 'skipped', reason: 'Dispatch already in progress' })
+        continue
+      }
+
+      const shipment = await createDelhiveryShipment(
+        normalizedShipping.address,
+        auctionRecord?.title || 'Auction Item',
+        orderId,
+        winner.id
+      )
+
+      if (shipment.success && shipment.awb) {
+        const { error: successUpdateError } = await supabaseAdmin
+          .from('winners')
+          .update({
+            dispatched_at: new Date().toISOString(),
+            delhivery_awb: shipment.awb,
+            delhivery_order_id: orderId,
+            delhivery_tracking_url: shipment.trackingUrl || null,
+            delhivery_status: 'created',
+            delhivery_raw_response: shipment.rawResponse || null,
+            delhivery_last_tracking_update: new Date().toISOString(),
+            shipment_triggered_at: new Date().toISOString(),
+            delhivery_error: null
+          })
+          .eq('id', winner.id)
+
+        if (successUpdateError) {
+          results.push({ id: winner.id, status: 'failed', reason: successUpdateError.message })
+        } else {
+          results.push({ id: winner.id, status: 'created', awb: shipment.awb })
+        }
+      } else {
+        await supabaseAdmin
+          .from('winners')
+          .update({
+            dispatched_at: null,
+            delhivery_order_id: orderId,
+            delhivery_status: 'failed',
+            delhivery_error: shipment.error || 'Failed to create Delhivery shipment',
+            delhivery_raw_response: shipment.rawResponse || null,
+            delhivery_last_tracking_update: new Date().toISOString(),
+            shipment_triggered_at: new Date().toISOString()
+          })
+          .eq('id', winner.id)
+
+        results.push({
+          id: winner.id,
+          status: 'failed',
+          reason: shipment.error || 'Delhivery shipment creation failed'
+        })
+      }
+    }
+
+    const retried = results.filter((r) => r.status === 'created').length
+    const failed = results.filter((r) => r.status === 'failed').length
+    const skipped = results.filter((r) => r.status === 'skipped').length
+
+    return res.json({
+      success: failed === 0,
+      message: `Processed ${results.length} failed shipment retries`,
+      total: results.length,
+      retried,
+      failed,
+      skipped,
+      results
+    })
+  } catch (error: any) {
+    console.error('Retry failed shipments error:', error)
+    return res.status(500).json({ error: error?.message || 'Failed to retry failed shipments' })
   }
 })
 

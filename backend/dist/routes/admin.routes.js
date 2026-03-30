@@ -12,6 +12,8 @@ const email_service_1 = require("../services/email.service");
 const email_service_2 = require("../services/email.service");
 const auction_service_1 = require("../services/auction.service");
 const winner_offer_service_1 = require("../services/winner-offer.service");
+const delhivery_service_1 = require("../services/delhivery.service");
+const env_1 = require("../config/env");
 const router = express_1.default.Router();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 function parseTimestamp(value) {
@@ -19,6 +21,32 @@ function parseTimestamp(value) {
         return Number.NaN;
     const ts = new Date(value).getTime();
     return Number.isNaN(ts) ? Number.NaN : ts;
+}
+function cleanText(value) {
+    return String(value ?? '').trim();
+}
+function normalizeShippingAddress(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        return { error: 'Shipping address is required before dispatch.' };
+    }
+    const raw = input;
+    const address = {
+        full_name: cleanText(raw.full_name),
+        phone: cleanText(raw.phone),
+        line1: cleanText(raw.line1),
+        line2: cleanText(raw.line2),
+        city: cleanText(raw.city),
+        state: cleanText(raw.state),
+        postal_code: cleanText(raw.postal_code),
+        country: cleanText(raw.country) || 'India'
+    };
+    const requiredFields = ['full_name', 'phone', 'line1', 'city', 'state', 'postal_code'];
+    for (const field of requiredFields) {
+        if (!address[field]) {
+            return { error: `Shipping ${field.replace('_', ' ')} is required before dispatch.` };
+        }
+    }
+    return { address };
 }
 // Custom upload middleware for admin routes (handles any fieldname)
 function maybeUpload(req, res, next) {
@@ -722,6 +750,14 @@ router.get('/winners', async (_req, res) => {
         shipping_address,
         shipping_address_submitted_at,
         dispatched_at,
+        delhivery_awb,
+        delhivery_order_id,
+        delhivery_tracking_url,
+        delhivery_status,
+        delhivery_error,
+        delhivery_raw_response,
+        delhivery_last_tracking_update,
+        shipment_triggered_at,
         escalation_done,
         bidder:bidder_id(name, phone, email),
         auction:auction_id(title, product_id, bidding_start_time, bidding_end_time)
@@ -758,14 +794,151 @@ router.patch('/winners/:id', async (req, res) => {
         const id = req.params.id;
         const body = req.body || {};
         const { payment_status, dispatched_at } = body;
+        const dispatchRequested = dispatched_at === true || dispatched_at === 'true';
         const updates = {};
+        const { data: currentWinner, error: winnerFetchError } = await supabase_1.supabaseAdmin
+            .from('winners')
+            .select(`
+        id,
+        auction_id,
+        bidder_id,
+        payment_status,
+        shipping_address,
+        razorpay_order_id,
+        dispatched_at,
+        delhivery_awb,
+        delhivery_order_id,
+        delhivery_status,
+        delhivery_tracking_url,
+        auction:auction_id(title)
+      `)
+            .eq('id', id)
+            .single();
+        if (winnerFetchError || !currentWinner) {
+            return res.status(404).json({ error: 'Winner not found' });
+        }
+        const cw = currentWinner;
+        const auctionRecord = Array.isArray(cw.auction) ? cw.auction[0] : cw.auction;
         if (payment_status === 'completed') {
             updates.payment_status = 'completed';
             updates.payment_completed_at = new Date().toISOString();
             updates.payment_verified_by_admin = true;
         }
-        if (dispatched_at !== undefined) {
-            updates.dispatched_at = dispatched_at === true || dispatched_at === 'true' ? new Date().toISOString() : dispatched_at || null;
+        if (dispatchRequested) {
+            const effectivePaymentStatus = payment_status === 'completed' ? 'completed' : cw.payment_status;
+            if (effectivePaymentStatus !== 'completed') {
+                return res.status(400).json({ error: 'Dispatch requires completed payment status.' });
+            }
+            if (cw.delhivery_awb) {
+                return res.status(200).json({
+                    success: true,
+                    winner: currentWinner,
+                    message: 'Already dispatched'
+                });
+            }
+            if (cw.delhivery_status === 'processing') {
+                return res.status(409).json({ error: 'Dispatch is already in progress for this winner.' });
+            }
+            const normalizedShipping = normalizeShippingAddress(cw.shipping_address);
+            if (!normalizedShipping.address) {
+                return res.status(400).json({ error: normalizedShipping.error || 'Shipping address is required before dispatch.' });
+            }
+            const orderId = cw.delhivery_order_id || cw.razorpay_order_id || `WIN-${cw.id}`;
+            const { data: existingByOrder } = await supabase_1.supabaseAdmin
+                .from('winners')
+                .select('id, delhivery_awb, delhivery_tracking_url, dispatched_at')
+                .eq('delhivery_order_id', orderId)
+                .not('delhivery_awb', 'is', null)
+                .maybeSingle();
+            if (existingByOrder?.delhivery_awb) {
+                return res.status(200).json({
+                    success: true,
+                    winner: {
+                        ...currentWinner,
+                        delhivery_order_id: orderId,
+                        delhivery_awb: existingByOrder.delhivery_awb,
+                        delhivery_tracking_url: existingByOrder.delhivery_tracking_url,
+                        dispatched_at: existingByOrder.dispatched_at
+                    },
+                    message: 'Already dispatched'
+                });
+            }
+            if (!env_1.env.delhiveryEnabled) {
+                updates.dispatched_at = new Date().toISOString();
+                updates.delhivery_order_id = orderId;
+                updates.delhivery_status = 'created';
+                updates.delhivery_last_tracking_update = new Date().toISOString();
+                updates.delhivery_error = null;
+                updates.shipment_triggered_at = null;
+                updates.delhivery_raw_response = {
+                    skipped: true,
+                    reason: 'DELHIVERY_ENABLED is false',
+                    timestamp: new Date().toISOString(),
+                    orderId
+                };
+            }
+            else {
+                const { data: lockRow, error: lockError } = await supabase_1.supabaseAdmin
+                    .from('winners')
+                    .update({
+                    delhivery_status: 'processing',
+                    delhivery_order_id: orderId,
+                    shipment_triggered_at: new Date().toISOString(),
+                    delhivery_error: null
+                })
+                    .eq('id', id)
+                    .is('delhivery_awb', null)
+                    .or('delhivery_status.is.null,delhivery_status.neq.processing')
+                    .select('id')
+                    .maybeSingle();
+                if (lockError) {
+                    console.error('Dispatch lock update error:', lockError);
+                    return res.status(500).json({ error: 'Failed to acquire dispatch lock' });
+                }
+                if (!lockRow) {
+                    return res.status(409).json({ error: 'Dispatch is already in progress for this winner.' });
+                }
+                const shipment = await (0, delhivery_service_1.createDelhiveryShipment)(normalizedShipping.address, auctionRecord?.title || 'Auction Item', orderId, id);
+                if (shipment.success && shipment.awb) {
+                    updates.dispatched_at = new Date().toISOString();
+                    updates.delhivery_awb = shipment.awb;
+                    updates.delhivery_order_id = orderId;
+                    updates.delhivery_tracking_url = shipment.trackingUrl || null;
+                    updates.delhivery_status = 'created';
+                    updates.delhivery_raw_response = shipment.rawResponse || null;
+                    updates.delhivery_last_tracking_update = new Date().toISOString();
+                    updates.shipment_triggered_at = new Date().toISOString();
+                    updates.delhivery_error = null;
+                }
+                else {
+                    const failureUpdates = {
+                        ...updates,
+                        dispatched_at: null,
+                        delhivery_order_id: orderId,
+                        delhivery_status: 'failed',
+                        delhivery_error: shipment.error || 'Failed to create Delhivery shipment',
+                        delhivery_raw_response: shipment.rawResponse || null,
+                        delhivery_last_tracking_update: new Date().toISOString(),
+                        shipment_triggered_at: new Date().toISOString()
+                    };
+                    const { data: failedWinner, error: failUpdateError } = await supabase_1.supabaseAdmin
+                        .from('winners')
+                        .update(failureUpdates)
+                        .eq('id', id)
+                        .select()
+                        .single();
+                    if (failUpdateError)
+                        throw failUpdateError;
+                    return res.status(502).json({
+                        success: false,
+                        error: shipment.error || 'Delhivery shipment creation failed. Retry dispatch.',
+                        winner: failedWinner
+                    });
+                }
+            }
+        }
+        else if (dispatched_at !== undefined) {
+            updates.dispatched_at = dispatched_at || null;
         }
         if (Object.keys(updates).length === 0) {
             return res.status(400).json({ error: 'Provide payment_status and/or dispatched_at' });

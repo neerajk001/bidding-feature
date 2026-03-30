@@ -44,6 +44,14 @@ exports.env = {
     resendApiKey: process.env.RESEND_API_KEY || '',
     resendFromEmail: process.env.RESEND_FROM_EMAIL || '',
     resendReplyToEmail: process.env.RESEND_REPLY_TO_EMAIL || '',
+    // Delhivery (optional)
+    delhiveryEnabled: String(process.env.DELHIVERY_ENABLED || 'true').toLowerCase() === 'true',
+    delhiveryApiKey: process.env.DELHIVERY_API_KEY || '',
+    delhiveryApiBaseUrl: process.env.DELHIVERY_API_BASE_URL || 'https://track.delhivery.com/api',
+    delhiveryPickupLocation: process.env.DELHIVERY_PICKUP_LOCATION || 'Nine Hills Society, NIBM',
+    delhiveryTimeoutMs: Number(process.env.DELHIVERY_TIMEOUT_MS || 8000),
+    delhiveryRetryAttempts: Number(process.env.DELHIVERY_RETRY_ATTEMPTS || 3),
+    delhiveryRetryDelayMs: Number(process.env.DELHIVERY_RETRY_DELAY_MS || 1000),
     // API
     apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
     publicAppUrl,

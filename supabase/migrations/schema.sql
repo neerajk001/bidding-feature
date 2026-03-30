@@ -146,6 +146,14 @@ create table public.winners (
   shipping_address jsonb null,
   shipping_address_submitted_at timestamp with time zone null,
   dispatched_at timestamp with time zone null,
+  delhivery_awb text null,
+  delhivery_order_id text null,
+  delhivery_tracking_url text null,
+  delhivery_status text null default 'pending'::text,
+  delhivery_raw_response jsonb null,
+  delhivery_error text null,
+  delhivery_last_tracking_update timestamp with time zone null,
+  shipment_triggered_at timestamp with time zone null,
   escalation_done boolean null default false,
   claim_token text null,
   winner_email_sent_at timestamp with time zone null,
@@ -169,3 +177,7 @@ where
 create unique INDEX IF not exists winners_razorpay_order_id_key on public.winners using btree (razorpay_order_id) TABLESPACE pg_default
 where
   (razorpay_order_id is not null);
+
+create unique INDEX IF not exists winners_delhivery_order_id_key on public.winners using btree (delhivery_order_id) TABLESPACE pg_default
+where
+  (delhivery_order_id is not null);
