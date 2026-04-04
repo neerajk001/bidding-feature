@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState, useRef } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -175,20 +175,45 @@ export default function AuctionDetailPage() {
 
   // Ref for throttling refresh calls
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const seenBidIdsRef = useRef<Set<string>>(new Set())
+
+  const phase = useMemo(() => {
+    if (!auction) return 'loading'
+    if (auction.status === 'ended') return 'ended'
+
+    const registrationEnd = new Date(auction.registration_end_time)
+    const biddingStart = new Date(auction.bidding_start_time)
+    const biddingEnd = new Date(auction.bidding_end_time)
+
+    if (now > biddingEnd) return 'ended'
+    if (now >= biddingStart && now <= biddingEnd) return 'live'
+    if (now < registrationEnd) return 'registration'
+    if (now >= registrationEnd && now < biddingStart) return 'upcoming'
+    return 'upcoming'
+  }, [auction, now])
+
+  const refreshAuction = useCallback(async () => {
+    try {
+      if (!auctionId) return
+      const res = await fetch(`/api/auction/${auctionId}`, { cache: 'no-store' })
+      const data = await res.json()
+      if (res.ok) {
+        setAuction(data)
+      }
+    } catch {
+      // Silent refresh failure
+    }
+  }, [auctionId])
 
   useEffect(() => {
-    // FREE TIER PROTECTION:
-    // Only connect to Realtime (WebSocket) if:
-    // 1. We have auction data
-    // 2. The auction is actually LIVE (don't waste connections on upcoming/ended)
-    // 3. The current time is within the bidding window
+    seenBidIdsRef.current.clear()
+  }, [auction?.id])
 
-    const nowTime = new Date().getTime()
-    const startTime = new Date(auction?.bidding_start_time || '').getTime()
-    const endTime = new Date(auction?.bidding_end_time || '').getTime()
-    const isLive = auction?.status === 'live' && nowTime >= startTime && nowTime <= endTime
-
-    if (!auction || !isLive) return
+  useEffect(() => {
+    // Subscribe exactly when live phase is active for this client.
+    // This avoids missing updates when the page was opened before bidding started.
+    const liveAuctionId = auction?.id
+    if (!liveAuctionId || phase !== 'live') return
 
     // Throttle the full refresh to avoid hammering the API
     const scheduleRefresh = () => {
@@ -196,16 +221,22 @@ export default function AuctionDetailPage() {
       refreshTimeoutRef.current = setTimeout(() => {
         refreshAuction()
         refreshTimeoutRef.current = null
-      }, 3000) // Refresh full details every 3 seconds max
+      }, 500) // Fast reconciliation after realtime event
     }
 
     const channel = supabase
-      .channel(`auction-room-${auction.id}`)
+      .channel(`auction-room-${liveAuctionId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${auction.id}` },
-        (payload: { new: { amount: number; size?: string } }) => {
+        { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${liveAuctionId}` },
+        (payload: { new: { id?: string; amount: number; size?: string } }) => {
           const newBid = payload.new
+          const newBidId = String(newBid.id || '').trim()
+          if (newBidId) {
+            if (seenBidIdsRef.current.has(newBidId)) return
+            seenBidIdsRef.current.add(newBidId)
+          }
+
           // Optimistically update the UI immediately
           setAuction((prev) => {
             if (!prev) return null
@@ -220,13 +251,11 @@ export default function AuctionDetailPage() {
               if (existingIndex >= 0 && updatedHighestBidsBySize) {
                 // Update existing size entry
                 const currentSizeAmount = updatedHighestBidsBySize[existingIndex].amount
-                if (newAmount > currentSizeAmount) {
-                  updatedHighestBidsBySize = [...updatedHighestBidsBySize]
-                  updatedHighestBidsBySize[existingIndex] = {
-                    ...updatedHighestBidsBySize[existingIndex],
-                    amount: newAmount,
-                    bid_count: updatedHighestBidsBySize[existingIndex].bid_count + 1
-                  }
+                updatedHighestBidsBySize = [...updatedHighestBidsBySize]
+                updatedHighestBidsBySize[existingIndex] = {
+                  ...updatedHighestBidsBySize[existingIndex],
+                  amount: Math.max(currentSizeAmount, newAmount),
+                  bid_count: Number(updatedHighestBidsBySize[existingIndex].bid_count || 0) + 1
                 }
               } else if (!updatedHighestBidsBySize) {
                 // Create new array with this size
@@ -263,7 +292,7 @@ export default function AuctionDetailPage() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'auctions', filter: `id=eq.${auction.id}` },
+        { event: 'UPDATE', schema: 'public', table: 'auctions', filter: `id=eq.${liveAuctionId}` },
         (payload: { new: { bidding_end_time: string; status: string } }) => {
           const updatedAuction = payload.new
           setAuction((prev) => {
@@ -276,7 +305,12 @@ export default function AuctionDetailPage() {
           })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // Pull latest data if realtime connection is interrupted.
+          refreshAuction()
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -284,37 +318,15 @@ export default function AuctionDetailPage() {
         clearTimeout(refreshTimeoutRef.current)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- subscription keyed by auction id
-  }, [auction?.id, auction?.status, auction?.bidding_end_time])
+  }, [auction?.id, phase, refreshAuction])
 
-  const refreshAuction = async () => {
-    try {
-      if (!auctionId) return
-      const res = await fetch(`/api/auction/${auctionId}`, { cache: 'no-store' })
-      const data = await res.json()
-      if (res.ok) {
-        setAuction(data)
-      }
-    } catch {
-      // Silent refresh failure
-    }
-  }
-
-
-  const phase = useMemo(() => {
-    if (!auction) return 'loading'
-    if (auction.status === 'ended') return 'ended'
-
-    const registrationEnd = new Date(auction.registration_end_time)
-    const biddingStart = new Date(auction.bidding_start_time)
-    const biddingEnd = new Date(auction.bidding_end_time)
-
-    if (now > biddingEnd) return 'ended'
-    if (now >= biddingStart && now <= biddingEnd) return 'live'
-    if (now < registrationEnd) return 'registration'
-    if (now >= registrationEnd && now < biddingStart) return 'upcoming'
-    return 'upcoming'
-  }, [auction, now])
+  useEffect(() => {
+    if (!auctionId || phase !== 'live') return
+    const interval = setInterval(() => {
+      refreshAuction()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [auctionId, phase, refreshAuction])
 
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'
