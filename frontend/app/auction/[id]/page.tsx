@@ -196,15 +196,27 @@ export default function AuctionDetailPage() {
   const refreshAuction = useCallback(async () => {
     try {
       if (!auctionId) return
-      const res = await fetch(`/api/auction/${auctionId}`, { cache: 'no-store' })
+      const liveMode = phase === 'live'
+      const endpoint = liveMode ? `/api/auction/${auctionId}/live-state` : `/api/auction/${auctionId}`
+      const res = await fetch(endpoint, { cache: 'no-store' })
       const data = await res.json()
       if (res.ok) {
-        setAuction(data)
+        if (liveMode) {
+          setAuction((prev) => {
+            if (!prev) return data
+            return {
+              ...prev,
+              ...data
+            }
+          })
+        } else {
+          setAuction(data)
+        }
       }
     } catch {
       // Silent refresh failure
     }
-  }, [auctionId])
+  }, [auctionId, phase])
 
   useEffect(() => {
     seenBidIdsRef.current.clear()
@@ -496,7 +508,9 @@ export default function AuctionDetailPage() {
 
       setBidAmount('')
       setMessage({ type: 'success', text: 'Bid placed successfully.' })
-      refreshAuction()
+      if (!isRealtimeConnected) {
+        refreshAuction()
+      }
       await refreshBidderSizeLock(auction.id, bidderId)
     } catch (err) {
       setMessage({

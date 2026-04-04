@@ -7,6 +7,7 @@ const express_1 = __importDefault(require("express"));
 const supabase_1 = require("../config/supabase");
 const cache_1 = require("../middleware/cache");
 const router = express_1.default.Router();
+const liveStateCache = new Map();
 function parseTimestamp(value) {
     if (!value)
         return Number.NaN;
@@ -200,6 +201,62 @@ router.get('/auction/product/:product_id', async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Public: Lightweight live-state refresh payload (used during active realtime bidding)
+router.get('/auction/:id/live-state', async (req, res) => {
+    try {
+        const id = req.params.id;
+        if (!id) {
+            return res.status(400).json({ error: 'Auction ID is required' });
+        }
+        const now = Date.now();
+        const cached = liveStateCache.get(id);
+        if (cached && cached.expiresAt > now) {
+            (0, cache_1.setNoCache)(res);
+            return res.json(cached.payload);
+        }
+        const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
+            .from('auctions')
+            .select('id, status, bidding_start_time, bidding_end_time')
+            .eq('id', id)
+            .single();
+        if (auctionError || !auction) {
+            return res.status(404).json({ error: 'Auction not found' });
+        }
+        const derivedStatus = getAuctionPhase(Date.now(), auction.bidding_start_time, auction.bidding_end_time);
+        const { data: snapshot, error: snapshotError } = await supabase_1.supabaseAdmin
+            .rpc('get_auction_live_snapshot', { p_auction_id: id })
+            .single();
+        if (snapshotError) {
+            console.error('Live snapshot RPC error:', snapshotError);
+            return res.status(500).json({ error: 'Failed to fetch live auction snapshot' });
+        }
+        const payload = {
+            id: auction.id,
+            status: derivedStatus,
+            bidding_end_time: auction.bidding_end_time,
+            current_highest_bid: Number(snapshot?.current_highest_bid ?? 0),
+            total_bids: Number(snapshot?.total_bids ?? 0),
+            highest_bidder_name: snapshot?.highest_bidder_name ?? null,
+            highest_bids_by_size: Array.isArray(snapshot?.highest_bids_by_size)
+                ? snapshot.highest_bids_by_size
+                : null
+        };
+        liveStateCache.set(id, { payload, expiresAt: now + 1500 });
+        if (liveStateCache.size > 500) {
+            for (const [key, entry] of liveStateCache.entries()) {
+                if (entry.expiresAt <= now) {
+                    liveStateCache.delete(key);
+                }
+            }
+        }
+        (0, cache_1.setNoCache)(res);
+        return res.json(payload);
+    }
+    catch (error) {
+        console.error('API error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
 // Public: Auction by ID (RPC)
 router.get('/auction/:id', async (req, res) => {
     try {
@@ -217,20 +274,13 @@ router.get('/auction/:id', async (req, res) => {
             return res.status(404).json({ error: 'Auction not found' });
         }
         const derivedStatus = getAuctionPhase(Date.now(), auction.bidding_start_time, auction.bidding_end_time);
-        // Get highest bid
-        const { data: highestBid } = await supabase_1.supabaseAdmin
-            .from('bids')
-            .select('amount, bidder:bidder_id(name)')
-            .eq('auction_id', id)
-            .order('amount', { ascending: false })
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        // Get total bids
-        const { count: totalBids } = await supabase_1.supabaseAdmin
-            .from('bids')
-            .select('id', { count: 'exact', head: true })
-            .eq('auction_id', id);
+        const { data: snapshot, error: snapshotError } = await supabase_1.supabaseAdmin
+            .rpc('get_auction_live_snapshot', { p_auction_id: id })
+            .single();
+        if (snapshotError) {
+            console.error('Auction snapshot RPC error:', snapshotError);
+            return res.status(500).json({ error: 'Failed to fetch auction snapshot' });
+        }
         // Get winners if auction ended
         let winnersList = [];
         let winningAmount = null;
@@ -258,52 +308,17 @@ router.get('/auction/:id', async (req, res) => {
             }
         }
         // Display values
-        const displayAmount = winningAmount ?? highestBid?.amount ?? null;
-        const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? highestBid.bidder[0]?.name : highestBid?.bidder?.name) ?? null;
-        // Calculate highest bids by size if multi-size auction
-        const sizes = Array.isArray(auction.available_sizes)
-            ? auction.available_sizes.map((s) => String(s ?? '').trim()).filter((s) => s.length > 0)
-            : [];
-        let highest_bids_by_size = null;
-        if (sizes.length > 0) {
-            // Egress optimization:
-            // Avoid fetching every bid row on each request.
-            // We query only top bid + count per size.
-            const bySize = await Promise.all(sizes.map(async (size) => {
-                const [topResult, countResult] = await Promise.all([
-                    supabase_1.supabaseAdmin
-                        .from('bids')
-                        .select('amount, bidder:bidder_id(name)')
-                        .eq('auction_id', id)
-                        .eq('size', size)
-                        .order('amount', { ascending: false })
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle(),
-                    supabase_1.supabaseAdmin
-                        .from('bids')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('auction_id', id)
-                        .eq('size', size)
-                ]);
-                const top = topResult.data;
-                const bidder = top?.bidder;
-                const bidderName = Array.isArray(bidder) ? bidder[0]?.name ?? null : bidder?.name ?? null;
-                return {
-                    size,
-                    amount: Number(top?.amount ?? 0),
-                    bid_count: Number(countResult.count ?? 0),
-                    bidder_name: bidderName
-                };
-            }));
-            highest_bids_by_size = bySize;
-        }
+        const displayAmount = winningAmount ?? Number(snapshot?.current_highest_bid ?? 0);
+        const displayName = winnerName ?? (snapshot?.highest_bidder_name ?? null);
+        const highest_bids_by_size = Array.isArray(snapshot?.highest_bids_by_size)
+            ? snapshot.highest_bids_by_size
+            : null;
         const data = {
             ...auction,
             status: derivedStatus,
             current_highest_bid: displayAmount,
             highest_bidder_name: displayName,
-            total_bids: totalBids ?? 0,
+            total_bids: Number(snapshot?.total_bids ?? 0),
             winner_name: winnerName,
             winning_amount: winningAmount,
             winner_declared_at: winnerDeclaredAt,

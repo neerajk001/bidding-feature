@@ -3,6 +3,7 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import { env } from './config/env'
 import { captureRawBody } from './middleware/rawBody'
+import { apiRateLimiter } from './middleware/rateLimit'
 import { initializeCronJobs } from './services/cron.service'
 
 // Import routes
@@ -29,6 +30,7 @@ app.use(express.urlencoded({ extended: true }))
 
 // API router
 const api = express.Router()
+api.use(apiRateLimiter)
 
 // Mount route modules
 api.use(healthRoutes)

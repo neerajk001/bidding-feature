@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const env_1 = require("./config/env");
 const rawBody_1 = require("./middleware/rawBody");
+const rateLimit_1 = require("./middleware/rateLimit");
 const cron_service_1 = require("./services/cron.service");
 // Import routes
 const health_routes_1 = __importDefault(require("./routes/health.routes"));
@@ -28,6 +29,7 @@ app.use(express_1.default.json({ limit: '2mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 // API router
 const api = express_1.default.Router();
+api.use(rateLimit_1.apiRateLimiter);
 // Mount route modules
 api.use(health_routes_1.default);
 api.use(auction_routes_1.default);
