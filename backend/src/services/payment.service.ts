@@ -29,7 +29,7 @@ export async function markWinnerPaidRazorpay(
 ): Promise<{ ok: boolean; error?: string }> {
   const { data: winner, error: fetchErr } = await supabaseAdmin
     .from('winners')
-    .select('id, payment_status, bidder_id, auction_id')
+    .select('id, payment_status, bidder_id, auction_id, razorpay_order_id')
     .eq('id', winnerId)
     .single()
 
@@ -37,18 +37,47 @@ export async function markWinnerPaidRazorpay(
 
   const w = winner as any
   if (w.payment_status === 'completed') return { ok: true }
+  if (orderId && w.razorpay_order_id && String(w.razorpay_order_id) !== String(orderId)) {
+    return { ok: false, error: 'Winner payment order mismatch' }
+  }
 
   const updates = buildRazorpayPaymentCompletionUpdate(paymentId, orderId)
 
-  const { error: upErr } = await supabaseAdmin
+  const { data: updatedWinner, error: upErr } = await supabaseAdmin
     .from('winners')
     .update(updates)
     .eq('id', winnerId)
+    .eq('bidder_id', w.bidder_id)
+    .in('payment_status', ['pending', 'overdue'])
+    .select('id, bidder_id, auction_id')
+    .maybeSingle()
 
   if (upErr) return { ok: false, error: upErr.message }
+  if (!updatedWinner) {
+    const { data: latestWinner } = await supabaseAdmin
+      .from('winners')
+      .select('payment_status')
+      .eq('id', winnerId)
+      .maybeSingle()
 
-  const { data: bidder } = await supabaseAdmin.from('bidders').select('email, name').eq('id', w.bidder_id).single()
-  const { data: auction } = await supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single()
+    if ((latestWinner as any)?.payment_status === 'completed') {
+      return { ok: true }
+    }
+
+    return { ok: false, error: 'Winner payment state changed. Please retry verification.' }
+  }
+
+  const freshWinner = updatedWinner as any
+  const { data: bidder } = await supabaseAdmin
+    .from('bidders')
+    .select('email, name')
+    .eq('id', freshWinner.bidder_id)
+    .single()
+  const { data: auction } = await supabaseAdmin
+    .from('auctions')
+    .select('title')
+    .eq('id', freshWinner.auction_id)
+    .single()
 
   if ((bidder as any)?.email) {
     await sendPaymentConfirmedEmail(

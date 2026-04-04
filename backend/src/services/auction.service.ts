@@ -172,7 +172,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
             .eq('id', w.id)
             .eq('payment_status', 'pending')
             .is('winner_email_sent_at', null)
-            .select('id')
+            .select('id, bidder_id, winning_amount, claim_token, size')
             .maybeSingle()
 
           if (claimErr) {
@@ -184,16 +184,17 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
             continue
           }
 
-          const { data: bidder } = await supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single()
+          const cw = claimedRow as any
+          const { data: bidder } = await supabaseAdmin.from('bidders').select('name, email').eq('id', cw.bidder_id).single()
           const email = (bidder as any)?.email
-          if (email && w.claim_token) {
+          if (email && cw.claim_token) {
             const sent = await sendWinnerEmail({
               to: email,
               winnerName: (bidder as any)?.name || 'Winner',
               auctionTitle: auction.title || 'Auction',
-              winningAmount: Number(w.winning_amount),
-              claimToken: w.claim_token,
-              size: w.size,
+              winningAmount: Number(cw.winning_amount),
+              claimToken: cw.claim_token,
+              size: cw.size,
               isEscalation: false
             })
             if (sent) {
@@ -201,6 +202,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
                 .from('winners')
                 .update(buildWinnerNotificationUpdate())
                 .eq('id', w.id)
+                .eq('bidder_id', cw.bidder_id)
                 .eq('winner_email_sent_at', claimAt)
             } else {
               await supabaseAdmin
@@ -208,6 +210,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
                 .update({ winner_email_sent_at: null })
                 .eq('id', w.id)
                 .eq('payment_status', 'pending')
+                .eq('bidder_id', cw.bidder_id)
                 .eq('winner_email_sent_at', claimAt)
             }
           } else {
@@ -216,6 +219,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
               .update({ winner_email_sent_at: null })
               .eq('id', w.id)
               .eq('payment_status', 'pending')
+              .eq('bidder_id', cw.bidder_id)
               .eq('winner_email_sent_at', claimAt)
           }
         }

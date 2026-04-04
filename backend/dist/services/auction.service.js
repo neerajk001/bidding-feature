@@ -152,7 +152,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                         .eq('id', w.id)
                         .eq('payment_status', 'pending')
                         .is('winner_email_sent_at', null)
-                        .select('id')
+                        .select('id, bidder_id, winning_amount, claim_token, size')
                         .maybeSingle();
                     if (claimErr) {
                         errors.push(`Failed to claim winner email slot for ${w.id}: ${claimErr.message}`);
@@ -161,16 +161,17 @@ async function finalizeEndedAuctions(now = new Date()) {
                     if (!claimedRow) {
                         continue;
                     }
-                    const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single();
+                    const cw = claimedRow;
+                    const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', cw.bidder_id).single();
                     const email = bidder?.email;
-                    if (email && w.claim_token) {
+                    if (email && cw.claim_token) {
                         const sent = await (0, email_service_1.sendWinnerEmail)({
                             to: email,
                             winnerName: bidder?.name || 'Winner',
                             auctionTitle: auction.title || 'Auction',
-                            winningAmount: Number(w.winning_amount),
-                            claimToken: w.claim_token,
-                            size: w.size,
+                            winningAmount: Number(cw.winning_amount),
+                            claimToken: cw.claim_token,
+                            size: cw.size,
                             isEscalation: false
                         });
                         if (sent) {
@@ -178,6 +179,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                                 .from('winners')
                                 .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)())
                                 .eq('id', w.id)
+                                .eq('bidder_id', cw.bidder_id)
                                 .eq('winner_email_sent_at', claimAt);
                         }
                         else {
@@ -186,6 +188,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                                 .update({ winner_email_sent_at: null })
                                 .eq('id', w.id)
                                 .eq('payment_status', 'pending')
+                                .eq('bidder_id', cw.bidder_id)
                                 .eq('winner_email_sent_at', claimAt);
                         }
                     }
@@ -195,6 +198,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                             .update({ winner_email_sent_at: null })
                             .eq('id', w.id)
                             .eq('payment_status', 'pending')
+                            .eq('bidder_id', cw.bidder_id)
                             .eq('winner_email_sent_at', claimAt);
                     }
                 }

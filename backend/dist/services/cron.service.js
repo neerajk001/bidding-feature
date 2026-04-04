@@ -83,31 +83,53 @@ async function checkWinnerPayments(trigger) {
             if (!claim.claimed || !claim.claimedAt) {
                 continue;
             }
-            const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single();
-            const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single();
-            if (bidder?.email && w.claim_token) {
+            const { data: currentWinner, error: currentWinnerError } = await supabase_1.supabaseAdmin
+                .from('winners')
+                .select('id, auction_id, bidder_id, winning_amount, claim_token, size')
+                .eq('id', w.id)
+                .eq('payment_status', 'pending')
+                .eq('winner_email_sent_at', claim.claimedAt)
+                .maybeSingle();
+            if (currentWinnerError) {
+                console.error(`[CRON] Failed to load winner ${w.id} after claim:`, currentWinnerError.message);
+                await releaseWinnerNotificationClaim(w.id, claim.claimedAt);
+                continue;
+            }
+            if (!currentWinner) {
+                continue;
+            }
+            const cw = currentWinner;
+            const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', cw.auction_id).single();
+            const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', cw.bidder_id).single();
+            if (bidder?.email && cw.claim_token) {
                 const sent = await (0, email_service_1.sendWinnerEmail)({
                     to: bidder.email,
                     winnerName: bidder?.name || 'Winner',
                     auctionTitle: auction?.title || 'Auction',
-                    winningAmount: Number(w.winning_amount),
-                    claimToken: w.claim_token,
-                    size: w.size,
+                    winningAmount: Number(cw.winning_amount),
+                    claimToken: cw.claim_token,
+                    size: cw.size,
                     isEscalation: false
                 });
                 if (sent) {
                     const sentAt = new Date().toISOString();
-                    const { error: markErr } = await supabase_1.supabaseAdmin
+                    const { data: markedRow, error: markErr } = await supabase_1.supabaseAdmin
                         .from('winners')
                         .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)(sentAt))
                         .eq('id', w.id)
-                        .eq('winner_email_sent_at', claim.claimedAt);
+                        .eq('bidder_id', cw.bidder_id)
+                        .eq('winner_email_sent_at', claim.claimedAt)
+                        .select('id')
+                        .maybeSingle();
                     if (markErr) {
                         console.error(`[CRON] Email sent but failed to mark notification state for ${w.id}:`, markErr.message);
                     }
+                    else if (!markedRow) {
+                        await releaseWinnerNotificationClaim(w.id, claim.claimedAt);
+                    }
                     else {
                         notified++;
-                        console.log(`[CRON] Sent winner email for winner ${w.id}${w.size ? ` (Size: ${w.size})` : ''}`);
+                        console.log(`[CRON] Sent winner email for winner ${w.id}${cw.size ? ` (Size: ${cw.size})` : ''}`);
                     }
                 }
                 else {
@@ -192,7 +214,7 @@ async function checkWinnerPayments(trigger) {
             .eq('id', w.id)
             .eq('payment_status', 'forfeited')
             .eq('bidder_id', w.bidder_id)
-            .select('id')
+            .select('id, bidder_id, winning_amount, claim_token, size')
             .maybeSingle();
         if (escErr || !escalatedRow) {
             console.error(`[CRON] Failed to escalate winner ${w.id}, rolling back to pending:`, escErr?.message || 'row changed during escalation');
@@ -203,16 +225,17 @@ async function checkWinnerPayments(trigger) {
             continue;
         }
         escalated++;
+        const ew = escalatedRow;
         const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single();
-        const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', nextBid.bidder_id).single();
+        const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', ew.bidder_id).single();
         if (bidder?.email) {
             const sent = await (0, email_service_1.sendWinnerEmail)({
                 to: bidder.email,
                 winnerName: bidder?.name || 'Winner',
                 auctionTitle: auction?.title || 'Auction',
-                winningAmount: Number(nextBid.amount),
-                claimToken: newClaimToken,
-                size: w.size,
+                winningAmount: Number(ew.winning_amount),
+                claimToken: ew.claim_token,
+                size: ew.size,
                 isEscalation: true
             });
             if (sent) {
@@ -220,7 +243,9 @@ async function checkWinnerPayments(trigger) {
                 const { error: markErr } = await supabase_1.supabaseAdmin
                     .from('winners')
                     .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)(sentAt))
-                    .eq('id', w.id);
+                    .eq('id', w.id)
+                    .eq('bidder_id', ew.bidder_id)
+                    .eq('claim_token', ew.claim_token);
                 if (markErr) {
                     console.error(`[CRON] Escalation email sent but failed to mark notification state for ${w.id}:`, markErr.message);
                 }

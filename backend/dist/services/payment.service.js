@@ -21,7 +21,7 @@ function buildRazorpayPaymentCompletionUpdate(paymentId, orderId, nowIso = new D
 async function markWinnerPaidRazorpay(winnerId, paymentId, orderId) {
     const { data: winner, error: fetchErr } = await supabase_1.supabaseAdmin
         .from('winners')
-        .select('id, payment_status, bidder_id, auction_id')
+        .select('id, payment_status, bidder_id, auction_id, razorpay_order_id')
         .eq('id', winnerId)
         .single();
     if (fetchErr || !winner)
@@ -29,15 +29,42 @@ async function markWinnerPaidRazorpay(winnerId, paymentId, orderId) {
     const w = winner;
     if (w.payment_status === 'completed')
         return { ok: true };
+    if (orderId && w.razorpay_order_id && String(w.razorpay_order_id) !== String(orderId)) {
+        return { ok: false, error: 'Winner payment order mismatch' };
+    }
     const updates = buildRazorpayPaymentCompletionUpdate(paymentId, orderId);
-    const { error: upErr } = await supabase_1.supabaseAdmin
+    const { data: updatedWinner, error: upErr } = await supabase_1.supabaseAdmin
         .from('winners')
         .update(updates)
-        .eq('id', winnerId);
+        .eq('id', winnerId)
+        .eq('bidder_id', w.bidder_id)
+        .in('payment_status', ['pending', 'overdue'])
+        .select('id, bidder_id, auction_id')
+        .maybeSingle();
     if (upErr)
         return { ok: false, error: upErr.message };
-    const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('email, name').eq('id', w.bidder_id).single();
-    const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single();
+    if (!updatedWinner) {
+        const { data: latestWinner } = await supabase_1.supabaseAdmin
+            .from('winners')
+            .select('payment_status')
+            .eq('id', winnerId)
+            .maybeSingle();
+        if (latestWinner?.payment_status === 'completed') {
+            return { ok: true };
+        }
+        return { ok: false, error: 'Winner payment state changed. Please retry verification.' };
+    }
+    const freshWinner = updatedWinner;
+    const { data: bidder } = await supabase_1.supabaseAdmin
+        .from('bidders')
+        .select('email, name')
+        .eq('id', freshWinner.bidder_id)
+        .single();
+    const { data: auction } = await supabase_1.supabaseAdmin
+        .from('auctions')
+        .select('title')
+        .eq('id', freshWinner.auction_id)
+        .single();
     if (bidder?.email) {
         await (0, email_service_1.sendPaymentConfirmedEmail)(bidder.email, bidder?.name || 'Winner', auction?.title || 'Auction');
     }

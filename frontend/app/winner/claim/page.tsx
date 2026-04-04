@@ -14,7 +14,7 @@ declare global {
       order_id: string
       name?: string
       description?: string
-      handler: (response: { razorpay_payment_id: string; razorpay_order_id: string }) => void
+      handler: (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => void
       prefill?: { name?: string }
       theme?: { color: string }
       modal?: { ondismiss?: () => void }
@@ -199,7 +199,7 @@ function ClaimContent() {
         prefill: { name: shippingAddress.full_name || data.bidder_name || undefined },
         theme: { color: '#800000' },
         modal: { ondismiss: () => setPaying(false) },
-        handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string }) => {
+        handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
           try {
             const verifyRes = await fetch('/api/winner/verify-payment', {
               method: 'POST',
@@ -208,6 +208,7 @@ function ClaimContent() {
                 token,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
                 instagram_handle: instagramHandle.trim() || undefined
               })
             })

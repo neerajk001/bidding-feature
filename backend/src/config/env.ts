@@ -14,13 +14,13 @@ function normalizeUrl(value: string): string {
 }
 
 const resolvedPublicAppUrl = normalizeUrl(
-  process.env.PUBLIC_APP_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || ''
+  process.env.PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL || ''
 )
 
 const publicAppUrl = resolvedPublicAppUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '')
 
 if (process.env.NODE_ENV === 'production' && (!publicAppUrl || /localhost|127\.0\.0\.1/i.test(publicAppUrl))) {
-  console.error('[ENV] PUBLIC_APP_URL is missing or points to localhost in production. Winner email links will be invalid.')
+  console.error('[ENV] PUBLIC_APP_URL (or NEXT_PUBLIC_APP_URL) is missing or points to localhost in production. Winner email links will be invalid.')
 }
 
 export const env = {

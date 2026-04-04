@@ -43,6 +43,20 @@ function normalizeShippingAddress(input) {
     }
     return { address };
 }
+function isRazorpayCheckoutSignatureValid(orderId, paymentId, signature) {
+    if (!env_1.env.razorpayKeySecret)
+        return false;
+    const expected = crypto_1.default
+        .createHmac('sha256', env_1.env.razorpayKeySecret)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+    try {
+        return crypto_1.default.timingSafeEqual(Buffer.from(expected), Buffer.from(String(signature).trim()));
+    }
+    catch {
+        return false;
+    }
+}
 // Public: get winner claim by token (for payment form)
 router.get('/winner/claim', async (req, res) => {
     try {
@@ -182,12 +196,12 @@ router.post('/winner/create-order', async (req, res) => {
 // Public: verify Razorpay payment and mark winner paid (after frontend checkout success)
 router.post('/winner/verify-payment', async (req, res) => {
     try {
-        const { token, razorpay_payment_id, razorpay_order_id, instagram_handle } = req.body || {};
+        const { token, razorpay_payment_id, razorpay_order_id, razorpay_signature, instagram_handle } = req.body || {};
         if (!token || typeof token !== 'string') {
             return res.status(400).json({ error: 'Token required' });
         }
-        if (!razorpay_payment_id || !razorpay_order_id) {
-            return res.status(400).json({ error: 'razorpay_payment_id and razorpay_order_id required' });
+        if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+            return res.status(400).json({ error: 'razorpay_payment_id, razorpay_order_id and razorpay_signature required' });
         }
         // Fail closed: never mark winners paid unless server-side Razorpay verification is available.
         if (!services_1.razorpay) {
@@ -208,6 +222,9 @@ router.post('/winner/verify-payment', async (req, res) => {
         if (w.razorpay_order_id !== razorpay_order_id) {
             return res.status(400).json({ error: 'Order does not match this claim' });
         }
+        if (!isRazorpayCheckoutSignatureValid(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
+            return res.status(400).json({ error: 'Invalid payment signature. Please retry payment.' });
+        }
         if (w.payment_status === 'completed') {
             return res.json({ success: true, message: 'Payment already confirmed.' });
         }
@@ -216,7 +233,13 @@ router.post('/winner/verify-payment', async (req, res) => {
             return res.status(400).json({ error: 'Please add delivery address before confirming payment.' });
         }
         {
-            let payment = await services_1.razorpay.payments.fetch(razorpay_payment_id);
+            let payment = null;
+            try {
+                payment = await services_1.razorpay.payments.fetch(razorpay_payment_id);
+            }
+            catch (fetchError) {
+                console.warn('[winner.verify-payment] payment fetch failed, trying order payments lookup', fetchError);
+            }
             // Many accounts return "authorized" first. Capture it here so proof is persisted immediately.
             if (payment?.status === 'authorized') {
                 const amountPaise = Number(payment.amount);
@@ -228,7 +251,12 @@ router.post('/winner/verify-payment', async (req, res) => {
                 }
                 catch (captureError) {
                     console.warn('[winner.verify-payment] capture attempt failed, re-fetching payment status', captureError);
-                    payment = await services_1.razorpay.payments.fetch(razorpay_payment_id);
+                    try {
+                        payment = await services_1.razorpay.payments.fetch(razorpay_payment_id);
+                    }
+                    catch (refetchError) {
+                        console.warn('[winner.verify-payment] payment re-fetch after capture failed', refetchError);
+                    }
                 }
             }
             if (!payment || payment.status !== 'captured') {
