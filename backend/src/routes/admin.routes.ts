@@ -13,6 +13,7 @@ import { env } from '../config/env'
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 const verifiedBuckets = new Set<string>()
+const DEFAULT_REEL_MAX_MB = 80
 
 function parseTimestamp(value: string | null | undefined): number {
   if (!value) return Number.NaN
@@ -71,31 +72,45 @@ function maybeUpload(req: Request, res: Response, next: NextFunction) {
   return next()
 }
 
-async function ensureStorageBucket(bucket: string): Promise<void> {
+function getConfiguredReelMaxMb(): number {
+  const parsed = Number(process.env.AUCTION_MAX_REEL_MB || DEFAULT_REEL_MAX_MB)
+  if (!Number.isFinite(parsed)) return DEFAULT_REEL_MAX_MB
+  return Math.min(Math.max(Math.floor(parsed), 10), 500)
+}
+
+async function ensureStorageBucket(bucket: string, maxReelMb: number): Promise<void> {
   if (verifiedBuckets.has(bucket)) return
 
-  const { data: existing, error: getError } = await supabaseAdmin.storage.getBucket(bucket)
-  if (existing && !getError) {
+  const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets()
+  if (listError) {
+    throw new Error(`Storage bucket listing failed: ${listError.message}`)
+  }
+
+  const existing = (buckets || []).find((b: any) => String(b?.name || b?.id || '') === bucket)
+  if (existing) {
     verifiedBuckets.add(bucket)
     return
   }
 
-  const isNotFound =
-    (getError as any)?.statusCode === '404' ||
-    (getError as any)?.status === 404 ||
-    String((getError as any)?.message || '').toLowerCase().includes('not found')
-
-  if (!isNotFound && getError) {
-    throw new Error(`Storage bucket check failed for "${bucket}": ${getError.message}`)
-  }
-
-  const { error: createError } = await supabaseAdmin.storage.createBucket(bucket, {
+  const fileSizeLimitBytes = maxReelMb * 1024 * 1024
+  let { error: createError } = await supabaseAdmin.storage.createBucket(bucket, {
     public: true,
-    fileSizeLimit: '60MB'
+    fileSizeLimit: fileSizeLimitBytes
   })
 
   if (createError) {
-    throw new Error(`Storage bucket "${bucket}" missing and auto-create failed: ${createError.message}`)
+    const msg = String(createError.message || '').toLowerCase()
+    const alreadyExists = msg.includes('already exists') || msg.includes('duplicate') || msg.includes('conflict')
+    const limitNotAccepted = msg.includes('maximum allowed size') || msg.includes('file size')
+    if (!alreadyExists && limitNotAccepted) {
+      // Some projects reject custom bucket size limits.
+      // Retry with platform default limit instead of failing hard.
+      const retry = await supabaseAdmin.storage.createBucket(bucket, { public: true })
+      createError = retry.error || null
+    }
+    if (createError && !alreadyExists) {
+      throw new Error(`Storage bucket "${bucket}" missing and auto-create failed: ${createError.message}`)
+    }
   }
 
   verifiedBuckets.add(bucket)
@@ -129,9 +144,9 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
   try {
     const contentType = req.headers['content-type'] || ''
     const ALLOWED_REEL_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
-    const MAX_REEL_MB = 50
+    const MAX_REEL_MB = getConfiguredReelMaxMb()
     const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media'
-    await ensureStorageBucket(bucket)
+    await ensureStorageBucket(bucket, MAX_REEL_MB)
 
     let body: Record<string, any> = {}
     let reelFile: Express.Multer.File | null = null
@@ -850,7 +865,7 @@ router.post('/upload-url', async (req: Request, res: Response) => {
     }
 
     const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media'
-    await ensureStorageBucket(bucket)
+    await ensureStorageBucket(bucket, getConfiguredReelMaxMb())
     const extension = filename.split('.').pop() || 'bin'
     const timestamp = Date.now()
     const cleanFolder = folder ? String(folder).replace(/[^a-z0-9]/gi, '') : 'uploads'
@@ -878,7 +893,11 @@ router.post('/upload-url', async (req: Request, res: Response) => {
     })
   } catch (error) {
     console.error('Upload URL error:', error)
-    return res.status(500).json({ error: 'Internal server error' })
+    const details = error instanceof Error ? error.message : String(error)
+    return res.status(500).json({
+      error: `Upload URL generation failed. ${details}`,
+      hint: 'Verify SUPABASE_SERVICE_ROLE_KEY, Storage API availability, and bucket permissions.'
+    })
   }
 })
 
