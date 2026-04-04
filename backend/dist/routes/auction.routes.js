@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const supabase_1 = require("../config/supabase");
-const auction_service_1 = require("../services/auction.service");
 const cache_1 = require("../middleware/cache");
 const router = express_1.default.Router();
 function parseTimestamp(value) {
@@ -35,7 +34,6 @@ function getAuctionPhase(nowTs, start, end) {
 // Public: List auctions
 router.get('/auctions', async (req, res) => {
     try {
-        await (0, auction_service_1.finalizeEndedAuctions)();
         const nowTs = Date.now();
         const includeEnded = req.query.includeEnded === 'true';
         const { data: auctions, error } = await supabase_1.supabaseAdmin
@@ -114,7 +112,6 @@ router.get('/auctions', async (req, res) => {
 // Public: Active auction
 router.get('/auction/active', async (_req, res) => {
     try {
-        await (0, auction_service_1.finalizeEndedAuctions)();
         const nowTs = Date.now();
         const { data: auctions, error } = await supabase_1.supabaseAdmin
             .from('auctions')
@@ -168,7 +165,6 @@ router.get('/auction/active', async (_req, res) => {
 // Public: Auction by product ID
 router.get('/auction/product/:product_id', async (req, res) => {
     try {
-        await (0, auction_service_1.finalizeEndedAuctions)();
         const product_id = req.params.product_id;
         if (!product_id) {
             return res.status(400).json({ error: 'Product ID is required' });
@@ -211,7 +207,6 @@ router.get('/auction/:id', async (req, res) => {
         if (!id) {
             return res.status(400).json({ error: 'Auction ID is required' });
         }
-        await (0, auction_service_1.finalizeEndedAuctions)();
         // Direct query - no RPC needed
         const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
             .from('auctions')

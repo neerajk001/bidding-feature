@@ -1,8 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildRazorpayPaymentCompletionUpdate = buildRazorpayPaymentCompletionUpdate;
 exports.markWinnerPaidRazorpay = markWinnerPaidRazorpay;
 const supabase_1 = require("../config/supabase");
 const email_service_1 = require("./email.service");
+function buildRazorpayPaymentCompletionUpdate(paymentId, orderId, nowIso = new Date().toISOString()) {
+    const updates = {
+        payment_status: 'completed',
+        payment_completed_at: nowIso,
+        payment_verified_by_admin: true,
+        razorpay_payment_id: paymentId,
+        payment_proof_note: 'Verified via Razorpay API'
+    };
+    if (orderId) {
+        updates.razorpay_order_id = orderId;
+    }
+    return updates;
+}
 /** Mark winner as paid (Razorpay), send confirmation email. Idempotent if already completed. */
 async function markWinnerPaidRazorpay(winnerId, paymentId, orderId) {
     const { data: winner, error: fetchErr } = await supabase_1.supabaseAdmin
@@ -15,17 +29,7 @@ async function markWinnerPaidRazorpay(winnerId, paymentId, orderId) {
     const w = winner;
     if (w.payment_status === 'completed')
         return { ok: true };
-    const now = new Date().toISOString();
-    const updates = {
-        payment_status: 'completed',
-        payment_completed_at: now,
-        payment_verified_by_admin: true,
-        razorpay_payment_id: paymentId,
-        payment_proof_note: 'Verified via Razorpay API'
-    };
-    if (orderId) {
-        updates.razorpay_order_id = orderId;
-    }
+    const updates = buildRazorpayPaymentCompletionUpdate(paymentId, orderId);
     const { error: upErr } = await supabase_1.supabaseAdmin
         .from('winners')
         .update(updates)

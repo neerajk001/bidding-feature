@@ -165,6 +165,25 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
 
       if (winnersToNotify && winnersToNotify.length > 0) {
         for (const w of winnersToNotify) {
+          const claimAt = new Date().toISOString()
+          const { data: claimedRow, error: claimErr } = await supabaseAdmin
+            .from('winners')
+            .update({ winner_email_sent_at: claimAt })
+            .eq('id', w.id)
+            .eq('payment_status', 'pending')
+            .is('winner_email_sent_at', null)
+            .select('id')
+            .maybeSingle()
+
+          if (claimErr) {
+            errors.push(`Failed to claim winner email slot for ${w.id}: ${claimErr.message}`)
+            continue
+          }
+
+          if (!claimedRow) {
+            continue
+          }
+
           const { data: bidder } = await supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single()
           const email = (bidder as any)?.email
           if (email && w.claim_token) {
@@ -178,8 +197,26 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
               isEscalation: false
             })
             if (sent) {
-              await supabaseAdmin.from('winners').update(buildWinnerNotificationUpdate()).eq('id', w.id)
+              await supabaseAdmin
+                .from('winners')
+                .update(buildWinnerNotificationUpdate())
+                .eq('id', w.id)
+                .eq('winner_email_sent_at', claimAt)
+            } else {
+              await supabaseAdmin
+                .from('winners')
+                .update({ winner_email_sent_at: null })
+                .eq('id', w.id)
+                .eq('payment_status', 'pending')
+                .eq('winner_email_sent_at', claimAt)
             }
+          } else {
+            await supabaseAdmin
+              .from('winners')
+              .update({ winner_email_sent_at: null })
+              .eq('id', w.id)
+              .eq('payment_status', 'pending')
+              .eq('winner_email_sent_at', claimAt)
           }
         }
       }

@@ -965,6 +965,184 @@ router.patch('/winners/:id', async (req, res) => {
         return res.status(500).json({ error: error?.message || 'Failed to update winner' });
     }
 });
+// POST /admin/winners/retry-failed-shipments - Retry failed Delhivery shipment creations in bulk
+router.post('/winners/retry-failed-shipments', async (req, res) => {
+    try {
+        const body = req.body || {};
+        const winnerIds = Array.isArray(body.winner_ids)
+            ? body.winner_ids.map((id) => String(id || '').trim()).filter(Boolean)
+            : [];
+        const requestedLimit = Number(body.limit);
+        const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+            ? Math.min(Math.floor(requestedLimit), 100)
+            : 25;
+        let query = supabase_1.supabaseAdmin
+            .from('winners')
+            .select(`
+        id,
+        payment_status,
+        shipping_address,
+        razorpay_order_id,
+        delhivery_order_id,
+        delhivery_status,
+        delhivery_awb,
+        auction:auction_id(title)
+      `)
+            .eq('payment_status', 'completed')
+            .is('delhivery_awb', null)
+            .eq('delhivery_status', 'failed')
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        if (winnerIds.length > 0) {
+            query = query.in('id', winnerIds);
+        }
+        const { data: failedWinners, error: failedFetchError } = await query;
+        if (failedFetchError)
+            throw failedFetchError;
+        if (!failedWinners || failedWinners.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No failed shipments found to retry',
+                total: 0,
+                retried: 0,
+                failed: 0,
+                skipped: 0,
+                results: []
+            });
+        }
+        const results = [];
+        for (const winnerRow of failedWinners) {
+            const winner = winnerRow;
+            const auctionRecord = Array.isArray(winner.auction) ? winner.auction[0] : winner.auction;
+            const orderId = winner.delhivery_order_id || winner.razorpay_order_id || `WIN-${winner.id}`;
+            if (winner.delhivery_awb) {
+                results.push({ id: winner.id, status: 'skipped', reason: 'Already dispatched' });
+                continue;
+            }
+            const normalizedShipping = normalizeShippingAddress(winner.shipping_address);
+            if (!normalizedShipping.address) {
+                await supabase_1.supabaseAdmin
+                    .from('winners')
+                    .update({
+                    delhivery_status: 'failed',
+                    delhivery_error: normalizedShipping.error || 'Shipping address is required before dispatch.',
+                    delhivery_last_tracking_update: new Date().toISOString(),
+                    delhivery_order_id: orderId
+                })
+                    .eq('id', winner.id);
+                results.push({
+                    id: winner.id,
+                    status: 'failed',
+                    reason: normalizedShipping.error || 'Invalid shipping address'
+                });
+                continue;
+            }
+            if (!env_1.env.delhiveryEnabled) {
+                await supabase_1.supabaseAdmin
+                    .from('winners')
+                    .update({
+                    dispatched_at: new Date().toISOString(),
+                    delhivery_order_id: orderId,
+                    delhivery_status: 'created',
+                    delhivery_error: null,
+                    delhivery_last_tracking_update: new Date().toISOString(),
+                    delhivery_raw_response: {
+                        skipped: true,
+                        reason: 'DELHIVERY_ENABLED is false',
+                        timestamp: new Date().toISOString(),
+                        orderId
+                    }
+                })
+                    .eq('id', winner.id);
+                results.push({
+                    id: winner.id,
+                    status: 'skipped',
+                    reason: 'Delhivery disabled, marked manual dispatch'
+                });
+                continue;
+            }
+            const { data: lockRow, error: lockError } = await supabase_1.supabaseAdmin
+                .from('winners')
+                .update({
+                delhivery_status: 'processing',
+                delhivery_order_id: orderId,
+                shipment_triggered_at: new Date().toISOString(),
+                delhivery_error: null
+            })
+                .eq('id', winner.id)
+                .is('delhivery_awb', null)
+                .or('delhivery_status.is.null,delhivery_status.eq.failed')
+                .select('id')
+                .maybeSingle();
+            if (lockError) {
+                results.push({ id: winner.id, status: 'failed', reason: 'Failed to acquire retry lock' });
+                continue;
+            }
+            if (!lockRow) {
+                results.push({ id: winner.id, status: 'skipped', reason: 'Dispatch already in progress' });
+                continue;
+            }
+            const shipment = await (0, delhivery_service_1.createDelhiveryShipment)(normalizedShipping.address, auctionRecord?.title || 'Auction Item', orderId, winner.id);
+            if (shipment.success && shipment.awb) {
+                const { error: successUpdateError } = await supabase_1.supabaseAdmin
+                    .from('winners')
+                    .update({
+                    dispatched_at: new Date().toISOString(),
+                    delhivery_awb: shipment.awb,
+                    delhivery_order_id: orderId,
+                    delhivery_tracking_url: shipment.trackingUrl || null,
+                    delhivery_status: 'created',
+                    delhivery_raw_response: shipment.rawResponse || null,
+                    delhivery_last_tracking_update: new Date().toISOString(),
+                    shipment_triggered_at: new Date().toISOString(),
+                    delhivery_error: null
+                })
+                    .eq('id', winner.id);
+                if (successUpdateError) {
+                    results.push({ id: winner.id, status: 'failed', reason: successUpdateError.message });
+                }
+                else {
+                    results.push({ id: winner.id, status: 'created', awb: shipment.awb });
+                }
+            }
+            else {
+                await supabase_1.supabaseAdmin
+                    .from('winners')
+                    .update({
+                    dispatched_at: null,
+                    delhivery_order_id: orderId,
+                    delhivery_status: 'failed',
+                    delhivery_error: shipment.error || 'Failed to create Delhivery shipment',
+                    delhivery_raw_response: shipment.rawResponse || null,
+                    delhivery_last_tracking_update: new Date().toISOString(),
+                    shipment_triggered_at: new Date().toISOString()
+                })
+                    .eq('id', winner.id);
+                results.push({
+                    id: winner.id,
+                    status: 'failed',
+                    reason: shipment.error || 'Delhivery shipment creation failed'
+                });
+            }
+        }
+        const retried = results.filter((r) => r.status === 'created').length;
+        const failed = results.filter((r) => r.status === 'failed').length;
+        const skipped = results.filter((r) => r.status === 'skipped').length;
+        return res.json({
+            success: failed === 0,
+            message: `Processed ${results.length} failed shipment retries`,
+            total: results.length,
+            retried,
+            failed,
+            skipped,
+            results
+        });
+    }
+    catch (error) {
+        console.error('Retry failed shipments error:', error);
+        return res.status(500).json({ error: error?.message || 'Failed to retry failed shipments' });
+    }
+});
 // POST /admin/winners/:id/resend-email - Force resend winner notification email
 router.post('/winners/:id/resend-email', async (req, res) => {
     try {

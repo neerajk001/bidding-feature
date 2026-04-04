@@ -189,6 +189,10 @@ router.post('/winner/verify-payment', async (req, res) => {
         if (!razorpay_payment_id || !razorpay_order_id) {
             return res.status(400).json({ error: 'razorpay_payment_id and razorpay_order_id required' });
         }
+        // Fail closed: never mark winners paid unless server-side Razorpay verification is available.
+        if (!services_1.razorpay) {
+            return res.status(503).json({ error: 'Payment verification service is unavailable. Please contact support.' });
+        }
         const { data: winner, error } = await supabase_1.supabaseAdmin
             .from('winners')
             .select('id, payment_due_at, payment_status, razorpay_order_id, winning_amount, shipping_address')
@@ -211,7 +215,7 @@ router.post('/winner/verify-payment', async (req, res) => {
         if (!normalizedShipping.address) {
             return res.status(400).json({ error: 'Please add delivery address before confirming payment.' });
         }
-        if (services_1.razorpay) {
+        {
             let payment = await services_1.razorpay.payments.fetch(razorpay_payment_id);
             // Many accounts return "authorized" first. Capture it here so proof is persisted immediately.
             if (payment?.status === 'authorized') {

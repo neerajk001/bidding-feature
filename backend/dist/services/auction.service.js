@@ -145,6 +145,22 @@ async function finalizeEndedAuctions(now = new Date()) {
                 .is('winner_email_sent_at', null);
             if (winnersToNotify && winnersToNotify.length > 0) {
                 for (const w of winnersToNotify) {
+                    const claimAt = new Date().toISOString();
+                    const { data: claimedRow, error: claimErr } = await supabase_1.supabaseAdmin
+                        .from('winners')
+                        .update({ winner_email_sent_at: claimAt })
+                        .eq('id', w.id)
+                        .eq('payment_status', 'pending')
+                        .is('winner_email_sent_at', null)
+                        .select('id')
+                        .maybeSingle();
+                    if (claimErr) {
+                        errors.push(`Failed to claim winner email slot for ${w.id}: ${claimErr.message}`);
+                        continue;
+                    }
+                    if (!claimedRow) {
+                        continue;
+                    }
                     const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single();
                     const email = bidder?.email;
                     if (email && w.claim_token) {
@@ -158,8 +174,28 @@ async function finalizeEndedAuctions(now = new Date()) {
                             isEscalation: false
                         });
                         if (sent) {
-                            await supabase_1.supabaseAdmin.from('winners').update((0, winner_offer_service_1.buildWinnerNotificationUpdate)()).eq('id', w.id);
+                            await supabase_1.supabaseAdmin
+                                .from('winners')
+                                .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)())
+                                .eq('id', w.id)
+                                .eq('winner_email_sent_at', claimAt);
                         }
+                        else {
+                            await supabase_1.supabaseAdmin
+                                .from('winners')
+                                .update({ winner_email_sent_at: null })
+                                .eq('id', w.id)
+                                .eq('payment_status', 'pending')
+                                .eq('winner_email_sent_at', claimAt);
+                        }
+                    }
+                    else {
+                        await supabase_1.supabaseAdmin
+                            .from('winners')
+                            .update({ winner_email_sent_at: null })
+                            .eq('id', w.id)
+                            .eq('payment_status', 'pending')
+                            .eq('winner_email_sent_at', claimAt);
                     }
                 }
             }

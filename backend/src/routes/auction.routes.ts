@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express'
 import { supabaseAdmin } from '../config/supabase'
-import { finalizeEndedAuctions } from '../services/auction.service'
 import { setNoCache } from '../middleware/cache'
 
 const router = express.Router()
@@ -30,7 +29,6 @@ function getAuctionPhase(nowTs: number, start: string | null | undefined, end: s
 // Public: List auctions
 router.get('/auctions', async (req: Request, res: Response) => {
   try {
-    await finalizeEndedAuctions()
     const nowTs = Date.now()
 
     const includeEnded = req.query.includeEnded === 'true'
@@ -123,8 +121,6 @@ router.get('/auctions', async (req: Request, res: Response) => {
 // Public: Active auction
 router.get('/auction/active', async (_req: Request, res: Response) => {
   try {
-    await finalizeEndedAuctions()
-
     const nowTs = Date.now()
 
     const { data: auctions, error } = await supabaseAdmin
@@ -184,8 +180,6 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
 // Public: Auction by product ID
 router.get('/auction/product/:product_id', async (req: Request, res: Response) => {
   try {
-    await finalizeEndedAuctions()
-
     const product_id = req.params.product_id
 
     if (!product_id) {
@@ -235,8 +229,6 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
     if (!id) {
       return res.status(400).json({ error: 'Auction ID is required' })
     }
-
-    await finalizeEndedAuctions()
 
     // Direct query - no RPC needed
     const { data: auction, error: auctionError } = await supabaseAdmin

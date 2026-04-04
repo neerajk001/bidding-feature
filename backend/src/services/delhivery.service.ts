@@ -23,6 +23,37 @@ export interface CreateShipmentResponse {
   validationError?: boolean
 }
 
+function maskPhone(phone: string): string {
+  const value = String(phone || '').trim()
+  if (!value) return value
+  if (value.length <= 2) return '*'.repeat(value.length)
+  return `${'*'.repeat(value.length - 2)}${value.slice(-2)}`
+}
+
+function maskPostalCode(pin: string): string {
+  const value = String(pin || '').trim()
+  if (!value) return value
+  if (value.length <= 2) return '*'.repeat(value.length)
+  return `${value.slice(0, 2)}${'*'.repeat(value.length - 2)}`
+}
+
+export function sanitizeShipmentPayloadForLogs(payload: Record<string, any>): Record<string, any> {
+  const shipments = Array.isArray(payload?.shipments)
+    ? payload.shipments.map((shipment: Record<string, any>) => ({
+        ...shipment,
+        name: shipment?.name ? '[REDACTED]' : shipment?.name,
+        add: shipment?.add ? '[REDACTED]' : shipment?.add,
+        phone: maskPhone(String(shipment?.phone || '')),
+        pin: maskPostalCode(String(shipment?.pin || ''))
+      }))
+    : payload?.shipments
+
+  return {
+    ...payload,
+    shipments
+  }
+}
+
 /**
  * Create a shipment in Delhivery CMU API when dispatch is requested.
  * Uses exponential backoff retry strategy for reliability.
@@ -74,7 +105,7 @@ export async function createDelhiveryShipment(
     winnerId,
     orderId,
     endpoint: `${env.delhiveryApiBaseUrl}/cmu/create.json`,
-    payload
+    payload: sanitizeShipmentPayloadForLogs(payload)
   })
 
   return retryWithExponentialBackoff(
@@ -123,9 +154,8 @@ async function sendDelhiveryRequest(payload: unknown): Promise<CreateShipmentRes
     }
 
     if (!response.ok) {
-      const errorText = typeof textBody === 'string' ? textBody.substring(0, 300) : `HTTP ${response.status}`
       const validationError = response.status === 400 || response.status === 422
-      console.error(`[Delhivery] API error ${response.status} for order ${orderId || 'unknown'}:`, errorText)
+      console.error(`[Delhivery] API error ${response.status} for order ${orderId || 'unknown'}`)
       return {
         success: false,
         status: 'failed',
@@ -143,8 +173,7 @@ async function sendDelhiveryRequest(payload: unknown): Promise<CreateShipmentRes
         timestamp: new Date().toISOString(),
         orderId,
         awb,
-        statusCode: response.status,
-        response: data
+        statusCode: response.status
       })
       return {
         success: true,

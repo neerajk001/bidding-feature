@@ -1,7 +1,39 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.sanitizeShipmentPayloadForLogs = sanitizeShipmentPayloadForLogs;
 exports.createDelhiveryShipment = createDelhiveryShipment;
 const env_1 = require("../config/env");
+function maskPhone(phone) {
+    const value = String(phone || '').trim();
+    if (!value)
+        return value;
+    if (value.length <= 2)
+        return '*'.repeat(value.length);
+    return `${'*'.repeat(value.length - 2)}${value.slice(-2)}`;
+}
+function maskPostalCode(pin) {
+    const value = String(pin || '').trim();
+    if (!value)
+        return value;
+    if (value.length <= 2)
+        return '*'.repeat(value.length);
+    return `${value.slice(0, 2)}${'*'.repeat(value.length - 2)}`;
+}
+function sanitizeShipmentPayloadForLogs(payload) {
+    const shipments = Array.isArray(payload?.shipments)
+        ? payload.shipments.map((shipment) => ({
+            ...shipment,
+            name: shipment?.name ? '[REDACTED]' : shipment?.name,
+            add: shipment?.add ? '[REDACTED]' : shipment?.add,
+            phone: maskPhone(String(shipment?.phone || '')),
+            pin: maskPostalCode(String(shipment?.pin || ''))
+        }))
+        : payload?.shipments;
+    return {
+        ...payload,
+        shipments
+    };
+}
 /**
  * Create a shipment in Delhivery CMU API when dispatch is requested.
  * Uses exponential backoff retry strategy for reliability.
@@ -44,7 +76,7 @@ async function createDelhiveryShipment(shippingAddress, auctionTitle, orderId, w
         winnerId,
         orderId,
         endpoint: `${env_1.env.delhiveryApiBaseUrl}/cmu/create.json`,
-        payload
+        payload: sanitizeShipmentPayloadForLogs(payload)
     });
     return retryWithExponentialBackoff(() => sendDelhiveryRequest(payload), Math.min(env_1.env.delhiveryRetryAttempts || 3, 3), [1000, 3000], winnerId);
 }
@@ -83,9 +115,8 @@ async function sendDelhiveryRequest(payload) {
             data = textBody || null;
         }
         if (!response.ok) {
-            const errorText = typeof textBody === 'string' ? textBody.substring(0, 300) : `HTTP ${response.status}`;
             const validationError = response.status === 400 || response.status === 422;
-            console.error(`[Delhivery] API error ${response.status} for order ${orderId || 'unknown'}:`, errorText);
+            console.error(`[Delhivery] API error ${response.status} for order ${orderId || 'unknown'}`);
             return {
                 success: false,
                 status: 'failed',
@@ -102,8 +133,7 @@ async function sendDelhiveryRequest(payload) {
                 timestamp: new Date().toISOString(),
                 orderId,
                 awb,
-                statusCode: response.status,
-                response: data
+                statusCode: response.status
             });
             return {
                 success: true,

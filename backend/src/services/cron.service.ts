@@ -1,6 +1,7 @@
 import cron from 'node-cron'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase'
+import { finalizeEndedAuctions } from './auction.service'
 import { sendWinnerEmail } from './email.service'
 import { buildPendingWinnerOffer, buildWinnerNotificationUpdate } from './winner-offer.service'
 
@@ -11,8 +12,18 @@ export type WinnerPaymentCheckResult = {
 }
 
 let activeRun: Promise<WinnerPaymentCheckResult> | null = null
+let activeFinalizationRun: Promise<{ finalized: number; errors: string[] }> | null = null
 
 export function initializeCronJobs() {
+  // Ensure auction end finalization is no longer dependent on public API traffic.
+  cron.schedule('* * * * *', async () => {
+    try {
+      await runAuctionFinalization('scheduler')
+    } catch (error) {
+      console.error('[CRON] Auction finalization failed:', error)
+    }
+  })
+
   cron.schedule('*/5 * * * *', async () => {
     try {
       await runWinnerPaymentCheck('scheduler')
@@ -21,7 +32,32 @@ export function initializeCronJobs() {
     }
   })
 
-  console.log('[CRON] Jobs initialized - running every 5 minutes')
+  console.log('[CRON] Jobs initialized - auction finalization every 1 minute, winner checks every 5 minutes')
+}
+
+export async function runAuctionFinalization(trigger: string = 'manual'): Promise<{ finalized: number; errors: string[] }> {
+  if (activeFinalizationRun) {
+    console.log(`[CRON] Auction finalization already running, joining existing run (${trigger})`)
+    return activeFinalizationRun
+  }
+
+  activeFinalizationRun = (async () => {
+    const result = await finalizeEndedAuctions()
+    const finalized = result.endedAuctionIds.length
+    if (finalized > 0 || result.errors.length > 0) {
+      console.log(
+        `[CRON] Auction finalization (${trigger}): finalized=${finalized}, errors=${result.errors.length}`
+      )
+    }
+    if (result.errors.length > 0) {
+      console.error('[CRON] Auction finalization errors:', result.errors)
+    }
+    return { finalized, errors: result.errors }
+  })().finally(() => {
+    activeFinalizationRun = null
+  })
+
+  return activeFinalizationRun
 }
 
 export async function runWinnerPaymentCheck(trigger: string = 'manual'): Promise<WinnerPaymentCheckResult> {
@@ -39,6 +75,7 @@ export async function runWinnerPaymentCheck(trigger: string = 'manual'): Promise
 
 async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckResult> {
   console.log(`[CRON] Running winner payment check (${trigger})...`)
+  await runAuctionFinalization(`winner-payment-check:${trigger}`)
   const now = new Date().toISOString()
   let notified = 0
 
@@ -52,6 +89,11 @@ async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckR
   if (toNotify && toNotify.length > 0) {
     console.log(`[CRON] Found ${toNotify.length} winner(s) to notify`)
     for (const w of toNotify) {
+      const claim = await claimWinnerNotificationSlot(w.id)
+      if (!claim.claimed || !claim.claimedAt) {
+        continue
+      }
+
       const { data: auction } = await supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single()
       const { data: bidder } = await supabaseAdmin.from('bidders').select('name, email').eq('id', w.bidder_id).single()
 
@@ -72,6 +114,7 @@ async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckR
             .from('winners')
             .update(buildWinnerNotificationUpdate(sentAt))
             .eq('id', w.id)
+            .eq('winner_email_sent_at', claim.claimedAt)
 
           if (markErr) {
             console.error(`[CRON] Email sent but failed to mark notification state for ${w.id}:`, markErr.message)
@@ -79,7 +122,11 @@ async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckR
             notified++
             console.log(`[CRON] Sent winner email for winner ${w.id}${w.size ? ` (Size: ${w.size})` : ''}`)
           }
+        } else {
+          await releaseWinnerNotificationClaim(w.id, claim.claimedAt)
         }
+      } else {
+        await releaseWinnerNotificationClaim(w.id, claim.claimedAt)
       }
     }
   }
@@ -120,10 +167,14 @@ async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckR
       .from('bids')
       .select('bidder_id, amount')
       .eq('auction_id', w.auction_id)
-      .not('bidder_id', 'in', `(${nowForfeited.join(',')})`)
       .order('amount', { ascending: false })
       .order('created_at', { ascending: true })
       .limit(1)
+
+    const excludedBidders = buildPostgrestInList(nowForfeited)
+    if (excludedBidders !== '()') {
+      nextBidQuery = nextBidQuery.not('bidder_id', 'in', excludedBidders)
+    }
 
     if (w.size != null && w.size !== '') {
       nextBidQuery = nextBidQuery.eq('size', w.size)
@@ -131,7 +182,16 @@ async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckR
       nextBidQuery = nextBidQuery.is('size', null)
     }
 
-    const { data: nextBid } = await nextBidQuery.maybeSingle()
+    const { data: nextBid, error: nextBidError } = await nextBidQuery.maybeSingle()
+    if (nextBidError) {
+      console.error(`[CRON] Failed to load next bidder for winner ${w.id}:`, nextBidError.message)
+      await supabaseAdmin
+        .from('winners')
+        .update({ payment_status: 'pending', forfeited_bidder_ids: alreadyForfeited })
+        .eq('id', w.id)
+        .eq('payment_status', 'forfeited')
+      continue
+    }
 
     if (!nextBid?.bidder_id) {
       console.error(
@@ -208,4 +268,47 @@ async function checkWinnerPayments(trigger: string): Promise<WinnerPaymentCheckR
   console.log(`[CRON] Marked ${marked} forfeited, escalated ${escalated}`)
   console.log(`[CRON] Winner payment check completed (${trigger})`)
   return { notified, marked_forfeited: marked, escalated }
+}
+
+async function claimWinnerNotificationSlot(winnerId: string): Promise<{ claimed: boolean; claimedAt?: string }> {
+  const claimedAt = new Date().toISOString()
+  const { data, error } = await supabaseAdmin
+    .from('winners')
+    .update({ winner_email_sent_at: claimedAt })
+    .eq('id', winnerId)
+    .eq('payment_status', 'pending')
+    .is('winner_email_sent_at', null)
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    console.error(`[CRON] Failed to claim winner notification slot for ${winnerId}:`, error.message)
+    return { claimed: false }
+  }
+
+  return data ? { claimed: true, claimedAt } : { claimed: false }
+}
+
+async function releaseWinnerNotificationClaim(winnerId: string, claimedAt: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('winners')
+    .update({ winner_email_sent_at: null })
+    .eq('id', winnerId)
+    .eq('payment_status', 'pending')
+    .eq('winner_email_sent_at', claimedAt)
+
+  if (error) {
+    console.error(`[CRON] Failed to release winner notification slot for ${winnerId}:`, error.message)
+  }
+}
+
+export function buildPostgrestInList(values: string[]): string {
+  const cleaned = values
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+
+  if (cleaned.length === 0) return '()'
+
+  const escaped = cleaned.map((value) => `"${value.replace(/"/g, '\\"')}"`)
+  return `(${escaped.join(',')})`
 }
