@@ -63,6 +63,7 @@ export default function AuctionDetailPage() {
   const [now, setNow] = useState(new Date())
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -221,9 +222,10 @@ export default function AuctionDetailPage() {
       refreshTimeoutRef.current = setTimeout(() => {
         refreshAuction()
         refreshTimeoutRef.current = null
-      }, 500) // Fast reconciliation after realtime event
+      }, 12000) // Keep DB reads low while still reconciling periodically
     }
 
+    setIsRealtimeConnected(false)
     const channel = supabase
       .channel(`auction-room-${liveAuctionId}`)
       .on(
@@ -306,13 +308,19 @@ export default function AuctionDetailPage() {
         }
       )
       .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsRealtimeConnected(true)
+          return
+        }
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setIsRealtimeConnected(false)
           // Pull latest data if realtime connection is interrupted.
           refreshAuction()
         }
       })
 
     return () => {
+      setIsRealtimeConnected(false)
       supabase.removeChannel(channel)
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current)
@@ -321,12 +329,12 @@ export default function AuctionDetailPage() {
   }, [auction?.id, phase, refreshAuction])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live') return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected) return
     const interval = setInterval(() => {
       refreshAuction()
-    }, 5000)
+    }, 15000)
     return () => clearInterval(interval)
-  }, [auctionId, phase, refreshAuction])
+  }, [auctionId, phase, isRealtimeConnected, refreshAuction])
 
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'

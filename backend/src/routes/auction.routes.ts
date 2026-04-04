@@ -296,26 +296,45 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
     const sizes = Array.isArray(auction.available_sizes)
       ? auction.available_sizes.map((s: any) => String(s ?? '').trim()).filter((s: string) => s.length > 0)
       : []
-    let highest_bids_by_size: { size: string; amount: number; bidder_name: string | null }[] | null = null
+    let highest_bids_by_size: { size: string; amount: number; bid_count: number; bidder_name: string | null }[] | null = null
 
     if (sizes.length > 0) {
-      const { data: bids } = await supabaseAdmin
-        .from('bids')
-        .select('size, amount, bidder:bidder_id(name)')
-        .eq('auction_id', id)
+      // Egress optimization:
+      // Avoid fetching every bid row on each request.
+      // We query only top bid + count per size.
+      const bySize = await Promise.all(
+        sizes.map(async (size) => {
+          const [topResult, countResult] = await Promise.all([
+            supabaseAdmin
+              .from('bids')
+              .select('amount, bidder:bidder_id(name)')
+              .eq('auction_id', id)
+              .eq('size', size)
+              .order('amount', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+            supabaseAdmin
+              .from('bids')
+              .select('id', { count: 'exact', head: true })
+              .eq('auction_id', id)
+              .eq('size', size)
+          ])
 
-      const bySize: Record<string, { amount: number; bidder_name: string | null }> = {}
-      for (const b of bids || []) {
-        const s = String((b as any).size ?? '').trim()
-        if (!s || !sizes.includes(s)) continue
-        const amt = Number((b as any).amount)
-        const bidder = (b as any).bidder as { name?: string } | { name?: string }[] | null
-        const name = Array.isArray(bidder) ? bidder[0]?.name : bidder?.name ?? null
-        if (!bySize[s] || amt > bySize[s].amount) {
-          bySize[s] = { amount: amt, bidder_name: name }
-        }
-      }
-      highest_bids_by_size = sizes.map((s) => ({ size: s, amount: bySize[s]?.amount ?? 0, bidder_name: bySize[s]?.bidder_name ?? null }))
+          const top = topResult.data as any
+          const bidder = top?.bidder as { name?: string } | { name?: string }[] | null
+          const bidderName = Array.isArray(bidder) ? bidder[0]?.name ?? null : bidder?.name ?? null
+
+          return {
+            size,
+            amount: Number(top?.amount ?? 0),
+            bid_count: Number(countResult.count ?? 0),
+            bidder_name: bidderName
+          }
+        })
+      )
+
+      highest_bids_by_size = bySize
     }
 
     const data = {
