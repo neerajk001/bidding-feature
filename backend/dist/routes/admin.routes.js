@@ -16,6 +16,7 @@ const delhivery_service_1 = require("../services/delhivery.service");
 const env_1 = require("../config/env");
 const router = express_1.default.Router();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
+const verifiedBuckets = new Set();
 function parseTimestamp(value) {
     if (!value)
         return Number.NaN;
@@ -56,6 +57,29 @@ function maybeUpload(req, res, next) {
     }
     return next();
 }
+async function ensureStorageBucket(bucket) {
+    if (verifiedBuckets.has(bucket))
+        return;
+    const { data: existing, error: getError } = await supabase_1.supabaseAdmin.storage.getBucket(bucket);
+    if (existing && !getError) {
+        verifiedBuckets.add(bucket);
+        return;
+    }
+    const isNotFound = getError?.statusCode === '404' ||
+        getError?.status === 404 ||
+        String(getError?.message || '').toLowerCase().includes('not found');
+    if (!isNotFound && getError) {
+        throw new Error(`Storage bucket check failed for "${bucket}": ${getError.message}`);
+    }
+    const { error: createError } = await supabase_1.supabaseAdmin.storage.createBucket(bucket, {
+        public: true,
+        fileSizeLimit: '60MB'
+    });
+    if (createError) {
+        throw new Error(`Storage bucket "${bucket}" missing and auto-create failed: ${createError.message}`);
+    }
+    verifiedBuckets.add(bucket);
+}
 // Protect all admin routes
 router.use(auth_1.requireAdmin);
 // GET /admin/auctions - List all auctions
@@ -83,6 +107,7 @@ router.post('/auctions', maybeUpload, async (req, res) => {
         const ALLOWED_REEL_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
         const MAX_REEL_MB = 50;
         const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media';
+        await ensureStorageBucket(bucket);
         let body = {};
         let reelFile = null;
         let galleryUrls = [];
@@ -702,6 +727,7 @@ router.post('/upload-url', async (req, res) => {
             return res.status(400).json({ error: 'Filename and type required' });
         }
         const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media';
+        await ensureStorageBucket(bucket);
         const extension = filename.split('.').pop() || 'bin';
         const timestamp = Date.now();
         const cleanFolder = folder ? String(folder).replace(/[^a-z0-9]/gi, '') : 'uploads';
@@ -712,7 +738,10 @@ router.post('/upload-url', async (req, res) => {
             .createSignedUploadUrl(path);
         if (error) {
             console.error('Signed URL creation failed:', error);
-            return res.status(500).json({ error: error.message });
+            const hint = /bucket|not found|storage/i.test(String(error.message || ''))
+                ? `Check bucket "${bucket}" exists and backend uses SUPABASE_SERVICE_ROLE_KEY.`
+                : 'Check Supabase Storage configuration.';
+            return res.status(500).json({ error: `${error.message}. ${hint}` });
         }
         const { data: publicData } = supabase_1.supabaseAdmin.storage.from(bucket).getPublicUrl(path);
         return res.json({

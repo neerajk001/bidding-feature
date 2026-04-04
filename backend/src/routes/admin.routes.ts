@@ -12,6 +12,7 @@ import { env } from '../config/env'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
+const verifiedBuckets = new Set<string>()
 
 function parseTimestamp(value: string | null | undefined): number {
   if (!value) return Number.NaN
@@ -70,6 +71,36 @@ function maybeUpload(req: Request, res: Response, next: NextFunction) {
   return next()
 }
 
+async function ensureStorageBucket(bucket: string): Promise<void> {
+  if (verifiedBuckets.has(bucket)) return
+
+  const { data: existing, error: getError } = await supabaseAdmin.storage.getBucket(bucket)
+  if (existing && !getError) {
+    verifiedBuckets.add(bucket)
+    return
+  }
+
+  const isNotFound =
+    (getError as any)?.statusCode === '404' ||
+    (getError as any)?.status === 404 ||
+    String((getError as any)?.message || '').toLowerCase().includes('not found')
+
+  if (!isNotFound && getError) {
+    throw new Error(`Storage bucket check failed for "${bucket}": ${getError.message}`)
+  }
+
+  const { error: createError } = await supabaseAdmin.storage.createBucket(bucket, {
+    public: true,
+    fileSizeLimit: '60MB'
+  })
+
+  if (createError) {
+    throw new Error(`Storage bucket "${bucket}" missing and auto-create failed: ${createError.message}`)
+  }
+
+  verifiedBuckets.add(bucket)
+}
+
 // Protect all admin routes
 router.use(requireAdmin)
 
@@ -100,6 +131,7 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
     const ALLOWED_REEL_TYPES = ['video/mp4', 'video/webm', 'video/quicktime']
     const MAX_REEL_MB = 50
     const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media'
+    await ensureStorageBucket(bucket)
 
     let body: Record<string, any> = {}
     let reelFile: Express.Multer.File | null = null
@@ -818,6 +850,7 @@ router.post('/upload-url', async (req: Request, res: Response) => {
     }
 
     const bucket = process.env.SUPABASE_REEL_BUCKET || 'auction-media'
+    await ensureStorageBucket(bucket)
     const extension = filename.split('.').pop() || 'bin'
     const timestamp = Date.now()
     const cleanFolder = folder ? String(folder).replace(/[^a-z0-9]/gi, '') : 'uploads'
@@ -830,7 +863,10 @@ router.post('/upload-url', async (req: Request, res: Response) => {
 
     if (error) {
       console.error('Signed URL creation failed:', error)
-      return res.status(500).json({ error: error.message })
+      const hint = /bucket|not found|storage/i.test(String(error.message || ''))
+        ? `Check bucket "${bucket}" exists and backend uses SUPABASE_SERVICE_ROLE_KEY.`
+        : 'Check Supabase Storage configuration.'
+      return res.status(500).json({ error: `${error.message}. ${hint}` })
     }
 
     const { data: publicData } = supabaseAdmin.storage.from(bucket).getPublicUrl(path)
