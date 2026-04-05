@@ -1,9 +1,29 @@
 import express, { Request, Response } from 'express'
 import { supabaseAdmin } from '../config/supabase'
-import { setNoCache } from '../middleware/cache'
+import { env } from '../config/env'
+import { setNoCache, setShortPublicCache } from '../middleware/cache'
 
 const router = express.Router()
 const liveStateCache = new Map<string, { expiresAt: number; payload: any }>()
+const auctionsListCache = new Map<string, { expiresAt: number; payload: any }>()
+const auctionDetailCache = new Map<string, { expiresAt: number; payload: any }>()
+
+function setRouteCacheHeaders(res: Response, maxAgeSeconds: number): void {
+  if (maxAgeSeconds <= 0) {
+    setNoCache(res)
+    return
+  }
+  setShortPublicCache(res, maxAgeSeconds, maxAgeSeconds * 3)
+}
+
+function pruneExpiredCacheEntries(cache: Map<string, { expiresAt: number; payload: any }>, nowTs: number, maxSize: number) {
+  if (cache.size <= maxSize) return
+  for (const [key, entry] of cache.entries()) {
+    if (entry.expiresAt <= nowTs) {
+      cache.delete(key)
+    }
+  }
+}
 
 function parseTimestamp(value: string | null | undefined): number {
   if (!value) return Number.NaN
@@ -31,12 +51,17 @@ function getAuctionPhase(nowTs: number, start: string | null | undefined, end: s
 router.get('/auctions', async (req: Request, res: Response) => {
   try {
     const nowTs = Date.now()
-
     const includeEnded = req.query.includeEnded === 'true'
+    const cacheKey = includeEnded ? 'with-ended' : 'without-ended'
+    const cached = auctionsListCache.get(cacheKey)
+    if (cached && cached.expiresAt > nowTs) {
+      setRouteCacheHeaders(res, env.auctionListCacheSeconds)
+      return res.json(cached.payload)
+    }
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, gallery_images, min_increment, base_price, available_sizes')
+      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment, base_price, available_sizes')
       .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
 
@@ -111,8 +136,14 @@ router.get('/auctions', async (req: Request, res: Response) => {
       ? auctionsWithBids
       : auctionsWithBids.filter((auction: any) => auction.status !== 'ended')
 
-    setNoCache(res)
-    return res.json({ success: true, auctions: filteredAuctions })
+    const payload = { success: true, auctions: filteredAuctions }
+    auctionsListCache.set(cacheKey, {
+      payload,
+      expiresAt: nowTs + Math.max(1, env.auctionListCacheSeconds) * 1000
+    })
+    pruneExpiredCacheEntries(auctionsListCache, nowTs, 20)
+    setRouteCacheHeaders(res, env.auctionListCacheSeconds)
+    return res.json(payload)
   } catch (error) {
     console.error('API error:', error)
     return res.status(500).json({ error: 'Internal server error' })
@@ -123,6 +154,13 @@ router.get('/auctions', async (req: Request, res: Response) => {
 router.get('/auction/active', async (_req: Request, res: Response) => {
   try {
     const nowTs = Date.now()
+    const cacheKey = 'active-auction'
+    const cacheTtlSeconds = Math.max(5, Math.min(env.auctionDetailCacheIdleSeconds, 20))
+    const cached = auctionDetailCache.get(cacheKey)
+    if (cached && cached.expiresAt > nowTs) {
+      setRouteCacheHeaders(res, cacheTtlSeconds)
+      return res.json(cached.payload)
+    }
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
@@ -136,20 +174,24 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
     }
 
     if (!auctions || auctions.length === 0) {
-      setNoCache(res)
-      return res.json({ exists: false })
+      const payload = { exists: false }
+      auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 })
+      setRouteCacheHeaders(res, cacheTtlSeconds)
+      return res.json(payload)
     }
 
     const liveAuction = auctions.find((auction: any) => isWithinWindow(nowTs, auction.bidding_start_time, auction.bidding_end_time))
 
     if (liveAuction) {
-      setNoCache(res)
-      return res.json({
+      const payload = {
         exists: true,
         auction_id: liveAuction.id,
         phase: 'live',
         cta: 'Place Bid'
-      })
+      }
+      auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 })
+      setRouteCacheHeaders(res, cacheTtlSeconds)
+      return res.json(payload)
     }
 
     const registrationAuction = auctions.find((auction: any) => {
@@ -161,17 +203,21 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
     })
 
     if (registrationAuction) {
-      setNoCache(res)
-      return res.json({
+      const payload = {
         exists: true,
         auction_id: registrationAuction.id,
         phase: 'registration',
         cta: 'Register Now'
-      })
+      }
+      auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 })
+      setRouteCacheHeaders(res, cacheTtlSeconds)
+      return res.json(payload)
     }
 
-    setNoCache(res)
-    return res.json({ exists: false })
+    const payload = { exists: false }
+    auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 })
+    setRouteCacheHeaders(res, cacheTtlSeconds)
+    return res.json(payload)
   } catch (error) {
     console.error('API error:', error)
     return res.status(500).json({ error: 'Internal server error' })
@@ -181,10 +227,19 @@ router.get('/auction/active', async (_req: Request, res: Response) => {
 // Public: Auction by product ID
 router.get('/auction/product/:product_id', async (req: Request, res: Response) => {
   try {
+    const nowTs = Date.now()
     const product_id = req.params.product_id
 
     if (!product_id) {
       return res.status(400).json({ error: 'Product ID is required' })
+    }
+
+    const cacheKey = `product:${product_id}`
+    const cached = auctionDetailCache.get(cacheKey)
+    if (cached && cached.expiresAt > nowTs) {
+      const cacheTtlSeconds = Math.max(3, Math.min(env.auctionDetailCacheLiveSeconds, 10))
+      setRouteCacheHeaders(res, cacheTtlSeconds)
+      return res.json(cached.payload)
     }
 
     const { data: auction, error } = await supabaseAdmin
@@ -210,12 +265,17 @@ router.get('/auction/product/:product_id', async (req: Request, res: Response) =
       .limit(1)
       .maybeSingle() as { data: { amount: number; bidder: { name: string } | { name: string }[] | null } | null }
 
-    return res.json({
+    const payload = {
       ...auction,
       status: derivedStatus,
       current_highest_bid: highestBid?.amount ?? null,
       highest_bidder_name: Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name ?? null
-    })
+    }
+    const cacheTtlSeconds = Math.max(3, Math.min(env.auctionDetailCacheLiveSeconds, 10))
+    auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 })
+    pruneExpiredCacheEntries(auctionDetailCache, nowTs, 1000)
+    setRouteCacheHeaders(res, cacheTtlSeconds)
+    return res.json(payload)
   } catch (error) {
     console.error('API error:', error)
     return res.status(500).json({ error: 'Internal server error' })
@@ -226,6 +286,7 @@ router.get('/auction/product/:product_id', async (req: Request, res: Response) =
 router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
   try {
     const id = req.params.id
+    const liveStateCacheSeconds = Math.max(1, env.auctionLiveStateCacheSeconds)
     if (!id) {
       return res.status(400).json({ error: 'Auction ID is required' })
     }
@@ -233,7 +294,7 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
     const now = Date.now()
     const cached = liveStateCache.get(id)
     if (cached && cached.expiresAt > now) {
-      setNoCache(res)
+      setRouteCacheHeaders(res, liveStateCacheSeconds)
       return res.json(cached.payload)
     }
 
@@ -269,7 +330,7 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
         : null
     }
 
-    liveStateCache.set(id, { payload, expiresAt: now + 1500 })
+    liveStateCache.set(id, { payload, expiresAt: now + liveStateCacheSeconds * 1000 })
     if (liveStateCache.size > 500) {
       for (const [key, entry] of liveStateCache.entries()) {
         if (entry.expiresAt <= now) {
@@ -278,7 +339,7 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
       }
     }
 
-    setNoCache(res)
+    setRouteCacheHeaders(res, liveStateCacheSeconds)
     return res.json(payload)
   } catch (error) {
     console.error('API error:', error)
@@ -289,10 +350,22 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
 // Public: Auction by ID (RPC)
 router.get('/auction/:id', async (req: Request, res: Response) => {
   try {
+    const nowTs = Date.now()
     const id = req.params.id
 
     if (!id) {
       return res.status(400).json({ error: 'Auction ID is required' })
+    }
+
+    const cacheKey = `auction:${id}`
+    const cached = auctionDetailCache.get(cacheKey)
+    if (cached && cached.expiresAt > nowTs) {
+      const cachedPayload = cached.payload as any
+      const ttl = cachedPayload?.status === 'live'
+        ? Math.max(1, env.auctionDetailCacheLiveSeconds)
+        : Math.max(5, env.auctionDetailCacheIdleSeconds)
+      setRouteCacheHeaders(res, ttl)
+      return res.json(cached.payload)
     }
 
     // Direct query - no RPC needed
@@ -352,7 +425,7 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
       ? (snapshot as any).highest_bids_by_size
       : null
 
-    const data = {
+    const payload = {
       ...auction,
       status: derivedStatus,
       current_highest_bid: displayAmount,
@@ -364,9 +437,13 @@ router.get('/auction/:id', async (req: Request, res: Response) => {
       winners_by_size: winnersList,
       highest_bids_by_size
     }
-
-    setNoCache(res)
-    return res.json(data)
+    const ttl = derivedStatus === 'live'
+      ? Math.max(1, env.auctionDetailCacheLiveSeconds)
+      : Math.max(5, env.auctionDetailCacheIdleSeconds)
+    auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + ttl * 1000 })
+    pruneExpiredCacheEntries(auctionDetailCache, nowTs, 1000)
+    setRouteCacheHeaders(res, ttl)
+    return res.json(payload)
   } catch (error) {
     console.error('API error:', error)
     return res.status(500).json({ error: 'Internal server error' })

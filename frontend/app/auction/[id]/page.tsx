@@ -64,10 +64,19 @@ export default function AuctionDetailPage() {
   const [selectedSize, setSelectedSize] = useState<string>('')
   const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
+  const [isPageVisible, setIsPageVisible] = useState(true)
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const updateVisibility = () => setIsPageVisible(document.visibilityState !== 'hidden')
+    updateVisibility()
+    document.addEventListener('visibilitychange', updateVisibility)
+    return () => document.removeEventListener('visibilitychange', updateVisibility)
   }, [])
 
   useEffect(() => {
@@ -232,7 +241,9 @@ export default function AuctionDetailPage() {
     const scheduleRefresh = () => {
       if (refreshTimeoutRef.current) return
       refreshTimeoutRef.current = setTimeout(() => {
-        refreshAuction()
+        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+          refreshAuction()
+        }
         refreshTimeoutRef.current = null
       }, 12000) // Keep DB reads low while still reconciling periodically
     }
@@ -341,12 +352,12 @@ export default function AuctionDetailPage() {
   }, [auction?.id, phase, refreshAuction])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || isRealtimeConnected) return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible) return
     const interval = setInterval(() => {
       refreshAuction()
     }, 15000)
     return () => clearInterval(interval)
-  }, [auctionId, phase, isRealtimeConnected, refreshAuction])
+  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction])
 
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'

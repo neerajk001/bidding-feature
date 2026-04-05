@@ -55,5 +55,14 @@ exports.env = {
     // API
     apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
     publicAppUrl,
-    port: Number(process.env.PORT || 3001)
+    port: Number(process.env.PORT || 3001),
+    // Traffic / egress guardrails
+    auctionListCacheSeconds: Number(process.env.AUCTION_LIST_CACHE_SECONDS || 20),
+    auctionDetailCacheLiveSeconds: Number(process.env.AUCTION_DETAIL_CACHE_LIVE_SECONDS || 5),
+    auctionDetailCacheIdleSeconds: Number(process.env.AUCTION_DETAIL_CACHE_IDLE_SECONDS || 45),
+    auctionLiveStateCacheSeconds: Number(process.env.AUCTION_LIVE_STATE_CACHE_SECONDS || 2),
+    rateLimitAuctionLiveStatePerMinute: Number(process.env.RATE_LIMIT_AUCTION_LIVE_STATE_PER_MIN || 90),
+    rateLimitAuctionDetailPerMinute: Number(process.env.RATE_LIMIT_AUCTION_DETAIL_PER_MIN || 45),
+    rateLimitAuctionsListPerMinute: Number(process.env.RATE_LIMIT_AUCTIONS_LIST_PER_MIN || 20),
+    rateLimitGlobalPerMinute: Number(process.env.RATE_LIMIT_GLOBAL_PER_MIN || 120)
 };

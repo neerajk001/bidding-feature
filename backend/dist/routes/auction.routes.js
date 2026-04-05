@@ -5,9 +5,28 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const supabase_1 = require("../config/supabase");
+const env_1 = require("../config/env");
 const cache_1 = require("../middleware/cache");
 const router = express_1.default.Router();
 const liveStateCache = new Map();
+const auctionsListCache = new Map();
+const auctionDetailCache = new Map();
+function setRouteCacheHeaders(res, maxAgeSeconds) {
+    if (maxAgeSeconds <= 0) {
+        (0, cache_1.setNoCache)(res);
+        return;
+    }
+    (0, cache_1.setShortPublicCache)(res, maxAgeSeconds, maxAgeSeconds * 3);
+}
+function pruneExpiredCacheEntries(cache, nowTs, maxSize) {
+    if (cache.size <= maxSize)
+        return;
+    for (const [key, entry] of cache.entries()) {
+        if (entry.expiresAt <= nowTs) {
+            cache.delete(key);
+        }
+    }
+}
 function parseTimestamp(value) {
     if (!value)
         return Number.NaN;
@@ -37,9 +56,15 @@ router.get('/auctions', async (req, res) => {
     try {
         const nowTs = Date.now();
         const includeEnded = req.query.includeEnded === 'true';
+        const cacheKey = includeEnded ? 'with-ended' : 'without-ended';
+        const cached = auctionsListCache.get(cacheKey);
+        if (cached && cached.expiresAt > nowTs) {
+            setRouteCacheHeaders(res, env_1.env.auctionListCacheSeconds);
+            return res.json(cached.payload);
+        }
         const { data: auctions, error } = await supabase_1.supabaseAdmin
             .from('auctions')
-            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, reel_url, gallery_images, min_increment, base_price, available_sizes')
+            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment, base_price, available_sizes')
             .neq('status', 'draft')
             .order('bidding_start_time', { ascending: true });
         if (error) {
@@ -102,8 +127,14 @@ router.get('/auctions', async (req, res) => {
         const filteredAuctions = includeEnded
             ? auctionsWithBids
             : auctionsWithBids.filter((auction) => auction.status !== 'ended');
-        (0, cache_1.setNoCache)(res);
-        return res.json({ success: true, auctions: filteredAuctions });
+        const payload = { success: true, auctions: filteredAuctions };
+        auctionsListCache.set(cacheKey, {
+            payload,
+            expiresAt: nowTs + Math.max(1, env_1.env.auctionListCacheSeconds) * 1000
+        });
+        pruneExpiredCacheEntries(auctionsListCache, nowTs, 20);
+        setRouteCacheHeaders(res, env_1.env.auctionListCacheSeconds);
+        return res.json(payload);
     }
     catch (error) {
         console.error('API error:', error);
@@ -114,6 +145,13 @@ router.get('/auctions', async (req, res) => {
 router.get('/auction/active', async (_req, res) => {
     try {
         const nowTs = Date.now();
+        const cacheKey = 'active-auction';
+        const cacheTtlSeconds = Math.max(5, Math.min(env_1.env.auctionDetailCacheIdleSeconds, 20));
+        const cached = auctionDetailCache.get(cacheKey);
+        if (cached && cached.expiresAt > nowTs) {
+            setRouteCacheHeaders(res, cacheTtlSeconds);
+            return res.json(cached.payload);
+        }
         const { data: auctions, error } = await supabase_1.supabaseAdmin
             .from('auctions')
             .select('id, status, registration_end_time, bidding_start_time, bidding_end_time')
@@ -124,18 +162,22 @@ router.get('/auction/active', async (_req, res) => {
             return res.status(500).json({ error: 'Failed to fetch auctions' });
         }
         if (!auctions || auctions.length === 0) {
-            (0, cache_1.setNoCache)(res);
-            return res.json({ exists: false });
+            const payload = { exists: false };
+            auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 });
+            setRouteCacheHeaders(res, cacheTtlSeconds);
+            return res.json(payload);
         }
         const liveAuction = auctions.find((auction) => isWithinWindow(nowTs, auction.bidding_start_time, auction.bidding_end_time));
         if (liveAuction) {
-            (0, cache_1.setNoCache)(res);
-            return res.json({
+            const payload = {
                 exists: true,
                 auction_id: liveAuction.id,
                 phase: 'live',
                 cta: 'Place Bid'
-            });
+            };
+            auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 });
+            setRouteCacheHeaders(res, cacheTtlSeconds);
+            return res.json(payload);
         }
         const registrationAuction = auctions.find((auction) => {
             if (getAuctionPhase(nowTs, auction.bidding_start_time, auction.bidding_end_time) !== 'upcoming')
@@ -147,16 +189,20 @@ router.get('/auction/active', async (_req, res) => {
             return nowTs < startTs && !Number.isNaN(regEndTs) && nowTs < regEndTs;
         });
         if (registrationAuction) {
-            (0, cache_1.setNoCache)(res);
-            return res.json({
+            const payload = {
                 exists: true,
                 auction_id: registrationAuction.id,
                 phase: 'registration',
                 cta: 'Register Now'
-            });
+            };
+            auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 });
+            setRouteCacheHeaders(res, cacheTtlSeconds);
+            return res.json(payload);
         }
-        (0, cache_1.setNoCache)(res);
-        return res.json({ exists: false });
+        const payload = { exists: false };
+        auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 });
+        setRouteCacheHeaders(res, cacheTtlSeconds);
+        return res.json(payload);
     }
     catch (error) {
         console.error('API error:', error);
@@ -166,9 +212,17 @@ router.get('/auction/active', async (_req, res) => {
 // Public: Auction by product ID
 router.get('/auction/product/:product_id', async (req, res) => {
     try {
+        const nowTs = Date.now();
         const product_id = req.params.product_id;
         if (!product_id) {
             return res.status(400).json({ error: 'Product ID is required' });
+        }
+        const cacheKey = `product:${product_id}`;
+        const cached = auctionDetailCache.get(cacheKey);
+        if (cached && cached.expiresAt > nowTs) {
+            const cacheTtlSeconds = Math.max(3, Math.min(env_1.env.auctionDetailCacheLiveSeconds, 10));
+            setRouteCacheHeaders(res, cacheTtlSeconds);
+            return res.json(cached.payload);
         }
         const { data: auction, error } = await supabase_1.supabaseAdmin
             .from('auctions')
@@ -189,12 +243,17 @@ router.get('/auction/product/:product_id', async (req, res) => {
             .order('amount', { ascending: false })
             .limit(1)
             .maybeSingle();
-        return res.json({
+        const payload = {
             ...auction,
             status: derivedStatus,
             current_highest_bid: highestBid?.amount ?? null,
             highest_bidder_name: Array.isArray(highestBid?.bidder) ? highestBid.bidder[0]?.name : highestBid?.bidder?.name ?? null
-        });
+        };
+        const cacheTtlSeconds = Math.max(3, Math.min(env_1.env.auctionDetailCacheLiveSeconds, 10));
+        auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + cacheTtlSeconds * 1000 });
+        pruneExpiredCacheEntries(auctionDetailCache, nowTs, 1000);
+        setRouteCacheHeaders(res, cacheTtlSeconds);
+        return res.json(payload);
     }
     catch (error) {
         console.error('API error:', error);
@@ -205,13 +264,14 @@ router.get('/auction/product/:product_id', async (req, res) => {
 router.get('/auction/:id/live-state', async (req, res) => {
     try {
         const id = req.params.id;
+        const liveStateCacheSeconds = Math.max(1, env_1.env.auctionLiveStateCacheSeconds);
         if (!id) {
             return res.status(400).json({ error: 'Auction ID is required' });
         }
         const now = Date.now();
         const cached = liveStateCache.get(id);
         if (cached && cached.expiresAt > now) {
-            (0, cache_1.setNoCache)(res);
+            setRouteCacheHeaders(res, liveStateCacheSeconds);
             return res.json(cached.payload);
         }
         const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
@@ -241,7 +301,7 @@ router.get('/auction/:id/live-state', async (req, res) => {
                 ? snapshot.highest_bids_by_size
                 : null
         };
-        liveStateCache.set(id, { payload, expiresAt: now + 1500 });
+        liveStateCache.set(id, { payload, expiresAt: now + liveStateCacheSeconds * 1000 });
         if (liveStateCache.size > 500) {
             for (const [key, entry] of liveStateCache.entries()) {
                 if (entry.expiresAt <= now) {
@@ -249,7 +309,7 @@ router.get('/auction/:id/live-state', async (req, res) => {
                 }
             }
         }
-        (0, cache_1.setNoCache)(res);
+        setRouteCacheHeaders(res, liveStateCacheSeconds);
         return res.json(payload);
     }
     catch (error) {
@@ -260,9 +320,20 @@ router.get('/auction/:id/live-state', async (req, res) => {
 // Public: Auction by ID (RPC)
 router.get('/auction/:id', async (req, res) => {
     try {
+        const nowTs = Date.now();
         const id = req.params.id;
         if (!id) {
             return res.status(400).json({ error: 'Auction ID is required' });
+        }
+        const cacheKey = `auction:${id}`;
+        const cached = auctionDetailCache.get(cacheKey);
+        if (cached && cached.expiresAt > nowTs) {
+            const cachedPayload = cached.payload;
+            const ttl = cachedPayload?.status === 'live'
+                ? Math.max(1, env_1.env.auctionDetailCacheLiveSeconds)
+                : Math.max(5, env_1.env.auctionDetailCacheIdleSeconds);
+            setRouteCacheHeaders(res, ttl);
+            return res.json(cached.payload);
         }
         // Direct query - no RPC needed
         const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
@@ -313,7 +384,7 @@ router.get('/auction/:id', async (req, res) => {
         const highest_bids_by_size = Array.isArray(snapshot?.highest_bids_by_size)
             ? snapshot.highest_bids_by_size
             : null;
-        const data = {
+        const payload = {
             ...auction,
             status: derivedStatus,
             current_highest_bid: displayAmount,
@@ -325,8 +396,13 @@ router.get('/auction/:id', async (req, res) => {
             winners_by_size: winnersList,
             highest_bids_by_size
         };
-        (0, cache_1.setNoCache)(res);
-        return res.json(data);
+        const ttl = derivedStatus === 'live'
+            ? Math.max(1, env_1.env.auctionDetailCacheLiveSeconds)
+            : Math.max(5, env_1.env.auctionDetailCacheIdleSeconds);
+        auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + ttl * 1000 });
+        pruneExpiredCacheEntries(auctionDetailCache, nowTs, 1000);
+        setRouteCacheHeaders(res, ttl);
+        return res.json(payload);
     }
     catch (error) {
         console.error('API error:', error);

@@ -32,7 +32,7 @@ export default function AuctionsPage() {
       setError(null)
 
       try {
-        const res = await fetch('/api/auctions', { cache: 'no-store' })
+        const res = await fetch('/api/auctions')
         const data = await res.json()
 
         if (!res.ok) {

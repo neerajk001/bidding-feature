@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
+import { env } from '../config/env'
 
 type RateLimitRule = {
   name: string
@@ -17,9 +18,27 @@ const buckets = new Map<string, Bucket>()
 
 const rules: RateLimitRule[] = [
   // Heavy realtime read paths
-  { name: 'auction_live_state', method: 'GET', path: /^\/auction\/[^/]+\/live-state$/, windowMs: 60_000, max: 120 },
-  { name: 'auction_detail', method: 'GET', path: /^\/auction\/[^/]+$/, windowMs: 60_000, max: 60 },
-  { name: 'auctions_list', method: 'GET', path: /^\/auctions$/, windowMs: 60_000, max: 30 },
+  {
+    name: 'auction_live_state',
+    method: 'GET',
+    path: /^\/auction\/[^/]+\/live-state$/,
+    windowMs: 60_000,
+    max: env.rateLimitAuctionLiveStatePerMinute
+  },
+  {
+    name: 'auction_detail',
+    method: 'GET',
+    path: /^\/auction\/[^/]+$/,
+    windowMs: 60_000,
+    max: env.rateLimitAuctionDetailPerMinute
+  },
+  {
+    name: 'auctions_list',
+    method: 'GET',
+    path: /^\/auctions$/,
+    windowMs: 60_000,
+    max: env.rateLimitAuctionsListPerMinute
+  },
 
   // Write paths
   { name: 'place_bid', method: 'POST', path: /^\/place-bid$/, windowMs: 60_000, max: 30 },
@@ -32,7 +51,7 @@ const rules: RateLimitRule[] = [
   { name: 'verify_phone_otp', method: 'POST', path: /^\/auth\/verify-otp$/, windowMs: 60 * 60_000, max: 50 },
 
   // Global default as final fallback
-  { name: 'global', path: /^\/.*/, windowMs: 60_000, max: 180 }
+  { name: 'global', path: /^\/.*/, windowMs: 60_000, max: env.rateLimitGlobalPerMinute }
 ]
 
 function getClientIp(req: Request): string {
@@ -113,4 +132,3 @@ export function apiRateLimiter(req: Request, res: Response, next: NextFunction):
   setRateLimitHeaders(res, rule.max, rule.max - current.count, current.resetAt)
   next()
 }
-

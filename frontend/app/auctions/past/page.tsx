@@ -37,7 +37,7 @@ export default function PastAuctionsPage() {
       setError(null)
 
       try {
-        const res = await fetch('/api/auctions?includeEnded=true', { cache: 'no-store' })
+        const res = await fetch('/api/auctions?includeEnded=true')
         const data = await res.json()
 
         if (!res.ok) {

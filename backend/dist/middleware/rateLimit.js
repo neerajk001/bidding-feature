@@ -1,12 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.apiRateLimiter = apiRateLimiter;
+const env_1 = require("../config/env");
 const buckets = new Map();
 const rules = [
     // Heavy realtime read paths
-    { name: 'auction_live_state', method: 'GET', path: /^\/auction\/[^/]+\/live-state$/, windowMs: 60_000, max: 120 },
-    { name: 'auction_detail', method: 'GET', path: /^\/auction\/[^/]+$/, windowMs: 60_000, max: 60 },
-    { name: 'auctions_list', method: 'GET', path: /^\/auctions$/, windowMs: 60_000, max: 30 },
+    {
+        name: 'auction_live_state',
+        method: 'GET',
+        path: /^\/auction\/[^/]+\/live-state$/,
+        windowMs: 60_000,
+        max: env_1.env.rateLimitAuctionLiveStatePerMinute
+    },
+    {
+        name: 'auction_detail',
+        method: 'GET',
+        path: /^\/auction\/[^/]+$/,
+        windowMs: 60_000,
+        max: env_1.env.rateLimitAuctionDetailPerMinute
+    },
+    {
+        name: 'auctions_list',
+        method: 'GET',
+        path: /^\/auctions$/,
+        windowMs: 60_000,
+        max: env_1.env.rateLimitAuctionsListPerMinute
+    },
     // Write paths
     { name: 'place_bid', method: 'POST', path: /^\/place-bid$/, windowMs: 60_000, max: 30 },
     { name: 'register_bidder', method: 'POST', path: /^\/register-bidder$/, windowMs: 60_000, max: 15 },
@@ -16,7 +35,7 @@ const rules = [
     { name: 'send_phone_otp', method: 'POST', path: /^\/auth\/send-otp$/, windowMs: 60 * 60_000, max: 12 },
     { name: 'verify_phone_otp', method: 'POST', path: /^\/auth\/verify-otp$/, windowMs: 60 * 60_000, max: 50 },
     // Global default as final fallback
-    { name: 'global', path: /^\/.*/, windowMs: 60_000, max: 180 }
+    { name: 'global', path: /^\/.*/, windowMs: 60_000, max: env_1.env.rateLimitGlobalPerMinute }
 ];
 function getClientIp(req) {
     const xff = req.headers['x-forwarded-for'];
