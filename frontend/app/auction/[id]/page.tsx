@@ -43,6 +43,14 @@ type VerificationProfile = {
   idToken?: string
 }
 
+type BidInsertPayload = { id?: string; amount: number; size?: string }
+
+type AuctionChannelMessage =
+  | { type: 'auction-sync'; payload: Partial<AuctionDetail> }
+  | { type: 'bid-insert'; payload: BidInsertPayload }
+  | { type: 'auction-update'; payload: { bidding_end_time: string; status: string } }
+  | { type: 'realtime-status'; connected?: boolean }
+
 export default function AuctionDetailPage() {
   const params = useParams<{ id: string }>()
   const auctionId = params?.id
@@ -195,7 +203,7 @@ export default function AuctionDetailPage() {
 
   const seenBidIdsRef = useRef<Set<string>>(new Set())
 
-  const applyBidInsertToAuction = useCallback((bid: { id?: string; amount: number; size?: string }) => {
+  const applyBidInsertToAuction = useCallback((bid: BidInsertPayload) => {
     const newBidId = String(bid.id || '').trim()
     if (newBidId) {
       if (seenBidIdsRef.current.has(newBidId)) return
@@ -248,7 +256,7 @@ export default function AuctionDetailPage() {
     })
   }, [])
 
-  const broadcastToFollowers = useCallback((message: Record<string, any>) => {
+  const broadcastToFollowers = useCallback((message: AuctionChannelMessage) => {
     if (!isLeaderTabRef.current) return
     const channel = syncChannelRef.current
     if (!channel) return
@@ -389,11 +397,11 @@ export default function AuctionDetailPage() {
       }
     }, heartbeatMs)
 
-    channel.onmessage = (event: MessageEvent<{ type?: string; payload?: any; connected?: boolean }>) => {
-      const message = event.data || {}
+    channel.onmessage = (event: MessageEvent<AuctionChannelMessage>) => {
+      const message = event.data
       if (message.type === 'auction-sync' && message.payload) {
         setAuction((prev) => {
-          if (!prev) return message.payload
+          if (!prev) return prev
           return {
             ...prev,
             ...message.payload
@@ -408,7 +416,7 @@ export default function AuctionDetailPage() {
       }
 
       if (message.type === 'auction-update' && message.payload) {
-        const updatedAuction = message.payload as { bidding_end_time: string; status: string }
+        const updatedAuction = message.payload
         setAuction((prev) => {
           if (!prev) return null
           return {

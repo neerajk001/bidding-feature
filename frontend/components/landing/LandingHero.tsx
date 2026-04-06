@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { ActiveAuctionResponse, AuctionSummary } from './types'
@@ -106,7 +106,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
             : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     )
 
-    const applyBidMessage = (message: { amount: number }) => {
+    const applyBidMessage = useCallback((message: { amount: number }) => {
         const newAmount = Number(message.amount)
         if (!Number.isFinite(newAmount) || newAmount <= 0) return
 
@@ -117,7 +117,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                 total: (prev?.total || activeDetail?.total_bids || 0) + 1
             }
         })
-    }
+    }, [activeDetail?.total_bids])
 
     const broadcastToFollowers = (message: { type: 'bid'; payload: { auction_id: string; amount: number; v: number } }) => {
         if (!isLeaderTabRef.current) return
@@ -224,7 +224,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
             }
             setLeaderStatus(true)
         }
-    }, [activeAuction?.phase, activeDetail?.id, activeDetail?.total_bids])
+    }, [activeAuction?.phase, activeDetail?.id, activeDetail?.total_bids, applyBidMessage])
 
     // Realtime Subscription
     useEffect(() => {
