@@ -99,7 +99,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, status, registration_end_time, bidding_start_time, bidding_end_time, min_increment, base_price')
+      .select('id, title, status, registration_end_time, bidding_start_time, bidding_end_time, min_increment, base_price, banner_image, reel_url, gallery_images')
       .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
       .limit(limit)
@@ -170,6 +170,9 @@ router.get('/auctions', async (req: Request, res: Response) => {
           bidding_end_time: auction.bidding_end_time,
           min_increment: auction.min_increment,
           base_price: auction.base_price,
+          banner_image: auction.banner_image ?? null,
+          reel_url: auction.reel_url ?? null,
+          gallery_images: Array.isArray(auction.gallery_images) ? auction.gallery_images : [],
           current_highest_bid: displayAmount,
           highest_bidder_name: displayName,
           total_bids: count ?? 0,

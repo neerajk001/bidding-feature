@@ -74,10 +74,12 @@ export default function AuctionDetailPage() {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const [isPageVisible, setIsPageVisible] = useState(true)
   const [isLeaderTab, setIsLeaderTab] = useState(true)
+  const [isFallbackPollingEnabled, setIsFallbackPollingEnabled] = useState(true)
 
   const isLeaderTabRef = useRef<boolean>(true)
   const syncChannelRef = useRef<BroadcastChannel | null>(null)
-  const liveStateEtagRef = useRef<string | null>(null)
+  const fallbackPollFailureCountRef = useRef<number>(0)
+  const fallbackPollInFlightRef = useRef<boolean>(false)
   const tabIdRef = useRef<string>(
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -278,47 +280,31 @@ export default function AuctionDetailPage() {
     return 'upcoming'
   }, [auction, now])
 
-  const refreshAuction = useCallback(async () => {
+  const refreshAuction = useCallback(async (): Promise<boolean> => {
     try {
-      if (!auctionId) return
-      const liveMode = phase === 'live'
-      const endpoint = liveMode ? `/api/auction/${auctionId}/live-state` : `/api/auction/${auctionId}`
-      const headers: HeadersInit | undefined = liveMode && liveStateEtagRef.current
-        ? { 'If-None-Match': liveStateEtagRef.current }
-        : undefined
-      const res = await fetch(endpoint, { cache: 'no-store', headers })
-
-      if (res.status === 304) {
-        return
-      }
-
-      if (liveMode) {
-        const etag = res.headers.get('etag')
-        if (etag) {
-          liveStateEtagRef.current = etag
-        }
-      }
+      if (!auctionId) return false
+      const res = await fetch(`/api/auction/${auctionId}`, { cache: 'no-store' })
 
       const data = await res.json()
-      if (res.ok) {
-        if (liveMode) {
-          setAuction((prev) => {
-            if (!prev) return data
-            return {
-              ...prev,
-              ...data
-            }
-          })
-          broadcastToFollowers({ type: 'auction-sync', payload: data })
-        } else {
-          setAuction(data)
-          broadcastToFollowers({ type: 'auction-sync', payload: data })
-        }
+      if (!res.ok) {
+        return false
       }
+
+      setAuction((prev) => {
+        if (!prev) return data
+        return {
+          ...prev,
+          ...data
+        }
+      })
+      broadcastToFollowers({ type: 'auction-sync', payload: data })
+      fallbackPollFailureCountRef.current = 0
+      setIsFallbackPollingEnabled(true)
+      return true
     } catch {
-      // Silent refresh failure
+      return false
     }
-  }, [auctionId, phase, broadcastToFollowers])
+  }, [auctionId, broadcastToFollowers])
 
   useEffect(() => {
     if (!auctionId || phase !== 'live' || typeof window === 'undefined') {
@@ -451,7 +437,8 @@ export default function AuctionDetailPage() {
 
   useEffect(() => {
     seenBidIdsRef.current.clear()
-    liveStateEtagRef.current = null
+    fallbackPollFailureCountRef.current = 0
+    setIsFallbackPollingEnabled(true)
   }, [auction?.id])
 
   useEffect(() => {
@@ -493,14 +480,14 @@ export default function AuctionDetailPage() {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setIsRealtimeConnected(true)
+          fallbackPollFailureCountRef.current = 0
+          setIsFallbackPollingEnabled(true)
           broadcastToFollowers({ type: 'realtime-status', connected: true })
           return
         }
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setIsRealtimeConnected(false)
           broadcastToFollowers({ type: 'realtime-status', connected: false })
-          // Pull latest data if realtime connection is interrupted.
-          refreshAuction()
         }
       })
 
@@ -508,21 +495,36 @@ export default function AuctionDetailPage() {
       setIsRealtimeConnected(false)
       supabase.removeChannel(channel)
     }
-  }, [auction?.id, phase, refreshAuction, isLeaderTab, applyBidInsertToAuction, broadcastToFollowers])
+  }, [auction?.id, phase, isLeaderTab, applyBidInsertToAuction, broadcastToFollowers])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isLeaderTab) return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isLeaderTab || !isFallbackPollingEnabled) return
     const interval = setInterval(() => {
-      refreshAuction()
-    }, 35000)
+      if (fallbackPollInFlightRef.current) return
+      fallbackPollInFlightRef.current = true
+      void refreshAuction()
+        .then((ok) => {
+          if (ok) {
+            fallbackPollFailureCountRef.current = 0
+            return
+          }
+          fallbackPollFailureCountRef.current += 1
+          if (fallbackPollFailureCountRef.current >= 3) {
+            setIsFallbackPollingEnabled(false)
+          }
+        })
+        .finally(() => {
+          fallbackPollInFlightRef.current = false
+        })
+    }, 20000)
     return () => clearInterval(interval)
-  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isLeaderTab])
+  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isLeaderTab, isFallbackPollingEnabled])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || !isPageVisible || !isLeaderTab) return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isLeaderTab || !isFallbackPollingEnabled) return
     // Reconcile once when tab becomes visible again.
-    refreshAuction()
-  }, [auctionId, phase, isPageVisible, refreshAuction, isLeaderTab])
+    void refreshAuction()
+  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isLeaderTab, isFallbackPollingEnabled])
 
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'
