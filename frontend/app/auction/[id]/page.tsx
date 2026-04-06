@@ -684,10 +684,24 @@ export default function AuctionDetailPage() {
         throw new Error(data.error || 'Failed to place bid')
       }
 
+      applyBidInsertToAuction({
+        id: data?.bid_id,
+        amount: Number(data?.amount ?? amountValue),
+        size: data?.size ?? selectedSize
+      })
+      broadcastToFollowers({
+        type: 'bid-insert',
+        payload: {
+          id: data?.bid_id,
+          amount: Number(data?.amount ?? amountValue),
+          size: data?.size ?? selectedSize
+        }
+      })
+
       setBidAmount('')
       setMessage({ type: 'success', text: 'Bid placed successfully.' })
       if (!isRealtimeConnected) {
-        refreshAuction()
+        void refreshAuction()
       }
       await refreshBidderSizeLock(auction.id, bidderId)
     } catch (err) {

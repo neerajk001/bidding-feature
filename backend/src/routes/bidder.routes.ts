@@ -9,15 +9,6 @@ function parseTimestamp(value: string | null | undefined): number {
   return Number.isNaN(ts) ? Number.NaN : ts
 }
 
-function getAuctionPhase(nowTs: number, start: string | null | undefined, end: string | null | undefined): 'upcoming' | 'live' | 'ended' {
-  const startTs = parseTimestamp(start)
-  const endTs = parseTimestamp(end)
-  if (Number.isNaN(startTs) || Number.isNaN(endTs)) return 'ended'
-  if (nowTs < startTs) return 'upcoming'
-  if (nowTs > endTs) return 'ended'
-  return 'live'
-}
-
 // Register bidder
 router.post('/register-bidder', async (req: Request, res: Response) => {
   try {
@@ -151,28 +142,29 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'All fields are required: auction_id, bidder_id, amount' })
     }
 
-    if (typeof amount !== 'number' || amount <= 0) {
+    const bidAmount = Number(amount)
+    if (!Number.isFinite(bidAmount) || bidAmount <= 0) {
       return res.status(400).json({ error: 'Amount must be a positive number' })
     }
 
-    // 1. Get auction details
-    const { data: auction, error: auctionError } = await supabaseAdmin
-      .from('auctions')
-      .select('id, status, bidding_start_time, bidding_end_time, min_increment, base_price, available_sizes')
-      .eq('id', auction_id)
-      .single()
+    // 1. Validate auction and bidder in parallel
+    const [{ data: auction, error: auctionError }, { data: bidder, error: bidderError }] = await Promise.all([
+      supabaseAdmin
+        .from('auctions')
+        .select('id, bidding_start_time, bidding_end_time, min_increment, base_price, available_sizes')
+        .eq('id', auction_id)
+        .single(),
+      supabaseAdmin
+        .from('bidders')
+        .select('id')
+        .eq('id', bidder_id)
+        .eq('auction_id', auction_id)
+        .maybeSingle()
+    ])
 
     if (auctionError || !auction) {
       return res.status(404).json({ error: 'Auction not found' })
     }
-
-    // Ensure bidder belongs to this auction to prevent cross-auction or crafted requests.
-    const { data: bidder, error: bidderError } = await supabaseAdmin
-      .from('bidders')
-      .select('id')
-      .eq('id', bidder_id)
-      .eq('auction_id', auction_id)
-      .maybeSingle()
 
     if (bidderError || !bidder) {
       return res.status(400).json({ error: 'Bidder is not registered for this auction' })
@@ -187,13 +179,11 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Auction timing is invalid. Contact admin.' })
     }
 
-    const phase = getAuctionPhase(nowTs, auction.bidding_start_time, auction.bidding_end_time)
-
-    if (phase === 'upcoming') {
+    if (nowTs < startTs) {
       return res.status(400).json({ error: 'Bidding has not started yet' })
     }
 
-    if (phase === 'ended') {
+    if (nowTs > endTs) {
       return res.status(400).json({ error: 'Bidding has ended' })
     }
 
@@ -250,8 +240,8 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       highestBidQuery = highestBidQuery.or('size.is.null,size.eq.')
     }
 
-    const { data: highestBids } = await highestBidQuery
-    const currentHighestBid = highestBids && highestBids.length > 0 ? Number(highestBids[0].amount) : 0
+    const { data: highestBidRow } = await highestBidQuery.maybeSingle()
+    const currentHighestBid = Number((highestBidRow as any)?.amount ?? 0)
 
     // 4. Validate bid amount
     const minIncrement = Number(auction.min_increment || 0)
@@ -260,7 +250,7 @@ router.post('/place-bid', async (req: Request, res: Response) => {
     if (currentHighestBid === 0) {
       // First bid
       const minRequired = basePrice || minIncrement
-      if (amount < minRequired) {
+      if (bidAmount < minRequired) {
         return res.status(400).json({ 
           error: `First bid must be at least ${minRequired}`,
           min_required: minRequired 
@@ -269,7 +259,7 @@ router.post('/place-bid', async (req: Request, res: Response) => {
     } else {
       // Subsequent bids
       const minRequired = currentHighestBid + minIncrement
-      if (amount < minRequired) {
+      if (bidAmount < minRequired) {
         return res.status(400).json({ 
           error: `Bid must be at least ${minRequired}`,
           min_required: minRequired,
@@ -284,10 +274,10 @@ router.post('/place-bid', async (req: Request, res: Response) => {
       .insert({
         auction_id,
         bidder_id,
-        amount,
+        amount: bidAmount,
         size: normalizedSize
       })
-      .select('id, created_at')
+      .select('id, amount, size, created_at')
       .single()
 
     if (bidError) {
@@ -298,9 +288,9 @@ router.post('/place-bid', async (req: Request, res: Response) => {
     return res.status(201).json({
       success: true,
       bid_id: newBid.id,
-      amount,
-      created_at: newBid.created_at,
-      message: 'Bid placed successfully'
+      amount: Number((newBid as any).amount ?? bidAmount),
+      size: (newBid as any).size ?? normalizedSize,
+      created_at: newBid.created_at
     })
   } catch (error) {
     console.error('API error:', error)
