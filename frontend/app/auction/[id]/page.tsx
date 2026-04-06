@@ -73,7 +73,6 @@ export default function AuctionDetailPage() {
   const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const [isPageVisible, setIsPageVisible] = useState(true)
-  const [isLeaderTab] = useState(true)
   const [isFallbackPollingEnabled, setIsFallbackPollingEnabled] = useState(true)
 
   const fallbackPollFailureCountRef = useRef<number>(0)
