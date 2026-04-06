@@ -73,18 +73,11 @@ export default function AuctionDetailPage() {
   const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const [isPageVisible, setIsPageVisible] = useState(true)
-  const [isLeaderTab, setIsLeaderTab] = useState(true)
+  const [isLeaderTab] = useState(true)
   const [isFallbackPollingEnabled, setIsFallbackPollingEnabled] = useState(true)
 
-  const isLeaderTabRef = useRef<boolean>(true)
-  const syncChannelRef = useRef<BroadcastChannel | null>(null)
   const fallbackPollFailureCountRef = useRef<number>(0)
   const fallbackPollInFlightRef = useRef<boolean>(false)
-  const tabIdRef = useRef<string>(
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  )
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -258,11 +251,8 @@ export default function AuctionDetailPage() {
     })
   }, [])
 
-  const broadcastToFollowers = useCallback((message: AuctionChannelMessage) => {
-    if (!isLeaderTabRef.current) return
-    const channel = syncChannelRef.current
-    if (!channel) return
-    channel.postMessage(message)
+  const broadcastToFollowers = useCallback((_message: AuctionChannelMessage) => {
+    // Direct Supabase realtime subscriptions are used per tab/device.
   }, [])
 
   const phase = useMemo(() => {
@@ -307,135 +297,6 @@ export default function AuctionDetailPage() {
   }, [auctionId, broadcastToFollowers])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || typeof window === 'undefined') {
-      setIsLeaderTab(true)
-      isLeaderTabRef.current = true
-      if (syncChannelRef.current) {
-        syncChannelRef.current.close()
-        syncChannelRef.current = null
-      }
-      return
-    }
-
-    const lockKey = `auction-live-leader:${auctionId}`
-    const ttlMs = 12_000
-    const heartbeatMs = 4_000
-    const channel = new BroadcastChannel(`auction-live-sync:${auctionId}`)
-    syncChannelRef.current = channel
-
-    const setLeaderStatus = (value: boolean) => {
-      isLeaderTabRef.current = value
-      setIsLeaderTab(value)
-    }
-
-    const readLock = (): { owner: string; expiresAt: number } | null => {
-      try {
-        const raw = localStorage.getItem(lockKey)
-        if (!raw) return null
-        const parsed = JSON.parse(raw) as { owner?: string; expiresAt?: number }
-        if (!parsed?.owner || typeof parsed.expiresAt !== 'number') return null
-        return { owner: parsed.owner, expiresAt: parsed.expiresAt }
-      } catch {
-        return null
-      }
-    }
-
-    const writeLock = () => {
-      const lockValue = {
-        owner: tabIdRef.current,
-        expiresAt: Date.now() + ttlMs
-      }
-      localStorage.setItem(lockKey, JSON.stringify(lockValue))
-    }
-
-    const releaseLock = () => {
-      const lock = readLock()
-      if (lock?.owner === tabIdRef.current) {
-        localStorage.removeItem(lockKey)
-      }
-    }
-
-    const electLeader = () => {
-      const lock = readLock()
-      const nowTs = Date.now()
-      const canClaim = !lock || lock.expiresAt <= nowTs || lock.owner === tabIdRef.current
-      if (canClaim) {
-        writeLock()
-        setLeaderStatus(true)
-      } else {
-        setLeaderStatus(false)
-      }
-    }
-
-    electLeader()
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        electLeader()
-      }
-    }
-
-    const heartbeat = setInterval(() => {
-      if (isLeaderTabRef.current) {
-        writeLock()
-      } else {
-        electLeader()
-      }
-    }, heartbeatMs)
-
-    channel.onmessage = (event: MessageEvent<AuctionChannelMessage>) => {
-      const message = event.data
-      if (message.type === 'auction-sync' && message.payload) {
-        setAuction((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            ...message.payload
-          }
-        })
-        return
-      }
-
-      if (message.type === 'bid-insert' && message.payload) {
-        applyBidInsertToAuction(message.payload)
-        return
-      }
-
-      if (message.type === 'auction-update' && message.payload) {
-        const updatedAuction = message.payload
-        setAuction((prev) => {
-          if (!prev) return null
-          return {
-            ...prev,
-            bidding_end_time: updatedAuction.bidding_end_time,
-            status: updatedAuction.status
-          }
-        })
-        return
-      }
-
-      if (message.type === 'realtime-status') {
-        setIsRealtimeConnected(Boolean(message.connected))
-      }
-    }
-
-    window.addEventListener('visibilitychange', onVisibility)
-    window.addEventListener('beforeunload', releaseLock)
-
-    return () => {
-      clearInterval(heartbeat)
-      window.removeEventListener('visibilitychange', onVisibility)
-      window.removeEventListener('beforeunload', releaseLock)
-      releaseLock()
-      if (syncChannelRef.current) {
-        syncChannelRef.current.close()
-        syncChannelRef.current = null
-      }
-      setLeaderStatus(true)
-    }
-  }, [auctionId, phase, applyBidInsertToAuction])
-
-  useEffect(() => {
     seenBidIdsRef.current.clear()
     fallbackPollFailureCountRef.current = 0
     setIsFallbackPollingEnabled(true)
@@ -445,7 +306,7 @@ export default function AuctionDetailPage() {
     // Subscribe exactly when live phase is active for this client.
     // This avoids missing updates when the page was opened before bidding started.
     const liveAuctionId = auction?.id
-    if (!liveAuctionId || phase !== 'live' || !isLeaderTab) {
+    if (!liveAuctionId || phase !== 'live') {
       setIsRealtimeConnected(false)
       return
     }
@@ -495,10 +356,10 @@ export default function AuctionDetailPage() {
       setIsRealtimeConnected(false)
       supabase.removeChannel(channel)
     }
-  }, [auction?.id, phase, isLeaderTab, applyBidInsertToAuction, broadcastToFollowers])
+  }, [auction?.id, phase, applyBidInsertToAuction, broadcastToFollowers])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isLeaderTab || !isFallbackPollingEnabled) return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isFallbackPollingEnabled) return
     const interval = setInterval(() => {
       if (fallbackPollInFlightRef.current) return
       fallbackPollInFlightRef.current = true
@@ -518,13 +379,13 @@ export default function AuctionDetailPage() {
         })
     }, 20000)
     return () => clearInterval(interval)
-  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isLeaderTab, isFallbackPollingEnabled])
+  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isFallbackPollingEnabled])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isLeaderTab || !isFallbackPollingEnabled) return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isFallbackPollingEnabled) return
     // Reconcile once when tab becomes visible again.
     void refreshAuction()
-  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isLeaderTab, isFallbackPollingEnabled])
+  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isFallbackPollingEnabled])
 
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'
