@@ -67,6 +67,8 @@ export default function AdminAuctionsPage() {
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
+  const [bannerPreview, setBannerPreview] = useState<string>('')
   const [reelFile, setReelFile] = useState<File | null>(null)
   const [reelPreview, setReelPreview] = useState<string>('')
 
@@ -161,6 +163,12 @@ export default function AdminAuctionsPage() {
     setMessage(null)
 
     try {
+      let bannerUrl = formData.banner_image
+      if (bannerFile) {
+        setMessage({ type: 'info', text: 'Uploading banner image...' })
+        bannerUrl = await uploadFile(bannerFile, 'banners')
+      }
+
       let reelUrl = ''
       if (reelFile) {
         setMessage({ type: 'info', text: 'Uploading reel video (this may take a moment)...' })
@@ -189,8 +197,8 @@ export default function AdminAuctionsPage() {
       body.append('status', formData.status)
       body.append('available_sizes', formData.available_sizes)
 
-      if (formData.banner_image) {
-        body.append('banner_image', formData.banner_image)
+      if (bannerUrl) {
+        body.append('banner_image', bannerUrl)
       }
 
       // Append uploaded URLs
@@ -227,6 +235,11 @@ export default function AdminAuctionsPage() {
         status: 'draft',
         available_sizes: ''
       })
+      setBannerFile(null)
+      if (bannerPreview) {
+        URL.revokeObjectURL(bannerPreview)
+        setBannerPreview('')
+      }
       setReelFile(null)
       if (reelPreview) {
         URL.revokeObjectURL(reelPreview)
@@ -272,20 +285,15 @@ export default function AdminAuctionsPage() {
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : ''
-      if (!result) {
-        setMessage({ type: 'error', text: 'Failed to read image file.' })
-        return
-      }
-      setFormData((prev) => ({ ...prev, banner_image: result }))
-      setMessage({ type: 'success', text: 'Banner image loaded from device.' })
+    if (bannerPreview) {
+      URL.revokeObjectURL(bannerPreview)
     }
-    reader.onerror = () => {
-      setMessage({ type: 'error', text: 'Failed to read image file.' })
-    }
-    reader.readAsDataURL(file)
+
+    const previewUrl = URL.createObjectURL(file)
+    setBannerFile(file)
+    setBannerPreview(previewUrl)
+    setFormData((prev) => ({ ...prev, banner_image: '' }))
+    setMessage({ type: 'success', text: 'Banner image selected. It will be uploaded on submit.' })
   }
 
   const handleReelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -665,11 +673,18 @@ export default function AdminAuctionsPage() {
                     >
                       Upload Image
                     </button>
-                    {formData.banner_image && (
+                    {(bannerPreview || formData.banner_image) && (
                       <button
                         type="button"
                         className={cn(adminStyles.btn, adminStyles.btnOutline)}
-                        onClick={() => setFormData((prev) => ({ ...prev, banner_image: '' }))}
+                        onClick={() => {
+                          if (bannerPreview) {
+                            URL.revokeObjectURL(bannerPreview)
+                            setBannerPreview('')
+                          }
+                          setBannerFile(null)
+                          setFormData((prev) => ({ ...prev, banner_image: '' }))
+                        }}
                       >
                         Clear image
                       </button>
@@ -680,9 +695,9 @@ export default function AdminAuctionsPage() {
               <span className="text-xs text-gray-600 mt-1 block">
                 Paste a URL or select from your device gallery. Max 2MB.
               </span>
-              {formData.banner_image && (
+              {(bannerPreview || formData.banner_image) && (
                 <Image
-                  src={formData.banner_image}
+                  src={bannerPreview || formData.banner_image}
                   alt="Banner preview"
                   width={128}
                   height={128}

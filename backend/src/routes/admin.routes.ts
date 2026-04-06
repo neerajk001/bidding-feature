@@ -36,6 +36,18 @@ function cleanText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+function isDataUri(value: string): boolean {
+  return /^data:[^;]+;base64,/i.test(value)
+}
+
+function sanitizeMediaUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (isDataUri(trimmed)) return null
+  return trimmed
+}
+
 function normalizeShippingAddress(input: unknown): { address?: ShippingAddress; error?: string } {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return { error: 'Shipping address is required before dispatch.' }
@@ -203,12 +215,16 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
       if (passedGalleryUrls) {
         if (Array.isArray(passedGalleryUrls)) {
           passedGalleryUrls.forEach((url) => {
-            if (typeof url === 'string' && url.trim() !== '') {
-              galleryUrls.push(url)
+            const cleaned = sanitizeMediaUrl(url)
+            if (cleaned) {
+              galleryUrls.push(cleaned)
             }
           })
         } else if (typeof passedGalleryUrls === 'string' && passedGalleryUrls.trim() !== '') {
-          galleryUrls.push(passedGalleryUrls)
+          const cleaned = sanitizeMediaUrl(passedGalleryUrls)
+          if (cleaned) {
+            galleryUrls.push(cleaned)
+          }
         }
       }
     } else {
@@ -216,9 +232,13 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
       const passedGalleryUrls = (body as any).gallery_urls
       if (passedGalleryUrls) {
         if (Array.isArray(passedGalleryUrls)) {
-          galleryUrls.push(...passedGalleryUrls)
+          for (const url of passedGalleryUrls) {
+            const cleaned = sanitizeMediaUrl(url)
+            if (cleaned) galleryUrls.push(cleaned)
+          }
         } else if (typeof passedGalleryUrls === 'string') {
-          galleryUrls.push(passedGalleryUrls)
+          const cleaned = sanitizeMediaUrl(passedGalleryUrls)
+          if (cleaned) galleryUrls.push(cleaned)
         }
       }
     }
@@ -339,7 +359,15 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
       }
     }
 
-    let reelPublicUrl: string | null = reel_url || null
+    const normalizedBannerImage = sanitizeMediaUrl(banner_image)
+    if (typeof banner_image === 'string' && banner_image.trim() !== '' && !normalizedBannerImage) {
+      return res.status(400).json({ error: 'banner_image must be a public URL, not base64 data.' })
+    }
+
+    let reelPublicUrl: string | null = sanitizeMediaUrl(reel_url)
+    if (typeof reel_url === 'string' && reel_url.trim() !== '' && !reelPublicUrl) {
+      return res.status(400).json({ error: 'reel_url must be a public URL, not base64 data.' })
+    }
 
     if (reelFile) {
       if (!ALLOWED_REEL_TYPES.includes(reelFile.mimetype)) {
@@ -377,7 +405,7 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
         product_id,
         min_increment: minIncrementValue,
         base_price: basePriceValue,
-        banner_image: banner_image || null,
+        banner_image: normalizedBannerImage,
         reel_url: reelPublicUrl,
         gallery_images: galleryUrls.length > 0 ? galleryUrls : [],
         registration_end_time: registrationEndUTC,

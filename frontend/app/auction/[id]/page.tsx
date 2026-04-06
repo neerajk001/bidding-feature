@@ -111,7 +111,7 @@ export default function AuctionDetailPage() {
           throw new Error('Auction ID is missing')
         }
 
-        const res = await fetch(`/api/auction/${auctionId}`, { cache: 'no-store' })
+        const res = await fetch(`/api/auction/${auctionId}/details`, { cache: 'no-store' })
         const data = await res.json()
 
         if (!res.ok) {
