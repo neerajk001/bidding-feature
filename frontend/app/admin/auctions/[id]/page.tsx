@@ -67,7 +67,8 @@ export default function AuctionDetailPage() {
 
   useEffect(() => {
     fetchAuctionData()
-    setupRealtimeSubscription()
+    const cleanup = setupRealtimeSubscription()
+    return cleanup
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run on auctionId only
   }, [auctionId])
 
@@ -86,7 +87,7 @@ export default function AuctionDetailPage() {
         bids?: Bid[]
         current_highest_bid?: number | null
         winners_by_size?: WinnerBySize[]
-      }>(`/api/admin/auctions/${auctionId}`)
+      }>(`/api/admin/auctions/${auctionId}?bids_limit=150&bidders_limit=200`)
 
       if (ok && data.auction) {
         setAuction(data.auction)
@@ -165,14 +166,19 @@ export default function AuctionDetailPage() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'bids',
           filter: `auction_id=eq.${auctionId}`
         },
-        (payload) => {
-          console.log('Bid change received:', payload)
-          fetchAuctionData() // Refresh all data
+        (payload: { new?: { amount?: number } }) => {
+          const insertedAmount = Number(payload.new?.amount || 0)
+          if (insertedAmount > 0) {
+            setCurrentHighestBid((prev) => {
+              if (prev === null) return insertedAmount
+              return insertedAmount > prev ? insertedAmount : prev
+            })
+          }
         }
       )
       .on(

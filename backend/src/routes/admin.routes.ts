@@ -405,10 +405,12 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
 router.get('/auctions/:id', async (req: Request, res: Response) => {
   try {
     const auctionId = req.params.id
+    const bidsLimit = Math.min(500, Math.max(20, Number(req.query.bids_limit || 100)))
+    const biddersLimit = Math.min(500, Math.max(20, Number(req.query.bidders_limit || 150)))
 
     const { data: auction, error: auctionError } = await supabaseAdmin
       .from('auctions')
-      .select('*')
+      .select('id, title, product_id, status, min_increment, registration_end_time, bidding_start_time, bidding_end_time, available_sizes')
       .eq('id', auctionId)
       .single()
 
@@ -418,9 +420,10 @@ router.get('/auctions/:id', async (req: Request, res: Response) => {
 
     const { data: bidders, error: biddersError } = await supabaseAdmin
       .from('bidders')
-      .select('*')
+      .select('id, name, phone, email, created_at')
       .eq('auction_id', auctionId)
       .order('created_at', { ascending: false })
+      .limit(biddersLimit)
 
     if (biddersError) {
       console.error('Error fetching bidders:', biddersError)
@@ -444,72 +447,11 @@ router.get('/auctions/:id', async (req: Request, res: Response) => {
       `)
       .eq('auction_id', auctionId)
       .order('amount', { ascending: false })
+      .limit(bidsLimit)
 
     if (bidsError) {
       console.error('Error fetching bids:', bidsError)
-      const { data: simpleBids } = await supabaseAdmin
-        .from('bids')
-        .select('*')
-        .eq('auction_id', auctionId)
-        .order('amount', { ascending: false })
-
-      const bidsWithBidderInfo = simpleBids?.map(bid => {
-        const bidder = bidders?.find(b => b.id === bid.bidder_id)
-        return {
-          ...bid,
-          bidders: bidder ? {
-            id: bidder.id,
-            name: bidder.name,
-            phone: bidder.phone,
-            email: bidder.email
-          } : null
-        }
-      }) || []
-
-      const currentHighestBid = simpleBids && simpleBids.length > 0
-        ? Math.max(...simpleBids.map(b => b.amount))
-        : null
-
-      const biddersWithHighestBid = bidders?.map(bidder => {
-        const bidderBids = simpleBids?.filter(bid => bid.bidder_id === bidder.id) || []
-        const highestBid = bidderBids.length > 0
-          ? Math.max(...bidderBids.map(b => b.amount))
-          : null
-
-        return {
-          ...bidder,
-          highest_bid: highestBid
-        }
-      }) || []
-
-      const { data: winnersRowsFallback } = await supabaseAdmin
-        .from('winners')
-        .select('id, auction_id, bidder_id, winning_amount, size, declared_at, bidder:bidder_id(name, phone, email)')
-        .eq('auction_id', auctionId)
-
-      const winners_by_size_fallback = (winnersRowsFallback || []).map((w: any) => {
-        const bidder = w.bidder
-        const name = Array.isArray(bidder) ? bidder[0]?.name : bidder?.name ?? null
-        const phone = Array.isArray(bidder) ? bidder[0]?.phone : bidder?.phone ?? null
-        const email = Array.isArray(bidder) ? bidder[0]?.email : bidder?.email ?? null
-        return {
-          size: w.size ?? null,
-          bidder_id: w.bidder_id,
-          winning_amount: w.winning_amount,
-          declared_at: w.declared_at,
-          winner_name: name,
-          winner_phone: phone,
-          winner_email: email
-        }
-      })
-
-      return res.json({
-        auction,
-        bidders: biddersWithHighestBid,
-        bids: bidsWithBidderInfo,
-        current_highest_bid: currentHighestBid,
-        winners_by_size: winners_by_size_fallback
-      })
+      return res.status(500).json({ error: 'Failed to fetch bids' })
     }
 
     const currentHighestBid = bids && bids.length > 0
@@ -527,6 +469,16 @@ router.get('/auctions/:id', async (req: Request, res: Response) => {
         highest_bid: highestBid
       }
     }) || []
+
+    const { count: totalBids } = await supabaseAdmin
+      .from('bids')
+      .select('id', { count: 'exact', head: true })
+      .eq('auction_id', auctionId)
+
+    const { count: totalBidders } = await supabaseAdmin
+      .from('bidders')
+      .select('id', { count: 'exact', head: true })
+      .eq('auction_id', auctionId)
 
     const { data: winnersRows } = await supabaseAdmin
       .from('winners')
@@ -554,7 +506,11 @@ router.get('/auctions/:id', async (req: Request, res: Response) => {
       bidders: biddersWithHighestBid,
       bids: bids || [],
       current_highest_bid: currentHighestBid,
-      winners_by_size
+      winners_by_size,
+      total_bids: totalBids || 0,
+      total_bidders: totalBidders || 0,
+      has_more_bids: Number(totalBids || 0) > bidsLimit,
+      has_more_bidders: Number(totalBidders || 0) > biddersLimit
     })
   } catch (error) {
     console.error('API error:', error)

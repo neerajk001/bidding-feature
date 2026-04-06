@@ -3,9 +3,8 @@ import LandingHero from '@/components/landing/LandingHero'
 import AuctionGrid from '@/components/landing/AuctionGrid'
 import type { AuctionSummary } from '@/components/landing/types'
 
-// Disable caching for real-time auction updates
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// Keep homepage data fresh without forcing every request to bypass cache.
+export const revalidate = 20
 
 function parseTimestamp(value?: string | null): number {
   if (!value) return Number.NaN
@@ -33,9 +32,9 @@ async function fetchAuctionsFromApi(): Promise<AuctionSummary[]> {
     console.warn('HomePage: BACKEND_URL / NEXT_PUBLIC_API_URL not set, auctions will be empty')
     return []
   }
-  const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true`
+  const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true&view=home&limit=20`
   try {
-    const res = await fetch(url, { cache: 'no-store' })
+    const res = await fetch(url, { next: { revalidate: 20 } })
     const data = (await res.json()) as { auctions?: AuctionSummary[] }
     if (!res.ok) return []
     return Array.isArray(data?.auctions) ? data.auctions : []

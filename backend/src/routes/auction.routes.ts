@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express'
+import { createHash } from 'crypto'
 import { supabaseAdmin } from '../config/supabase'
 import { env } from '../config/env'
 import { setNoCache, setShortPublicCache } from '../middleware/cache'
@@ -47,12 +48,49 @@ function getAuctionPhase(nowTs: number, start: string | null | undefined, end: s
   return 'live'
 }
 
+function createLiveStateVersion(payload: {
+  id: string
+  status: string
+  bidding_end_time: string | null | undefined
+  current_highest_bid: number
+  total_bids: number
+  highest_bidder_name: string | null
+  highest_bids_by_size: any
+}): string {
+  const raw = JSON.stringify({
+    id: payload.id,
+    status: payload.status,
+    bidding_end_time: payload.bidding_end_time || null,
+    current_highest_bid: Number(payload.current_highest_bid || 0),
+    total_bids: Number(payload.total_bids || 0),
+    highest_bidder_name: payload.highest_bidder_name || null,
+    highest_bids_by_size: Array.isArray(payload.highest_bids_by_size) ? payload.highest_bids_by_size : null
+  })
+  return createHash('sha1').update(raw).digest('hex').slice(0, 16)
+}
+
+function getWeakEtag(version: string): string {
+  return `W/\"${version}\"`
+}
+
+function requestHasMatchingEtag(req: Request, etag: string): boolean {
+  const ifNoneMatch = String(req.headers['if-none-match'] || '').trim()
+  if (!ifNoneMatch) return false
+  if (ifNoneMatch === '*') return true
+  return ifNoneMatch.split(',').map((v) => v.trim()).includes(etag)
+}
+
 // Public: List auctions
 router.get('/auctions', async (req: Request, res: Response) => {
   try {
     const nowTs = Date.now()
     const includeEnded = req.query.includeEnded === 'true'
-    const cacheKey = includeEnded ? 'with-ended' : 'without-ended'
+    const requestedView = String(req.query.view || 'card').toLowerCase()
+    const view: 'card' | 'past' | 'home' = requestedView === 'past' || requestedView === 'home' ? requestedView : 'card'
+    const limitCap = view === 'home' ? 20 : 120
+    const limitDefault = view === 'home' ? 20 : 60
+    const limit = Math.min(limitCap, Math.max(5, Number(req.query.limit || limitDefault)))
+    const cacheKey = `${includeEnded ? 'with-ended' : 'without-ended'}:${view}:${limit}`
     const cached = auctionsListCache.get(cacheKey)
     if (cached && cached.expiresAt > nowTs) {
       setRouteCacheHeaders(res, env.auctionListCacheSeconds)
@@ -61,9 +99,10 @@ router.get('/auctions', async (req: Request, res: Response) => {
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment, base_price, available_sizes')
+      .select('id, title, status, registration_end_time, bidding_start_time, bidding_end_time, min_increment, base_price')
       .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
+      .limit(limit)
 
     if (error) {
       console.error('Supabase error:', error)
@@ -87,31 +126,35 @@ router.get('/auctions', async (req: Request, res: Response) => {
           .select('id', { count: 'exact', head: true })
           .eq('auction_id', auction.id)
 
-        let winnersList: { size: string | null; winning_amount: number; winner_name: string | null; declared_at: string | null }[] = []
         let winningAmount: number | null = null
         let winnerName: string | null = null
-        let winnerDeclaredAt: string | null = null
+        let winnersCount = 0
+        let topWinningAmount: number | null = null
 
-        if (derivedStatus === 'ended') {
+        if (derivedStatus === 'ended' && view !== 'card') {
           const { data: winnersRows } = await supabaseAdmin
             .from('winners')
-            .select('size, winning_amount, declared_at, bidder:bidder_id(name)')
+            .select('winning_amount, bidder:bidder_id(name)')
             .eq('auction_id', auction.id)
 
           if (winnersRows && winnersRows.length > 0) {
-            winnersList = winnersRows.map((w: any) => {
+            winnersCount = winnersRows.length
+            let maxWinner: { amount: number; name: string | null } | null = null
+
+            for (const w of winnersRows) {
               const name = Array.isArray(w?.bidder) ? (w.bidder[0] as any)?.name : (w?.bidder as any)?.name ?? null
-              return {
-                size: w.size ?? null,
-                winning_amount: Number(w.winning_amount) ?? 0,
-                winner_name: name,
-                declared_at: w.declared_at ?? null
+              const amount = Number(w.winning_amount) || 0
+              if (!maxWinner || amount > maxWinner.amount) {
+                maxWinner = {
+                  amount,
+                  name
+                }
               }
-            })
-            const first = winnersList[0]
-            winningAmount = first?.winning_amount ?? null
-            winnerName = first?.winner_name ?? null
-            winnerDeclaredAt = first?.declared_at ?? null
+            }
+
+            topWinningAmount = maxWinner?.amount ?? null
+            winningAmount = topWinningAmount
+            winnerName = maxWinner?.name ?? null
           }
         }
 
@@ -119,15 +162,21 @@ router.get('/auctions', async (req: Request, res: Response) => {
         const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null
 
         return {
-          ...auction,
+          id: auction.id,
+          title: auction.title,
           status: derivedStatus,
+          registration_end_time: auction.registration_end_time,
+          bidding_start_time: auction.bidding_start_time,
+          bidding_end_time: auction.bidding_end_time,
+          min_increment: auction.min_increment,
+          base_price: auction.base_price,
           current_highest_bid: displayAmount,
           highest_bidder_name: displayName,
           total_bids: count ?? 0,
           winner_name: winnerName,
           winning_amount: winningAmount,
-          winner_declared_at: winnerDeclaredAt,
-          winners_by_size: winnersList
+          winners_count: winnersCount,
+          top_winning_amount: topWinningAmount
         }
       })
     )
@@ -294,6 +343,15 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
     const now = Date.now()
     const cached = liveStateCache.get(id)
     if (cached && cached.expiresAt > now) {
+      const snapshotVersion = String((cached.payload as any)?.snapshot_version || '')
+      if (snapshotVersion) {
+        const etag = getWeakEtag(snapshotVersion)
+        res.setHeader('ETag', etag)
+        if (requestHasMatchingEtag(req, etag)) {
+          setRouteCacheHeaders(res, liveStateCacheSeconds)
+          return res.status(304).end()
+        }
+      }
       setRouteCacheHeaders(res, liveStateCacheSeconds)
       return res.json(cached.payload)
     }
@@ -318,7 +376,7 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to fetch live auction snapshot' })
     }
 
-    const payload = {
+    const basePayload = {
       id: auction.id,
       status: derivedStatus,
       bidding_end_time: auction.bidding_end_time,
@@ -328,6 +386,19 @@ router.get('/auction/:id/live-state', async (req: Request, res: Response) => {
       highest_bids_by_size: Array.isArray((snapshot as any)?.highest_bids_by_size)
         ? (snapshot as any).highest_bids_by_size
         : null
+    }
+
+    const snapshot_version = createLiveStateVersion(basePayload)
+    const payload = {
+      ...basePayload,
+      snapshot_version
+    }
+
+    const etag = getWeakEtag(snapshot_version)
+    res.setHeader('ETag', etag)
+    if (requestHasMatchingEtag(req, etag)) {
+      setRouteCacheHeaders(res, liveStateCacheSeconds)
+      return res.status(304).end()
     }
 
     liveStateCache.set(id, { payload, expiresAt: now + liveStateCacheSeconds * 1000 })

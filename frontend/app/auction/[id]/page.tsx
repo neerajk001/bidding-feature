@@ -65,6 +65,16 @@ export default function AuctionDetailPage() {
   const [bidderLockedSize, setBidderLockedSize] = useState<string | null>(null)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const [isPageVisible, setIsPageVisible] = useState(true)
+  const [isLeaderTab, setIsLeaderTab] = useState(true)
+
+  const isLeaderTabRef = useRef<boolean>(true)
+  const syncChannelRef = useRef<BroadcastChannel | null>(null)
+  const liveStateEtagRef = useRef<string | null>(null)
+  const tabIdRef = useRef<string>(
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  )
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
@@ -183,9 +193,67 @@ export default function AuctionDetailPage() {
     }
   }, [auction, bidderLockedSize, selectedSize])
 
-  // Ref for throttling refresh calls
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const seenBidIdsRef = useRef<Set<string>>(new Set())
+
+  const applyBidInsertToAuction = useCallback((bid: { id?: string; amount: number; size?: string }) => {
+    const newBidId = String(bid.id || '').trim()
+    if (newBidId) {
+      if (seenBidIdsRef.current.has(newBidId)) return
+      seenBidIdsRef.current.add(newBidId)
+    }
+
+    setAuction((prev) => {
+      if (!prev) return null
+      const newAmount = Number(bid.amount)
+      const bidSize = bid.size ?? undefined
+
+      let updatedHighestBidsBySize = prev.highest_bids_by_size
+      if (bidSize && prev.available_sizes && prev.available_sizes.length > 0) {
+        const existingIndex = updatedHighestBidsBySize?.findIndex((b) => b.size === bidSize) ?? -1
+
+        if (existingIndex >= 0 && updatedHighestBidsBySize) {
+          const currentSizeAmount = updatedHighestBidsBySize[existingIndex].amount
+          updatedHighestBidsBySize = [...updatedHighestBidsBySize]
+          updatedHighestBidsBySize[existingIndex] = {
+            ...updatedHighestBidsBySize[existingIndex],
+            amount: Math.max(currentSizeAmount, newAmount),
+            bid_count: Number(updatedHighestBidsBySize[existingIndex].bid_count || 0) + 1
+          }
+        } else if (!updatedHighestBidsBySize) {
+          updatedHighestBidsBySize = [{
+            size: bidSize,
+            amount: newAmount,
+            bid_count: 1,
+            bidder_name: null
+          }]
+        } else {
+          updatedHighestBidsBySize = [...updatedHighestBidsBySize, {
+            size: bidSize,
+            amount: newAmount,
+            bid_count: 1,
+            bidder_name: null
+          }]
+        }
+      }
+
+      const isHigher = newAmount > (prev.current_highest_bid || 0)
+
+      return {
+        ...prev,
+        current_highest_bid: isHigher ? newAmount : prev.current_highest_bid,
+        total_bids: (prev.total_bids || 0) + 1,
+        highest_bids_by_size: updatedHighestBidsBySize,
+        highest_bidder_name: prev.highest_bidder_name
+      }
+    })
+  }, [])
+
+  const broadcastToFollowers = useCallback((message: Record<string, any>) => {
+    if (!isLeaderTabRef.current) return
+    const channel = syncChannelRef.current
+    if (!channel) return
+    channel.postMessage(message)
+  }, [])
 
   const phase = useMemo(() => {
     if (!auction) return 'loading'
@@ -207,7 +275,22 @@ export default function AuctionDetailPage() {
       if (!auctionId) return
       const liveMode = phase === 'live'
       const endpoint = liveMode ? `/api/auction/${auctionId}/live-state` : `/api/auction/${auctionId}`
-      const res = await fetch(endpoint, { cache: 'no-store' })
+      const headers: HeadersInit | undefined = liveMode && liveStateEtagRef.current
+        ? { 'If-None-Match': liveStateEtagRef.current }
+        : undefined
+      const res = await fetch(endpoint, { cache: 'no-store', headers })
+
+      if (res.status === 304) {
+        return
+      }
+
+      if (liveMode) {
+        const etag = res.headers.get('etag')
+        if (etag) {
+          liveStateEtagRef.current = etag
+        }
+      }
+
       const data = await res.json()
       if (res.ok) {
         if (liveMode) {
@@ -218,34 +301,158 @@ export default function AuctionDetailPage() {
               ...data
             }
           })
+          broadcastToFollowers({ type: 'auction-sync', payload: data })
         } else {
           setAuction(data)
+          broadcastToFollowers({ type: 'auction-sync', payload: data })
         }
       }
     } catch {
       // Silent refresh failure
     }
-  }, [auctionId, phase])
+  }, [auctionId, phase, broadcastToFollowers])
+
+  useEffect(() => {
+    if (!auctionId || phase !== 'live' || typeof window === 'undefined') {
+      setIsLeaderTab(true)
+      isLeaderTabRef.current = true
+      if (syncChannelRef.current) {
+        syncChannelRef.current.close()
+        syncChannelRef.current = null
+      }
+      return
+    }
+
+    const lockKey = `auction-live-leader:${auctionId}`
+    const ttlMs = 12_000
+    const heartbeatMs = 4_000
+    const channel = new BroadcastChannel(`auction-live-sync:${auctionId}`)
+    syncChannelRef.current = channel
+
+    const setLeaderStatus = (value: boolean) => {
+      isLeaderTabRef.current = value
+      setIsLeaderTab(value)
+    }
+
+    const readLock = (): { owner: string; expiresAt: number } | null => {
+      try {
+        const raw = localStorage.getItem(lockKey)
+        if (!raw) return null
+        const parsed = JSON.parse(raw) as { owner?: string; expiresAt?: number }
+        if (!parsed?.owner || typeof parsed.expiresAt !== 'number') return null
+        return { owner: parsed.owner, expiresAt: parsed.expiresAt }
+      } catch {
+        return null
+      }
+    }
+
+    const writeLock = () => {
+      const lockValue = {
+        owner: tabIdRef.current,
+        expiresAt: Date.now() + ttlMs
+      }
+      localStorage.setItem(lockKey, JSON.stringify(lockValue))
+    }
+
+    const releaseLock = () => {
+      const lock = readLock()
+      if (lock?.owner === tabIdRef.current) {
+        localStorage.removeItem(lockKey)
+      }
+    }
+
+    const electLeader = () => {
+      const lock = readLock()
+      const nowTs = Date.now()
+      const canClaim = !lock || lock.expiresAt <= nowTs || lock.owner === tabIdRef.current
+      if (canClaim) {
+        writeLock()
+        setLeaderStatus(true)
+      } else {
+        setLeaderStatus(false)
+      }
+    }
+
+    electLeader()
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        electLeader()
+      }
+    }
+
+    const heartbeat = setInterval(() => {
+      if (isLeaderTabRef.current) {
+        writeLock()
+      } else {
+        electLeader()
+      }
+    }, heartbeatMs)
+
+    channel.onmessage = (event: MessageEvent<{ type?: string; payload?: any; connected?: boolean }>) => {
+      const message = event.data || {}
+      if (message.type === 'auction-sync' && message.payload) {
+        setAuction((prev) => {
+          if (!prev) return message.payload
+          return {
+            ...prev,
+            ...message.payload
+          }
+        })
+        return
+      }
+
+      if (message.type === 'bid-insert' && message.payload) {
+        applyBidInsertToAuction(message.payload)
+        return
+      }
+
+      if (message.type === 'auction-update' && message.payload) {
+        const updatedAuction = message.payload as { bidding_end_time: string; status: string }
+        setAuction((prev) => {
+          if (!prev) return null
+          return {
+            ...prev,
+            bidding_end_time: updatedAuction.bidding_end_time,
+            status: updatedAuction.status
+          }
+        })
+        return
+      }
+
+      if (message.type === 'realtime-status') {
+        setIsRealtimeConnected(Boolean(message.connected))
+      }
+    }
+
+    window.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('beforeunload', releaseLock)
+
+    return () => {
+      clearInterval(heartbeat)
+      window.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('beforeunload', releaseLock)
+      releaseLock()
+      if (syncChannelRef.current) {
+        syncChannelRef.current.close()
+        syncChannelRef.current = null
+      }
+      setLeaderStatus(true)
+    }
+  }, [auctionId, phase, applyBidInsertToAuction])
 
   useEffect(() => {
     seenBidIdsRef.current.clear()
+    liveStateEtagRef.current = null
   }, [auction?.id])
 
   useEffect(() => {
     // Subscribe exactly when live phase is active for this client.
     // This avoids missing updates when the page was opened before bidding started.
     const liveAuctionId = auction?.id
-    if (!liveAuctionId || phase !== 'live') return
-
-    // Throttle the full refresh to avoid hammering the API
-    const scheduleRefresh = () => {
-      if (refreshTimeoutRef.current) return
-      refreshTimeoutRef.current = setTimeout(() => {
-        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-          refreshAuction()
-        }
-        refreshTimeoutRef.current = null
-      }, 12000) // Keep DB reads low while still reconciling periodically
+    if (!liveAuctionId || phase !== 'live' || !isLeaderTab) {
+      setIsRealtimeConnected(false)
+      return
     }
 
     setIsRealtimeConnected(false)
@@ -255,64 +462,8 @@ export default function AuctionDetailPage() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${liveAuctionId}` },
         (payload: { new: { id?: string; amount: number; size?: string } }) => {
-          const newBid = payload.new
-          const newBidId = String(newBid.id || '').trim()
-          if (newBidId) {
-            if (seenBidIdsRef.current.has(newBidId)) return
-            seenBidIdsRef.current.add(newBidId)
-          }
-
-          // Optimistically update the UI immediately
-          setAuction((prev) => {
-            if (!prev) return null
-            const newAmount = Number(newBid.amount)
-            const bidSize = newBid.size ?? undefined
-
-            // Update highest_bids_by_size for multi-size auctions
-            let updatedHighestBidsBySize = prev.highest_bids_by_size
-            if (bidSize && prev.available_sizes && prev.available_sizes.length > 0) {
-              const existingIndex = updatedHighestBidsBySize?.findIndex((b) => b.size === bidSize) ?? -1
-
-              if (existingIndex >= 0 && updatedHighestBidsBySize) {
-                // Update existing size entry
-                const currentSizeAmount = updatedHighestBidsBySize[existingIndex].amount
-                updatedHighestBidsBySize = [...updatedHighestBidsBySize]
-                updatedHighestBidsBySize[existingIndex] = {
-                  ...updatedHighestBidsBySize[existingIndex],
-                  amount: Math.max(currentSizeAmount, newAmount),
-                  bid_count: Number(updatedHighestBidsBySize[existingIndex].bid_count || 0) + 1
-                }
-              } else if (!updatedHighestBidsBySize) {
-                // Create new array with this size
-                updatedHighestBidsBySize = [{
-                  size: bidSize,
-                  amount: newAmount,
-                  bid_count: 1,
-                  bidder_name: null
-                }]
-              } else {
-                // Add new size entry
-                updatedHighestBidsBySize = [...updatedHighestBidsBySize, {
-                  size: bidSize,
-                  amount: newAmount,
-                  bid_count: 1,
-                  bidder_name: null
-                }]
-              }
-            }
-
-            // If the new bid is higher globally, update display
-            const isHigher = newAmount > (prev.current_highest_bid || 0)
-
-            return {
-              ...prev,
-              current_highest_bid: isHigher ? newAmount : prev.current_highest_bid,
-              total_bids: (prev.total_bids || 0) + 1,
-              highest_bids_by_size: updatedHighestBidsBySize,
-              highest_bidder_name: prev.highest_bidder_name
-            }
-          })
-          scheduleRefresh()
+          applyBidInsertToAuction(payload.new)
+          broadcastToFollowers({ type: 'bid-insert', payload: payload.new })
         }
       )
       .on(
@@ -328,15 +479,18 @@ export default function AuctionDetailPage() {
               status: updatedAuction.status
             }
           })
+          broadcastToFollowers({ type: 'auction-update', payload: updatedAuction })
         }
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setIsRealtimeConnected(true)
+          broadcastToFollowers({ type: 'realtime-status', connected: true })
           return
         }
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setIsRealtimeConnected(false)
+          broadcastToFollowers({ type: 'realtime-status', connected: false })
           // Pull latest data if realtime connection is interrupted.
           refreshAuction()
         }
@@ -345,19 +499,22 @@ export default function AuctionDetailPage() {
     return () => {
       setIsRealtimeConnected(false)
       supabase.removeChannel(channel)
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current)
-      }
     }
-  }, [auction?.id, phase, refreshAuction])
+  }, [auction?.id, phase, refreshAuction, isLeaderTab, applyBidInsertToAuction, broadcastToFollowers])
 
   useEffect(() => {
-    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible) return
+    if (!auctionId || phase !== 'live' || isRealtimeConnected || !isPageVisible || !isLeaderTab) return
     const interval = setInterval(() => {
       refreshAuction()
-    }, 15000)
+    }, 35000)
     return () => clearInterval(interval)
-  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction])
+  }, [auctionId, phase, isRealtimeConnected, isPageVisible, refreshAuction, isLeaderTab])
+
+  useEffect(() => {
+    if (!auctionId || phase !== 'live' || !isPageVisible || !isLeaderTab) return
+    // Reconcile once when tab becomes visible again.
+    refreshAuction()
+  }, [auctionId, phase, isPageVisible, refreshAuction, isLeaderTab])
 
   const phaseLabel = useMemo(() => {
     if (phase === 'registration') return 'Registration open'

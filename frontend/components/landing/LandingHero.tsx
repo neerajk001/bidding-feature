@@ -97,11 +97,139 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
 
     // State for realtime bid updates
     const [liveBidData, setLiveBidData] = useState<{ amount: number, total: number } | null>(null)
+    const [isLeaderTab, setIsLeaderTab] = useState(true)
+    const isLeaderTabRef = useRef<boolean>(true)
+    const syncChannelRef = useRef<BroadcastChannel | null>(null)
+    const tabIdRef = useRef<string>(
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    )
+
+    const applyBidMessage = (message: { amount: number }) => {
+        const newAmount = Number(message.amount)
+        if (!Number.isFinite(newAmount) || newAmount <= 0) return
+
+        setLiveBidData(prev => {
+            if (prev && newAmount <= prev.amount) return prev
+            return {
+                amount: newAmount,
+                total: (prev?.total || activeDetail?.total_bids || 0) + 1
+            }
+        })
+    }
+
+    const broadcastToFollowers = (message: { type: 'bid'; payload: { auction_id: string; amount: number; v: number } }) => {
+        if (!isLeaderTabRef.current) return
+        const channel = syncChannelRef.current
+        if (!channel) return
+        channel.postMessage(message)
+    }
+
+    useEffect(() => {
+        if (activeAuction?.phase !== 'live' || !activeDetail?.id || typeof window === 'undefined') {
+            setIsLeaderTab(true)
+            isLeaderTabRef.current = true
+            if (syncChannelRef.current) {
+                syncChannelRef.current.close()
+                syncChannelRef.current = null
+            }
+            return
+        }
+
+        const lockKey = `landing-hero-leader:${activeDetail.id}`
+        const ttlMs = 12000
+        const heartbeatMs = 4000
+        const channel = new BroadcastChannel(`landing-hero-sync:${activeDetail.id}`)
+        syncChannelRef.current = channel
+
+        const setLeaderStatus = (value: boolean) => {
+            isLeaderTabRef.current = value
+            setIsLeaderTab(value)
+        }
+
+        const readLock = (): { owner: string; expiresAt: number } | null => {
+            try {
+                const raw = localStorage.getItem(lockKey)
+                if (!raw) return null
+                const parsed = JSON.parse(raw) as { owner?: string; expiresAt?: number }
+                if (!parsed?.owner || typeof parsed.expiresAt !== 'number') return null
+                return { owner: parsed.owner, expiresAt: parsed.expiresAt }
+            } catch {
+                return null
+            }
+        }
+
+        const writeLock = () => {
+            const lockValue = {
+                owner: tabIdRef.current,
+                expiresAt: Date.now() + ttlMs
+            }
+            localStorage.setItem(lockKey, JSON.stringify(lockValue))
+        }
+
+        const releaseLock = () => {
+            const lock = readLock()
+            if (lock?.owner === tabIdRef.current) {
+                localStorage.removeItem(lockKey)
+            }
+        }
+
+        const electLeader = () => {
+            const lock = readLock()
+            const nowTs = Date.now()
+            const canClaim = !lock || lock.expiresAt <= nowTs || lock.owner === tabIdRef.current
+            if (canClaim) {
+                writeLock()
+                setLeaderStatus(true)
+            } else {
+                setLeaderStatus(false)
+            }
+        }
+
+        electLeader()
+
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                electLeader()
+            }
+        }
+
+        const heartbeat = setInterval(() => {
+            if (isLeaderTabRef.current) {
+                writeLock()
+            } else {
+                electLeader()
+            }
+        }, heartbeatMs)
+
+        channel.onmessage = (event: MessageEvent<{ type?: 'bid'; payload?: { auction_id: string; amount: number; v: number } }>) => {
+            const message = event.data
+            if (!message || message.type !== 'bid' || !message.payload) return
+            if (message.payload.auction_id !== activeDetail.id) return
+            applyBidMessage({ amount: message.payload.amount })
+        }
+
+        window.addEventListener('visibilitychange', onVisibility)
+        window.addEventListener('beforeunload', releaseLock)
+
+        return () => {
+            clearInterval(heartbeat)
+            window.removeEventListener('visibilitychange', onVisibility)
+            window.removeEventListener('beforeunload', releaseLock)
+            releaseLock()
+            if (syncChannelRef.current) {
+                syncChannelRef.current.close()
+                syncChannelRef.current = null
+            }
+            setLeaderStatus(true)
+        }
+    }, [activeAuction?.phase, activeDetail?.id, activeDetail?.total_bids])
 
     // Realtime Subscription
     useEffect(() => {
         // FREE TIER PROTECTION: Only connect if auction is LIVE
-        if (activeAuction?.phase !== 'live' || !activeDetail?.id) return
+        if (activeAuction?.phase !== 'live' || !activeDetail?.id || !isLeaderTab) return
 
         const channel = supabase
             .channel(`landing-hero-${activeDetail.id}`)
@@ -110,14 +238,15 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                 { event: 'INSERT', schema: 'public', table: 'bids', filter: `auction_id=eq.${activeDetail.id}` },
                 (payload: { new: Record<string, unknown> }) => {
                     const newBid = payload.new
-                    setLiveBidData(prev => {
-                        const newAmount = Number(newBid.amount)
-                        // Only update if higher
-                        if (prev && newAmount <= prev.amount) return prev
-                        return {
-                            amount: newAmount,
-                            total: (prev?.total || activeDetail.total_bids || 0) + 1
-                        }
+                    const minimal = {
+                        auction_id: activeDetail.id,
+                        amount: Number(newBid.amount || 0),
+                        v: Date.now()
+                    }
+                    applyBidMessage({ amount: minimal.amount })
+                    broadcastToFollowers({
+                        type: 'bid',
+                        payload: minimal
                     })
                 }
             )
@@ -127,7 +256,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
             supabase.removeChannel(channel)
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- subscription keyed by phase and id
-    }, [activeAuction?.phase, activeDetail?.id])
+    }, [activeAuction?.phase, activeDetail?.id, isLeaderTab])
 
     // Use live data if available, otherwise fall back to prop data
     const displayPrice = liveBidData?.amount ?? activeDetail?.current_highest_bid ?? 0
@@ -238,15 +367,15 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
 
     const winnerName = endedDetail?.winner_name || endedDetail?.highest_bidder_name || 'No bids'
     // Logic for winning amount display if we are showing closed variant
-    const winningAmount = endedDetail?.winning_amount ?? endedDetail?.current_highest_bid
+    const winningAmount = endedDetail?.top_winning_amount ?? endedDetail?.winning_amount ?? endedDetail?.current_highest_bid
     const winningBidDisplay = winningAmount === null || winningAmount === undefined
         ? 'No bids'
         : formatCurrency(winningAmount)
 
-    const winnersBySize = (endedDetail?.winners_by_size ?? []).filter((w) => w && w.winning_amount !== null && w.winning_amount !== undefined)
-    const hasWinnersBySize = winnersBySize.length > 0
+    const winnersCount = Number(endedDetail?.winners_count || 0)
+    const hasWinnersBySize = winnersCount > 1
     const winnersSummary = hasWinnersBySize
-        ? `Bidding has concluded across all sizes. See the winning bids below.`
+        ? `Bidding has concluded across all sizes.`
         : ''
 
     const cardTitle = effectiveVariant === 'empty'
@@ -298,35 +427,11 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                 ]
                 : effectiveVariant === 'closed'
                     ? (hasWinnersBySize
-                        ? (() => {
-                            if (winnersBySize.length > 3) {
-                                // If 4 or 5 sizes exist, truncate into a single aggregate box to avoid UI breaking
-                                const metrics = [
-                                    {
-                                        label: 'Winners Found',
-                                        value: `${winnersBySize.length} unique sizes claimed`
-                                    },
-                                    {
-                                        label: 'Total Value',
-                                        value: formatCurrency(winnersBySize.reduce((acc, curr) => acc + (curr.winning_amount || 0), 0))
-                                    },
-                                    {
-                                        label: 'Total Bids',
-                                        value: `${endedDetail?.total_bids || 0}`
-                                    }
-                                ]
-                                return metrics
-                            }
-                            // Original logic for 1, 2, or 3 sizes
-                            const metrics = winnersBySize.slice(0, 3).map(w => ({
-                                label: w.size ? `Size ${w.size}` : 'Winner',
-                                value: `${w.winner_name || 'Winner'} \u2022 ${formatCurrency(w.winning_amount)}`
-                            }))
-                            if (metrics.length < 3) {
-                                metrics.push({ label: 'Total bids', value: `${endedDetail?.total_bids || 0}` })
-                            }
-                            return metrics
-                        })()
+                        ? [
+                            { label: 'Winners', value: `${winnersCount}` },
+                            { label: 'Top Winning Bid', value: winningBidDisplay },
+                            { label: 'Total bids', value: `${endedDetail?.total_bids || 0}` },
+                        ]
                         : [
                             { label: 'Winner', value: winnerName },
                             { label: 'Winning bid', value: winningBidDisplay },

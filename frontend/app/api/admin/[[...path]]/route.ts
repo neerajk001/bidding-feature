@@ -6,6 +6,31 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
+const FORWARDED_RESPONSE_HEADERS = [
+  'cache-control',
+  'etag',
+  'last-modified',
+  'vary',
+  'expires',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+  'retry-after'
+]
+
+function pickResponseHeaders(source: Headers, fallbackContentType?: string): HeadersInit {
+  const nextHeaders = new Headers()
+  const contentType = source.get('content-type') || fallbackContentType || 'text/plain; charset=utf-8'
+  nextHeaders.set('Content-Type', contentType)
+
+  for (const header of FORWARDED_RESPONSE_HEADERS) {
+    const value = source.get(header)
+    if (value) nextHeaders.set(header, value)
+  }
+
+  return nextHeaders
+}
+
 function getApiBase(): string {
   const backendUrl =
     process.env.BACKEND_URL ||
@@ -77,6 +102,10 @@ async function proxy(
   headers.set('Authorization', `Bearer ${token}`)
   const contentType = request.headers.get('content-type')
   if (contentType) headers.set('Content-Type', contentType)
+  const ifNoneMatch = request.headers.get('if-none-match')
+  if (ifNoneMatch) headers.set('If-None-Match', ifNoneMatch)
+  const ifModifiedSince = request.headers.get('if-modified-since')
+  if (ifModifiedSince) headers.set('If-Modified-Since', ifModifiedSince)
 
   try {
     const apiBase = getApiBase()
@@ -88,15 +117,10 @@ async function proxy(
     })
 
     const responseBody = await res.text()
-    try {
-      const json = JSON.parse(responseBody)
-      return NextResponse.json(json, { status: res.status })
-    } catch {
-      return new NextResponse(responseBody, {
-        status: res.status,
-        headers: { 'Content-Type': res.headers.get('Content-Type') || 'text/plain' },
-      })
-    }
+    return new NextResponse(responseBody, {
+      status: res.status,
+      headers: pickResponseHeaders(res.headers)
+    })
   } catch (err) {
     console.error('Admin backend proxy error:', err)
     return NextResponse.json(

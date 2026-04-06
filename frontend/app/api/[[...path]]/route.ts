@@ -5,6 +5,31 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
+const FORWARDED_RESPONSE_HEADERS = [
+  'cache-control',
+  'etag',
+  'last-modified',
+  'vary',
+  'expires',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+  'retry-after'
+]
+
+function pickResponseHeaders(source: Headers, fallbackContentType?: string): HeadersInit {
+  const nextHeaders = new Headers()
+  const contentType = source.get('content-type') || fallbackContentType || 'text/plain; charset=utf-8'
+  nextHeaders.set('Content-Type', contentType)
+
+  for (const header of FORWARDED_RESPONSE_HEADERS) {
+    const value = source.get(header)
+    if (value) nextHeaders.set(header, value)
+  }
+
+  return nextHeaders
+}
+
 const getApiBase = (): string => {
   const backendUrl =
     process.env.BACKEND_URL ||
@@ -73,6 +98,10 @@ async function proxy(
   const headers = new Headers()
   const contentType = request.headers.get('content-type')
   if (contentType) headers.set('Content-Type', contentType)
+  const ifNoneMatch = request.headers.get('if-none-match')
+  if (ifNoneMatch) headers.set('If-None-Match', ifNoneMatch)
+  const ifModifiedSince = request.headers.get('if-modified-since')
+  if (ifModifiedSince) headers.set('If-Modified-Since', ifModifiedSince)
 
   try {
     const apiBase = getApiBase()
@@ -84,25 +113,10 @@ async function proxy(
     })
 
     const responseBody = await res.text()
-    const responseContentType = res.headers.get('Content-Type') || ''
-    try {
-      const json = JSON.parse(responseBody)
-      return NextResponse.json(json, { status: res.status })
-    } catch {
-      if (!res.ok) {
-        return NextResponse.json(
-          {
-            error: responseBody || `Request failed with status ${res.status}`,
-            status: res.status,
-          },
-          { status: res.status }
-        )
-      }
-      return new NextResponse(responseBody, {
-        status: res.status,
-        headers: { 'Content-Type': responseContentType || 'text/plain' },
-      })
-    }
+    return new NextResponse(responseBody, {
+      status: res.status,
+      headers: pickResponseHeaders(res.headers)
+    })
   } catch (err) {
     console.error('Backend proxy error:', err)
     return NextResponse.json(

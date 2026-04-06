@@ -5,12 +5,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 import PublicShell from '@/components/public/PublicShell'
 
-interface WinnerBySize {
-  size: string | null
-  winning_amount: number
-  winner_name?: string | null
-}
-
 interface AuctionSummary {
   id: string
   title: string
@@ -21,7 +15,8 @@ interface AuctionSummary {
   highest_bidder_name?: string | null
   winner_name?: string | null
   winning_amount?: number | null
-  winners_by_size?: WinnerBySize[] | null
+  winners_count?: number
+  top_winning_amount?: number | null
 }
 
 export default function PastAuctionsPage() {
@@ -37,7 +32,7 @@ export default function PastAuctionsPage() {
       setError(null)
 
       try {
-        const res = await fetch('/api/auctions?includeEnded=true')
+        const res = await fetch('/api/auctions?includeEnded=true&view=past&limit=120')
         const data = await res.json()
 
         if (!res.ok) {
@@ -159,19 +154,19 @@ export default function PastAuctionsPage() {
                         <div>
                           <span className="block text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Winner</span>
                           <span className="text-sm font-bold text-black line-clamp-1">
-                            {auction.winners_by_size && auction.winners_by_size.length > 1
-                              ? `${auction.winners_by_size.length} Winners`
+                            {Number(auction.winners_count || 0) > 1
+                              ? `${auction.winners_count} Winners`
                               : auction.winner_name || auction.highest_bidder_name || 'No bids'}
                           </span>
                         </div>
                         <div className="text-right">
                           <span className="block text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">
-                            {auction.winners_by_size && auction.winners_by_size.length > 1 ? 'Top Bid' : 'Final Bid'}
+                            {Number(auction.winners_count || 0) > 1 ? 'Top Bid' : 'Final Bid'}
                           </span>
                           <span className="text-sm font-bold text-primary">
                             {formatCurrency(
-                              auction.winners_by_size && auction.winners_by_size.length > 1
-                                ? Math.max(...auction.winners_by_size.map((winner) => winner.winning_amount))
+                              Number(auction.winners_count || 0) > 1
+                                ? (auction.top_winning_amount ?? auction.winning_amount ?? auction.current_highest_bid)
                                 : (auction.winning_amount ?? auction.current_highest_bid)
                             )}
                           </span>

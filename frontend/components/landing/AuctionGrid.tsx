@@ -273,19 +273,19 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                                                 <div>
                                                     <span className="block text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">Winner</span>
                                                     <span className="text-sm font-bold text-black line-clamp-1">
-                                                        {auction.winners_by_size && auction.winners_by_size.length > 1
-                                                            ? `${auction.winners_by_size.length} Winners`
+                                                        {Number(auction.winners_count || 0) > 1
+                                                            ? `${auction.winners_count} Winners`
                                                             : auction.winner_name || auction.highest_bidder_name || 'No bids'}
                                                     </span>
                                                 </div>
                                                 <div className="text-right">
                                                     <span className="block text-xs uppercase tracking-wider text-gray-500 font-semibold mb-0.5">
-                                                        {auction.winners_by_size && auction.winners_by_size.length > 1 ? 'Top Bid' : 'Final Bid'}
+                                                        {Number(auction.winners_count || 0) > 1 ? 'Top Bid' : 'Final Bid'}
                                                     </span>
                                                     <span className="text-sm font-bold text-primary">
                                                         {formatCurrency(
-                                                            auction.winners_by_size && auction.winners_by_size.length > 1
-                                                                ? Math.max(...auction.winners_by_size.map(w => w.winning_amount))
+                                                            Number(auction.winners_count || 0) > 1
+                                                                ? (auction.top_winning_amount ?? auction.winning_amount ?? auction.current_highest_bid)
                                                                 : (auction.winning_amount ?? auction.current_highest_bid)
                                                         )}
                                                     </span>
@@ -335,45 +335,28 @@ export default function AuctionGrid({ auctions, activeDetail }: AuctionGridProps
                             </div>
                             <h3 className="text-xl lg:text-2xl font-display font-bold text-black mb-1">Winner Announced</h3>
                             <p className="text-base lg:text-lg text-gray-700 mb-6">{recentEndedAuction.title}</p>
-                            {recentEndedAuction.winners_by_size && recentEndedAuction.winners_by_size.length > 0 ? (
-                                <div className="space-y-4 mb-6 pb-6 border-b border-orange-200">
-                                    {recentEndedAuction.winners_by_size.map((w, idx) => (
-                                        <div key={idx} className="grid grid-cols-3 gap-4 pb-4 border-b border-orange-100 last:border-0 last:pb-0">
-                                            <div>
-                                                <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Size</span>
-                                                <span className="text-lg lg:text-xl font-bold text-black">{w.size || '-'}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Highest Bidder</span>
-                                                <span className="text-lg lg:text-xl font-bold text-black">{w.winner_name || 'No bids'}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Winning Bid</span>
-                                                <span className="text-lg lg:text-xl font-bold text-primary font-display">{formatCurrency(w.winning_amount)}</span>
-                                            </div>
-                                        </div>
-                                    ))}
+                            <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-orange-200">
+                                <div>
+                                    <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Highest Bidder</span>
+                                    <span className="text-lg lg:text-xl font-bold text-black">
+                                        {recentEndedAuction.winner_name ||
+                                            recentEndedAuction.highest_bidder_name ||
+                                            'No bids placed'}
+                                    </span>
                                 </div>
-                            ) : (
-                                <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-orange-200">
-                                    <div>
-                                        <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Highest Bidder</span>
-                                        <span className="text-lg lg:text-xl font-bold text-black">
-                                            {recentEndedAuction.winner_name ||
-                                                recentEndedAuction.highest_bidder_name ||
-                                                'No bids placed'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">Winning Bid</span>
-                                        <span className="text-lg lg:text-xl font-bold text-primary font-display">
-                                            {formatCurrency(
-                                                recentEndedAuction.winning_amount ?? recentEndedAuction.current_highest_bid
-                                            )}
-                                        </span>
-                                    </div>
+                                <div>
+                                    <span className="block text-xs uppercase tracking-wider text-secondary font-bold mb-1">
+                                        {Number(recentEndedAuction.winners_count || 0) > 1 ? 'Top Winning Bid' : 'Winning Bid'}
+                                    </span>
+                                    <span className="text-lg lg:text-xl font-bold text-primary font-display">
+                                        {formatCurrency(
+                                            recentEndedAuction.top_winning_amount ??
+                                            recentEndedAuction.winning_amount ??
+                                            recentEndedAuction.current_highest_bid
+                                        )}
+                                    </span>
                                 </div>
-                            )}
+                            </div>
                             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
                                 <Link
                                     href={`/auction/${recentEndedAuction.id}`}

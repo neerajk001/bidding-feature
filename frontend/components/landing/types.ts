@@ -15,6 +15,8 @@ export interface AuctionSummary {
     winner_name?: string | null
     winning_amount?: number | null
     winner_declared_at?: string | null
+    winners_count?: number
+    top_winning_amount?: number | null
     winners_by_size?: { size: string | null; winning_amount: number; winner_name?: string | null; declared_at?: string | null }[] | null
     highest_bids_by_size?: { size: string; amount: number; bid_count: number; bidder_name: string | null }[] | null
     gallery_images?: string[] | null
