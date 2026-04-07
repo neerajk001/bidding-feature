@@ -41,6 +41,20 @@ function formatDateTime(value: string | null | undefined) {
     return `${dateFormatter.format(date)} · ${timeFormatter.format(date)}`
 }
 
+function formatTimeOnly(value: string | null | undefined) {
+    const date = parseDate(value)
+    if (!date) return 'TBD'
+    return timeFormatter.format(date)
+}
+
+function formatCountdown(msRemaining: number) {
+    const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000))
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':')
+}
+
 interface LandingHeroProps {
     activeAuction: ActiveAuctionResponse | null
     activeDetail: AuctionSummary | null
@@ -258,9 +272,12 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- subscription keyed by phase and id
     }, [activeAuction?.phase, activeDetail?.id, isLeaderTab])
 
-    // Use live data if available, otherwise fall back to prop data
-    const displayPrice = liveBidData?.amount ?? activeDetail?.current_highest_bid ?? 0
-    const displayTotalBids = liveBidData?.total ?? activeDetail?.total_bids ?? 0
+    const [nowTs, setNowTs] = useState(() => Date.now())
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNowTs(Date.now()), 1000)
+        return () => window.clearInterval(timer)
+    }, [])
 
     const heroRef = useRef<HTMLElement>(null)
 
@@ -345,105 +362,71 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
         ? null
         : { label: 'View Upcoming Auctions', href: '#auction-calendar' }
 
-    const cardStatusLabel = effectiveVariant === 'live'
-        ? 'Live Auction'
-        : effectiveVariant === 'registration'
-            ? 'Registration Open'
-            : effectiveVariant === 'upcoming'
-                ? 'Upcoming Auction'
-                : effectiveVariant === 'closed'
-                    ? 'Auction Closed'
-                    : 'No Live Auction'
-
-    const cardStatusMeta = effectiveVariant === 'live'
-        ? `Ends ${formatDateTime(effectiveDetail?.bidding_end_time)}`
-        : effectiveVariant === 'registration'
-            ? `Closes ${formatDateTime(effectiveDetail?.registration_end_time)}`
-            : effectiveVariant === 'upcoming'
-                ? `Starts ${formatDateTime(effectiveDetail?.bidding_start_time)}`
-                : effectiveVariant === 'closed'
-                    ? `Ended ${formatDateTime(endedDetail?.bidding_end_time)}`
-                    : 'Next drop in preparation'
-
-    const winnerName = endedDetail?.winner_name || endedDetail?.highest_bidder_name || 'No bids'
-    // Logic for winning amount display if we are showing closed variant
-    const winningAmount = endedDetail?.top_winning_amount ?? endedDetail?.winning_amount ?? endedDetail?.current_highest_bid
-    const winningBidDisplay = winningAmount === null || winningAmount === undefined
-        ? 'No bids'
-        : formatCurrency(winningAmount)
-
-    const winnersCount = Number(endedDetail?.winners_count || 0)
-    const hasWinnersBySize = winnersCount > 1
-    const winnersSummary = hasWinnersBySize
-        ? `Bidding has concluded across all sizes.`
-        : ''
-
     const cardTitle = effectiveVariant === 'empty'
         ? 'Next lot in curation'
         : detail?.title || 'Heritage Auction'
 
-    const cardSummary = effectiveVariant === 'live'
-        ? (effectiveDetail?.highest_bids_by_size && effectiveDetail.highest_bids_by_size.length > 0
-            ? `Size-wise bidding: ${effectiveDetail.highest_bids_by_size.map(b => `${b.size}: ${formatCurrency(b.amount)}`).join(', ')}`
-            : effectiveDetail?.current_highest_bid
-                ? `Current lead at ${formatCurrency(displayPrice)}.`
-                : 'Bidding is open. Be the first to place a bid.')
-        : effectiveVariant === 'registration'
-            ? `Registration closes ${formatDateTime(effectiveDetail?.registration_end_time)}.`
-            : effectiveVariant === 'upcoming'
-                ? `Auction opens on ${formatDateTime(effectiveDetail?.bidding_start_time)}.`
-                : effectiveVariant === 'closed'
-                    ? (hasWinnersBySize
-                        ? winnersSummary
-                        : winnerName === 'No bids'
-                            ? 'No bids were placed. See the full result.'
-                            : `Winner ${winnerName} with ${winningBidDisplay}.`)
-                    : 'Our curators are assembling a new collection of heirloom pieces.'
+    const countdownTargetIso = effectiveVariant === 'registration'
+        ? effectiveDetail?.registration_end_time
+        : effectiveVariant === 'upcoming'
+            ? effectiveDetail?.bidding_start_time
+            : effectiveVariant === 'live'
+                ? effectiveDetail?.bidding_end_time
+                : null
 
-    const cardMetrics = effectiveVariant === 'live'
-        ? (effectiveDetail?.highest_bids_by_size && effectiveDetail.highest_bids_by_size.length > 0
-            ? effectiveDetail.highest_bids_by_size.slice(0, 3).map(bid => ({
-                label: `Size ${bid.size}`,
-                value: `${formatCurrency(bid.amount)} (${bid.bid_count} ${bid.bid_count === 1 ? 'bid' : 'bids'})`
-            }))
-            : [
-                { label: 'Current bid', value: formatCurrency(displayPrice) },
-                { label: 'Active bids', value: `${displayTotalBids}` },
-                { label: 'Ends', value: formatDateTime(effectiveDetail?.bidding_end_time) },
-            ])
-        : effectiveVariant === 'registration'
-            ? [
-                { label: 'Registration ends', value: formatDateTime(effectiveDetail?.registration_end_time) },
-                { label: 'Auction starts', value: formatDateTime(effectiveDetail?.bidding_start_time) },
-                ...(effectiveDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(effectiveDetail?.base_price) }] : []),
-                { label: 'Bid increment', value: formatCurrency(effectiveDetail?.min_increment) },
-            ]
-            : effectiveVariant === 'upcoming'
-                ? [
-                    { label: 'Auction starts', value: formatDateTime(effectiveDetail?.bidding_start_time) },
-                    { label: 'Registration closes', value: formatDateTime(effectiveDetail?.registration_end_time) },
-                    ...(effectiveDetail?.base_price ? [{ label: 'Base price', value: formatCurrency(effectiveDetail?.base_price) }] : []),
-                    { label: 'Bid increment', value: formatCurrency(effectiveDetail?.min_increment) },
-                ]
-                : effectiveVariant === 'closed'
-                    ? (hasWinnersBySize
-                        ? [
-                            { label: 'Winners', value: `${winnersCount}` },
-                            { label: 'Top Winning Bid', value: winningBidDisplay },
-                            { label: 'Total bids', value: `${endedDetail?.total_bids || 0}` },
-                        ]
-                        : [
-                            { label: 'Winner', value: winnerName },
-                            { label: 'Winning bid', value: winningBidDisplay },
-                            { label: 'Total bids', value: `${endedDetail?.total_bids || 0}` },
-                        ])
-                    : []
+    const countdownTargetTs = countdownTargetIso ? new Date(countdownTargetIso).getTime() : Number.NaN
+    const hasCountdown = Number.isFinite(countdownTargetTs)
+    const countdownText = hasCountdown
+        ? formatCountdown(Math.max(0, countdownTargetTs - nowTs))
+        : null
 
-    const emptySteps = [
-        { label: 'Step 01', value: 'Browse the auction calendar' },
-        { label: 'Step 02', value: 'Preview curated lots' },
-        { label: 'Step 03', value: 'Join the next live bidding' },
-    ]
+    const cardStatusLabel = effectiveVariant === 'registration' || effectiveVariant === 'live'
+        ? `Open${countdownText ? ` · Closes in ${countdownText}` : ''}`
+        : effectiveVariant === 'upcoming'
+            ? `Upcoming${countdownText ? ` · Starts in ${countdownText}` : ''}`
+            : effectiveVariant === 'closed'
+                ? 'Closed'
+                : 'Upcoming Soon'
+
+    const cardStatusClass = effectiveVariant === 'registration' || effectiveVariant === 'live'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : effectiveVariant === 'upcoming'
+            ? 'bg-amber-50 text-amber-700 border-amber-200'
+            : effectiveVariant === 'closed'
+                ? 'bg-zinc-100 text-zinc-700 border-zinc-300'
+                : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+
+    const cardSubline = effectiveVariant === 'upcoming'
+        ? `Starts today at ${formatTimeOnly(effectiveDetail?.bidding_start_time)}`
+        : effectiveVariant === 'closed'
+            ? `Closed at ${formatDateTime(endedDetail?.bidding_end_time)}`
+            : `Closes today at ${formatTimeOnly(
+                effectiveVariant === 'registration'
+                    ? effectiveDetail?.registration_end_time
+                    : effectiveDetail?.bidding_end_time
+            )}`
+
+    const cardMetaItems = detail
+        ? [
+            { label: 'Starts', value: formatDateTime(detail.bidding_start_time) },
+            { label: 'Base', value: formatCurrency(detail.base_price ?? 0) },
+            { label: '+', value: formatCurrency(detail.min_increment ?? 0) }
+        ]
+        : [
+            { label: 'Starts', value: 'TBD' },
+            { label: 'Base', value: '₹0' },
+            { label: '+', value: '₹0' }
+        ]
+
+    const cardPrimaryCta = detail
+        ? {
+            href: `/auction/${detail.id}`,
+            label: effectiveVariant === 'closed' ? 'View Results' : 'Register to Bid'
+        }
+        : {
+            href: '/auctions',
+            label: 'View Auctions'
+        }
 
     const renderCta = (cta: HeroCta | null, className: string) => {
         if (!cta) return null
@@ -467,17 +450,6 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
         : effectiveVariant === 'empty'
             ? 'Next Drop'
             : 'Curated Lot'
-
-    const getStatusPillClass = (variant: HeroVariant) => {
-        switch (variant) {
-            case 'live': return 'bg-red-900/10 text-red-800 border-red-900/20'
-            case 'registration': return 'bg-secondary/10 text-secondary border-secondary/20'
-            case 'upcoming': return 'bg-primary/10 text-primary border-primary/20'
-            case 'closed': return 'bg-zinc-800 text-zinc-300 border-zinc-700'
-            case 'empty': return 'bg-zinc-800/50 text-zinc-500 border-zinc-700'
-            default: return 'bg-zinc-800 text-zinc-400'
-        }
-    }
 
     return (
         <section className="relative pb-4 lg:pb-12 overflow-hidden bg-cream" data-variant={effectiveVariant} ref={heroRef}>
@@ -526,103 +498,46 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
                         {/* Enhanced glow effect behind card */}
                         <div className="absolute -inset-6 bg-gradient-to-br from-primary/10 via-secondary/10 to-primary/5 rounded-3xl blur-3xl opacity-60 animate-pulse" />
 
-                        <div className="relative bg-white border border-secondary/20 rounded-t-[2.5rem] rounded-b-[2rem] overflow-hidden shadow-2xl hover:shadow-secondary/10 transition-all duration-500" data-variant={effectiveVariant}>
+                        <div className="relative bg-white/85 backdrop-blur-md border border-secondary/20 rounded-[1.25rem] overflow-hidden shadow-2xl hover:shadow-secondary/10 transition-all duration-500" data-variant={effectiveVariant}>
                             {/* Horizontal layout: content left, media right on desktop */}
                             <div className="flex flex-col lg:flex-row">
                                 {/* Content Section - Wider on desktop */}
-                                <div className="lg:w-[55%] p-4 lg:p-8 bg-gradient-to-br from-white via-cream to-white">
-                                    {/* Status Header */}
-                                    <div className="flex items-center justify-between gap-3 mb-4">
-                                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm border ${getStatusPillClass(effectiveVariant)}`}>
-                                            {effectiveVariant === 'live' && <span className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />}
+                                <div className="lg:w-[55%] p-4 lg:p-6 bg-gradient-to-br from-white via-cream to-white space-y-5 lg:space-y-6">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide border ${cardStatusClass}`}>
+                                            {(effectiveVariant === 'live' || effectiveVariant === 'registration') && (
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            )}
                                             {cardStatusLabel}
                                         </span>
-                                        {cardStatusMeta ? (
-                                            <span className="text-xs font-semibold text-text/60 uppercase tracking-wide bg-cream border border-secondary/10 px-2.5 py-1 rounded-full">{cardStatusMeta}</span>
-                                        ) : null}
                                     </div>
 
-                                    {/* Title & Summary */}
-                                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                                    <div className="space-y-2">
                                         <h3 className="text-2xl lg:text-3xl font-bold font-display text-[#2D2420] leading-tight">{cardTitle}</h3>
-                                        {effectiveDetail?.registration_count ? (
-                                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50/80 border border-blue-100 backdrop-blur-sm">
-                                                <span className="relative flex h-2 w-2">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                                                </span>
-                                                <span className="text-xs font-semibold text-blue-700 font-sans tracking-wide">
-                                                    {effectiveDetail.registration_count} registered
-                                                </span>
-                                            </div>
-                                        ) : null}
+                                        <p className="text-sm text-[#5E5248]">{cardSubline}</p>
                                     </div>
-                                    <p className="text-[#6B5E53] mb-6 leading-relaxed text-sm font-body">{cardSummary}</p>
 
-                                    {/* Metrics or Steps */}
-                                    {effectiveVariant === 'empty' ? (
-                                        <div className="space-y-2.5 mb-6">
-                                            {emptySteps.map((step) => (
-                                                <div
-                                                    className="flex items-center gap-4 p-3 bg-white rounded-xl border border-secondary/10 hover:border-primary/20 hover:shadow-sm transition-all duration-300 group"
-                                                    key={step.label}
-                                                >
-                                                    <span className="shrink-0 inline-block min-w-[56px] text-center text-[10px] font-extrabold uppercase tracking-widest text-amber-700 bg-amber-50 border border-amber-200/60 rounded-md px-2 py-1">{step.label}</span>
-                                                    <span className="text-sm font-semibold text-text/80 group-hover:text-primary transition-colors">{step.value}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="mb-6 pb-6 border-b border-secondary/10">
-                                            <div className="flex justify-between gap-2">
-                                                {cardMetrics.map((metric, idx) => (
-                                                    <div
-                                                        key={metric.label}
-                                                        className="flex-1 text-center group"
-                                                        style={{ animationDelay: `${idx * 100}ms` }}
-                                                    >
-                                                        <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-2 group-hover:text-primary transition-colors">{metric.label}</div>
-                                                        <div className="text-sm lg:text-base font-bold text-text group-hover:text-primary transition-colors break-words leading-tight font-display">{metric.value}</div>
-                                                    </div>
-                                                ))}
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#7B6F63]">
+                                        {cardMetaItems.map((item, index) => (
+                                            <div key={`${item.label}-${index}`} className="inline-flex items-center gap-1.5 rounded-lg border border-secondary/15 bg-white/80 px-2.5 py-1.5">
+                                                <span className="font-medium text-[#8A7E72]">{item.label}:</span>
+                                                <span className="font-semibold text-[#2D2420]">{item.value}</span>
                                             </div>
-                                        </div>
-                                    )}
+                                        ))}
+                                    </div>
 
-                                    {/* CTA Buttons */}
-                                    <div className="mt-auto">
-                                        {effectiveVariant === 'live' && effectiveDetail ? (
-                                            <div className="flex flex-col gap-3">
-                                                <div className="relative">
-                                                    <span className="absolute inset-y-0 left-4 flex items-center text-text/40 font-display italic">Bid</span>
-                                                    <input
-                                                        type="text"
-                                                        disabled
-                                                        placeholder={`Next bid: ${formatCurrency(
-                                                            (displayPrice > 0 ? displayPrice : (effectiveDetail.base_price || 0)) + (effectiveDetail.min_increment || 50)
-                                                        )}`}
-                                                        className="w-full bg-white border border-secondary/20 rounded-xl pl-12 pr-4 py-3 text-text text-sm font-semibold font-body focus:ring-1 focus:ring-secondary focus:border-secondary outline-none transition-all placeholder:text-text/40 shadow-sm"
-                                                    />
-                                                </div>
-                                                <Link href={`/auction/${effectiveDetail.id}`} className="w-full px-6 py-3 rounded-xl bg-primary text-cream font-bold text-base hover:bg-primary/90 transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 text-center transform duration-300 font-display tracking-wide border border-transparent hover:border-secondary">
-                                                    Place Bid Online
-                                                </Link>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col gap-3">
-                                                {renderCta(primaryCta, 'w-full inline-flex items-center justify-center px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 bg-[#3D2E1F] text-cream hover:bg-primary shadow-lg hover:shadow-xl hover:-translate-y-0.5 transform tracking-wide')}
-                                                {effectiveVariant !== 'empty' && (
-                                                    <Link href="/auctions" className="w-full inline-flex items-center justify-center px-6 py-3 rounded-xl font-bold text-sm transition-all duration-300 bg-transparent border border-text/20 text-text hover:border-primary hover:text-primary hover:bg-primary/5 transform tracking-wide">
-                                                        View all auctions →
-                                                    </Link>
-                                                )}
-                                            </div>
+                                    <div className="pt-2 space-y-2">
+                                        <Link href={cardPrimaryCta.href} className="w-full inline-flex items-center justify-center px-6 py-3.5 rounded-xl font-bold text-lg transition-all duration-300 bg-[#3D2E1F] text-cream hover:bg-primary shadow-lg hover:shadow-xl hover:-translate-y-0.5 tracking-wide">
+                                            {cardPrimaryCta.label}
+                                        </Link>
+                                        {effectiveVariant !== 'closed' && (
+                                            <p className="text-xs text-center text-[#7B6F63]">No charges until you win</p>
                                         )}
                                     </div>
 
                                     <TermsAndConditionsModal
                                         showAgreementText={false}
-                                        wrapperClassName="mt-3 flex items-center justify-center"
+                                        wrapperClassName="pt-1 flex items-center justify-center"
                                         triggerClassName="inline-flex items-center text-blue-600 underline underline-offset-2 hover:text-blue-700 text-xs font-medium leading-none"
                                     />
                                 </div>
