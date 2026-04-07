@@ -14,6 +14,35 @@ const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 const verifiedBuckets = new Set<string>()
 const DEFAULT_REEL_MAX_MB = 80
+const ADMIN_TRIGGER_MAX_LOOKBACK_DAYS = 365
+
+function parseBooleanFlag(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return fallback
+}
+
+function parseBatchLimit(rawValue: unknown, defaultValue: number): number {
+  const parsed = Number(rawValue)
+  const base = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultValue
+  return Math.min(base, env.adminManualWorkflowMaxBatch)
+}
+
+function parseLookbackDays(rawValue: unknown, fallback = 30): number {
+  const parsed = Number(rawValue)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(Math.floor(parsed), ADMIN_TRIGGER_MAX_LOOKBACK_DAYS)
+}
+
+function enforceManualWorkflowAccess(res: Response): boolean {
+  if (process.env.NODE_ENV !== 'production') return true
+  if (env.adminManualWorkflowsEnabled) return true
+  res.status(403).json({ error: 'Manual admin workflows are disabled in production.' })
+  return false
+}
 
 function parseTimestamp(value: string | null | undefined): number {
   if (!value) return Number.NaN
@@ -132,19 +161,33 @@ async function ensureStorageBucket(bucket: string, maxReelMb: number): Promise<v
 router.use(requireAdmin)
 
 // GET /admin/auctions - List all auctions
-router.get('/auctions', async (_req: Request, res: Response) => {
+router.get('/auctions', async (req: Request, res: Response) => {
   try {
-    const { data: auctions, error } = await supabaseAdmin
+    const page = Math.max(1, Number(req.query.page || 1))
+    const limit = Math.min(50, Math.max(10, Number(req.query.limit || 20)))
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+
+    const { data: auctions, error, count } = await supabaseAdmin
       .from('auctions')
-      .select('*')
+      .select('id, title, product_id, status, min_increment, base_price, registration_end_time, bidding_start_time, bidding_end_time, created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
+      .range(from, to)
 
     if (error) {
       console.error('Supabase error:', error)
       return res.status(500).json({ error: 'Failed to fetch auctions' })
     }
 
-    return res.json({ auctions })
+    return res.json({
+      auctions: auctions || [],
+      pagination: {
+        page,
+        limit,
+        total: count ?? 0,
+        has_more: Array.isArray(auctions) ? auctions.length === limit : false
+      }
+    })
   } catch (error) {
     console.error('API error:', error)
     return res.status(500).json({ error: 'Internal server error' })
@@ -429,12 +472,18 @@ router.post('/auctions', maybeUpload, async (req: Request, res: Response) => {
   }
 })
 
-// GET /admin/auctions/:id - Get auction details
-router.get('/auctions/:id', async (req: Request, res: Response) => {
+function parsePageAndLimit(req: Request, defaultLimit = 50, maxLimit = 200): { page: number; limit: number; from: number; to: number } {
+  const page = Math.max(1, Number(req.query.page || 1))
+  const limit = Math.min(maxLimit, Math.max(10, Number(req.query.limit || defaultLimit)))
+  const from = (page - 1) * limit
+  const to = from + limit - 1
+  return { page, limit, from, to }
+}
+
+// GET /admin/auction/:id - Get basic auction details only
+router.get('/auction/:id', async (req: Request, res: Response) => {
   try {
     const auctionId = req.params.id
-    const bidsLimit = Math.min(500, Math.max(20, Number(req.query.bids_limit || 100)))
-    const biddersLimit = Math.min(500, Math.max(20, Number(req.query.bidders_limit || 150)))
 
     const { data: auction, error: auctionError } = await supabaseAdmin
       .from('auctions')
@@ -446,79 +495,174 @@ router.get('/auctions/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Auction not found' })
     }
 
-    const { data: bidders, error: biddersError } = await supabaseAdmin
-      .from('bidders')
-      .select('id, name, phone, email, created_at')
-      .eq('auction_id', auctionId)
-      .order('created_at', { ascending: false })
-      .limit(biddersLimit)
+    const [{ count: totalBids }, { count: totalBidders }, { count: totalWinners }, { data: highestBidRow }] = await Promise.all([
+      supabaseAdmin.from('bids').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+      supabaseAdmin.from('bidders').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+      supabaseAdmin.from('winners').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+      supabaseAdmin
+        .from('bids')
+        .select('amount')
+        .eq('auction_id', auctionId)
+        .order('amount', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    ])
 
-    if (biddersError) {
-      console.error('Error fetching bidders:', biddersError)
-    }
+    return res.json({
+      auction,
+      summary: {
+        total_bids: totalBids || 0,
+        total_bidders: totalBidders || 0,
+        total_winners: totalWinners || 0,
+        current_highest_bid: highestBidRow?.amount ?? null
+      }
+    })
+  } catch (error) {
+    console.error('API error:', error)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
 
-    const { data: bids, error: bidsError } = await supabaseAdmin
-      .from('bids')
-      .select(`
-        id,
-        amount,
-        created_at,
-        bidder_id,
-        auction_id,
-        size,
-        bidders!fk_bids_bidder (
+// GET /admin/auction/:id/bids - Get paginated bids
+router.get('/auction/:id/bids', async (req: Request, res: Response) => {
+  try {
+    const auctionId = req.params.id
+    const { page, limit, from, to } = parsePageAndLimit(req, 100, 200)
+
+    const [{ data: bids, error: bidsError, count }, { data: highestBidRow }] = await Promise.all([
+      supabaseAdmin
+        .from('bids')
+        .select(`
           id,
-          name,
-          phone,
-          email
-        )
-      `)
-      .eq('auction_id', auctionId)
-      .order('amount', { ascending: false })
-      .limit(bidsLimit)
+          amount,
+          created_at,
+          bidder_id,
+          size,
+          bidders!fk_bids_bidder (
+            name,
+            phone,
+            email
+          )
+        `, { count: 'exact' })
+        .eq('auction_id', auctionId)
+        .order('amount', { ascending: false })
+        .order('created_at', { ascending: true })
+        .range(from, to),
+      supabaseAdmin
+        .from('bids')
+        .select('amount')
+        .eq('auction_id', auctionId)
+        .order('amount', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    ])
 
     if (bidsError) {
       console.error('Error fetching bids:', bidsError)
       return res.status(500).json({ error: 'Failed to fetch bids' })
     }
 
-    const currentHighestBid = bids && bids.length > 0
-      ? Math.max(...(bids as any[]).map((b: any) => b.amount))
-      : null
-
-    const biddersWithHighestBid = bidders?.map(bidder => {
-      const bidderBids = (bids as any[])?.filter(bid => bid.bidder_id === bidder.id) || []
-      const highestBid = bidderBids.length > 0
-        ? Math.max(...bidderBids.map(b => b.amount))
-        : null
-
-      return {
-        ...bidder,
-        highest_bid: highestBid
+    return res.json({
+      bids: bids || [],
+      current_highest_bid: highestBidRow?.amount ?? null,
+      pagination: {
+        page,
+        limit,
+        total: count ?? 0,
+        has_more: from + (bids?.length || 0) < (count ?? 0)
       }
-    }) || []
+    })
+  } catch (error) {
+    console.error('API error:', error)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
 
-    const { count: totalBids } = await supabaseAdmin
-      .from('bids')
-      .select('id', { count: 'exact', head: true })
-      .eq('auction_id', auctionId)
+// GET /admin/auction/:id/bidders - Get paginated bidders
+router.get('/auction/:id/bidders', async (req: Request, res: Response) => {
+  try {
+    const auctionId = req.params.id
+    const { page, limit, from, to } = parsePageAndLimit(req, 100, 200)
 
-    const { count: totalBidders } = await supabaseAdmin
+    const { data: bidders, error: biddersError, count } = await supabaseAdmin
       .from('bidders')
-      .select('id', { count: 'exact', head: true })
+      .select('id, name, phone, email, created_at', { count: 'exact' })
       .eq('auction_id', auctionId)
+      .order('created_at', { ascending: false })
+      .range(from, to)
 
-    const { data: winnersRows } = await supabaseAdmin
+    if (biddersError) {
+      console.error('Error fetching bidders:', biddersError)
+      return res.status(500).json({ error: 'Failed to fetch bidders' })
+    }
+
+    const bidderIds = (bidders || []).map((bidder: any) => bidder.id)
+    const highestByBidder = new Map<string, number>()
+
+    if (bidderIds.length > 0) {
+      const { data: bidsForPageBidders } = await supabaseAdmin
+        .from('bids')
+        .select('bidder_id, amount')
+        .eq('auction_id', auctionId)
+        .in('bidder_id', bidderIds)
+
+      for (const row of bidsForPageBidders || []) {
+        const bidderId = String((row as any).bidder_id || '')
+        const amount = Number((row as any).amount || 0)
+        const current = highestByBidder.get(bidderId)
+        if (current === undefined || amount > current) {
+          highestByBidder.set(bidderId, amount)
+        }
+      }
+    }
+
+    const biddersWithHighestBid = (bidders || []).map((bidder: any) => ({
+      ...bidder,
+      highest_bid: highestByBidder.has(String(bidder.id)) ? highestByBidder.get(String(bidder.id)) ?? null : null
+    }))
+
+    return res.json({
+      bidders: biddersWithHighestBid,
+      pagination: {
+        page,
+        limit,
+        total: count ?? 0,
+        has_more: from + biddersWithHighestBid.length < (count ?? 0)
+      }
+    })
+  } catch (error) {
+    console.error('API error:', error)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// GET /admin/auction/:id/winners - Get paginated winners
+router.get('/auction/:id/winners', async (req: Request, res: Response) => {
+  try {
+    const auctionId = req.params.id
+    const { page, limit, from, to } = parsePageAndLimit(req, 50, 200)
+
+    const { data: winnersRows, error: winnersError, count } = await supabaseAdmin
       .from('winners')
-      .select('id, auction_id, bidder_id, winning_amount, size, declared_at, bidder:bidder_id(name, phone, email)')
+      .select('id, auction_id, bidder_id, winning_amount, size, declared_at, bidder:bidder_id(name, phone, email)', { count: 'exact' })
       .eq('auction_id', auctionId)
+      .order('declared_at', { ascending: false })
+      .range(from, to)
 
-    const winners_by_size = (winnersRows || []).map((w: any) => {
+    if (winnersError) {
+      console.error('Error fetching winners:', winnersError)
+      return res.status(500).json({ error: 'Failed to fetch winners' })
+    }
+
+    const winners = (winnersRows || []).map((w: any) => {
       const bidder = w.bidder
       const name = Array.isArray(bidder) ? bidder[0]?.name : bidder?.name ?? null
       const phone = Array.isArray(bidder) ? bidder[0]?.phone : bidder?.phone ?? null
       const email = Array.isArray(bidder) ? bidder[0]?.email : bidder?.email ?? null
       return {
+        id: w.id,
         size: w.size ?? null,
         bidder_id: w.bidder_id,
         winning_amount: w.winning_amount,
@@ -530,15 +674,57 @@ router.get('/auctions/:id', async (req: Request, res: Response) => {
     })
 
     return res.json({
+      winners,
+      pagination: {
+        page,
+        limit,
+        total: count ?? 0,
+        has_more: from + winners.length < (count ?? 0)
+      }
+    })
+  } catch (error) {
+    console.error('API error:', error)
+    return res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// Backward-compatible alias for older clients.
+router.get('/auctions/:id', async (req: Request, res: Response) => {
+  try {
+    const auctionId = req.params.id
+
+    const { data: auction, error: auctionError } = await supabaseAdmin
+      .from('auctions')
+      .select('id, title, product_id, status, min_increment, registration_end_time, bidding_start_time, bidding_end_time, available_sizes')
+      .eq('id', auctionId)
+      .single()
+
+    if (auctionError || !auction) {
+      return res.status(404).json({ error: 'Auction not found' })
+    }
+
+    const [{ count: totalBids }, { count: totalBidders }, { count: totalWinners }, { data: highestBidRow }] = await Promise.all([
+      supabaseAdmin.from('bids').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+      supabaseAdmin.from('bidders').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+      supabaseAdmin.from('winners').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+      supabaseAdmin
+        .from('bids')
+        .select('amount')
+        .eq('auction_id', auctionId)
+        .order('amount', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+    ])
+
+    return res.json({
       auction,
-      bidders: biddersWithHighestBid,
-      bids: bids || [],
-      current_highest_bid: currentHighestBid,
-      winners_by_size,
-      total_bids: totalBids || 0,
-      total_bidders: totalBidders || 0,
-      has_more_bids: Number(totalBids || 0) > bidsLimit,
-      has_more_bidders: Number(totalBidders || 0) > biddersLimit
+      summary: {
+        total_bids: totalBids || 0,
+        total_bidders: totalBidders || 0,
+        total_winners: totalWinners || 0,
+        current_highest_bid: highestBidRow?.amount ?? null
+      }
     })
   } catch (error) {
     console.error('API error:', error)
@@ -732,9 +918,14 @@ router.delete('/auctions/:id', async (req: Request, res: Response) => {
 })
 
 // GET /admin/bidders - List bidders
-router.get('/bidders', async (_req: Request, res: Response) => {
+router.get('/bidders', async (req: Request, res: Response) => {
   try {
-    const { data: bidders, error: biddersError } = await supabaseAdmin
+    const page = Math.max(1, Number(req.query.page || 1))
+    const limit = Math.min(50, Math.max(10, Number(req.query.limit || 20)))
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+
+    const { data: bidders, error: biddersError, count } = await supabaseAdmin
       .from('bidders')
       .select(`
         id,
@@ -744,38 +935,52 @@ router.get('/bidders', async (_req: Request, res: Response) => {
         auction_id,
         created_at,
         auction:auctions(title, product_id, status)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
+      .range(from, to)
 
     if (biddersError) throw biddersError
 
-    const biddersWithStats = await Promise.all(
-      (bidders || []).map(async (bidder: any) => {
-        const { count: bidsCount } = await supabaseAdmin
-          .from('bids')
-          .select('id', { count: 'exact', head: true })
-          .eq('bidder_id', bidder.id)
+    const bidderIds = Array.from(new Set((bidders || []).map((b: any) => String(b.id || '')).filter(Boolean)))
+    const statsMap = new Map<string, { bids_count: number; highest_bid: number | null }>()
+    if (bidderIds.length > 0) {
+      const { data: bidRows } = await supabaseAdmin
+        .from('bids')
+        .select('bidder_id, amount')
+        .in('bidder_id', bidderIds)
 
-        const { data: highestBidData } = await supabaseAdmin
-          .from('bids')
-          .select('amount')
-          .eq('bidder_id', bidder.id)
-          .order('amount', { ascending: false })
-          .limit(1)
-          .single()
-
-        return {
-          ...bidder,
-          registered_at: bidder.created_at,
-          bids_count: bidsCount || 0,
-          highest_bid: highestBidData?.amount || null
+      for (const row of bidRows || []) {
+        const bidderId = String((row as any).bidder_id || '')
+        if (!bidderId) continue
+        const amount = Number((row as any).amount || 0)
+        const current = statsMap.get(bidderId) || { bids_count: 0, highest_bid: null }
+        current.bids_count += 1
+        if (current.highest_bid === null || amount > current.highest_bid) {
+          current.highest_bid = amount
         }
-      })
-    )
+        statsMap.set(bidderId, current)
+      }
+    }
+
+    const biddersWithStats = (bidders || []).map((bidder: any) => {
+      const stats = statsMap.get(String(bidder.id)) || { bids_count: 0, highest_bid: null }
+      return {
+        ...bidder,
+        registered_at: bidder.created_at,
+        bids_count: stats.bids_count,
+        highest_bid: stats.highest_bid
+      }
+    })
 
     return res.json({
       success: true,
-      bidders: biddersWithStats
+      bidders: biddersWithStats,
+      pagination: {
+        page,
+        limit,
+        total: count ?? 0,
+        has_more: from + biddersWithStats.length < (count ?? 0)
+      }
     })
   } catch (error: any) {
     console.error('Bidders API error:', error)
@@ -886,9 +1091,14 @@ router.post('/upload-url', async (req: Request, res: Response) => {
 })
 
 // GET /admin/winners - List winners
-router.get('/winners', async (_req: Request, res: Response) => {
+router.get('/winners', async (req: Request, res: Response) => {
   try {
-    const { data: winners, error } = await supabaseAdmin
+    const page = Math.max(1, Number(req.query.page || 1))
+    const limit = Math.min(50, Math.max(10, Number(req.query.limit || 20)))
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+
+    const { data: winners, error, count } = await supabaseAdmin
       .from('winners')
       .select(`
         id,
@@ -914,14 +1124,14 @@ router.get('/winners', async (_req: Request, res: Response) => {
         delhivery_tracking_url,
         delhivery_status,
         delhivery_error,
-        delhivery_raw_response,
         delhivery_last_tracking_update,
         shipment_triggered_at,
         escalation_done,
         bidder:bidder_id(name, phone, email),
         auction:auction_id(title, product_id, bidding_start_time, bidding_end_time)
-      `)
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
+      .range(from, to)
 
     if (error) throw error
 
@@ -938,7 +1148,13 @@ router.get('/winners', async (_req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      winners: normalizedWinners
+      winners: normalizedWinners,
+      pagination: {
+        page,
+        limit,
+        total: count ?? 0,
+        has_more: from + normalizedWinners.length < (count ?? 0)
+      }
     })
   } catch (error: any) {
     console.error('Winners API error:', error)
@@ -1155,14 +1371,15 @@ router.patch('/winners/:id', async (req: Request, res: Response) => {
 // POST /admin/winners/retry-failed-shipments - Retry failed Delhivery shipment creations in bulk
 router.post('/winners/retry-failed-shipments', async (req: Request, res: Response) => {
   try {
+    if (!enforceManualWorkflowAccess(res)) return
+
     const body = req.body || {}
     const winnerIds = Array.isArray(body.winner_ids)
       ? body.winner_ids.map((id: unknown) => String(id || '').trim()).filter(Boolean)
       : []
-    const requestedLimit = Number(body.limit)
-    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
-      ? Math.min(Math.floor(requestedLimit), 100)
-      : 25
+    const limit = parseBatchLimit(body.limit, 25)
+    const lookbackDays = parseLookbackDays(body.lookback_days, 30)
+    const lookbackIso = new Date(Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)).toISOString()
 
     let query = supabaseAdmin
       .from('winners')
@@ -1179,6 +1396,7 @@ router.post('/winners/retry-failed-shipments', async (req: Request, res: Respons
       .eq('payment_status', 'completed')
       .is('delhivery_awb', null)
       .eq('delhivery_status', 'failed')
+      .gte('created_at', lookbackIso)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -1340,6 +1558,10 @@ router.post('/winners/retry-failed-shipments', async (req: Request, res: Respons
     return res.json({
       success: failed === 0,
       message: `Processed ${results.length} failed shipment retries`,
+      scope: {
+        lookback_days: lookbackDays,
+        max_batch: env.adminManualWorkflowMaxBatch
+      },
       total: results.length,
       retried,
       failed,
@@ -1429,78 +1651,101 @@ router.post('/winners/:id/resend-email', async (req: Request, res: Response) => 
 })
 
 // POST /admin/trigger-winner-emails - Manually trigger winner email notifications
-router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
+router.post('/trigger-winner-emails', async (req: Request, res: Response) => {
   try {
-    const now = new Date().toISOString()
+    if (!enforceManualWorkflowAccess(res)) return
 
-    // Finalize ended auctions to ensure winners exist
-    await finalizeEndedAuctions()
+    const body = req.body || {}
+    const runFinalize = parseBooleanFlag(body.run_finalize, false)
+    const runBackfill = parseBooleanFlag(body.run_backfill, false)
+    const limit = parseBatchLimit(body.limit, 25)
+    const lookbackDays = parseLookbackDays(body.lookback_days, 30)
+    const lookbackIso = new Date(Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)).toISOString()
+    const winnerIds = Array.isArray(body.winner_ids)
+      ? body.winner_ids.map((id: unknown) => String(id || '').trim()).filter(Boolean).slice(0, env.adminManualWorkflowMaxBatch)
+      : []
 
-    // ── STEP 1: Backfill winners missing claim_token / payment_status ────────────
-    // This covers winners created by the old PUT /admin/auctions/:id route that
-    // didn't set those fields, and any existing winners in the DB before this fix.
-    const { data: incompleteWinners, error: incompleteErr } = await supabaseAdmin
-      .from('winners')
-      .select('id, payment_status, claim_token, payment_due_at')
-      .or('claim_token.is.null,payment_status.is.null')
+    let finalizedAuctions: string[] = []
+    let finalizeErrors: string[] = []
 
-    console.log(`[trigger-winner-emails] Step1: incompleteWinners=${incompleteWinners?.length ?? 0}, err=${incompleteErr?.message}`)
+    if (runFinalize) {
+      const finalizeResult = await finalizeEndedAuctions()
+      finalizedAuctions = finalizeResult.endedAuctionIds
+      finalizeErrors = finalizeResult.errors
+    }
 
-    if (incompleteWinners && incompleteWinners.length > 0) {
-      for (const iw of incompleteWinners) {
-        const patch: Record<string, any> = {}
-        if (!iw.claim_token) {
-          patch.claim_token = crypto.randomUUID()
-        }
-        if (!iw.payment_status) {
-          patch.payment_status = 'pending'
-        }
-        if (!iw.payment_due_at) {
-          patch.payment_due_at = null
-        }
-        if (Object.keys(patch).length > 0) {
-          console.log(`[trigger-winner-emails] Patching winner ${iw.id} with:`, patch)
-          const { error: patchErr } = await supabaseAdmin.from('winners').update(patch).eq('id', iw.id)
-          if (patchErr) console.error(`[trigger-winner-emails] Patch error for ${iw.id}:`, patchErr.message)
+    // Optional targeted backfill for legacy rows; always bounded by lookback+limit.
+    if (runBackfill) {
+      let incompleteQuery = supabaseAdmin
+        .from('winners')
+        .select('id, payment_status, claim_token, payment_due_at, created_at')
+        .or('claim_token.is.null,payment_status.is.null')
+        .gte('created_at', lookbackIso)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (winnerIds.length > 0) {
+        incompleteQuery = incompleteQuery.in('id', winnerIds)
+      }
+
+      const { data: incompleteWinners, error: incompleteErr } = await incompleteQuery
+
+      if (incompleteErr) {
+        return res.status(500).json({ error: 'Failed to backfill winners', details: incompleteErr.message })
+      }
+
+      if (incompleteWinners && incompleteWinners.length > 0) {
+        for (const iw of incompleteWinners) {
+          const patch: Record<string, any> = {}
+          if (!iw.claim_token) {
+            patch.claim_token = crypto.randomUUID()
+          }
+          if (!iw.payment_status) {
+            patch.payment_status = 'pending'
+          }
+          if (!iw.payment_due_at) {
+            patch.payment_due_at = null
+          }
+          if (Object.keys(patch).length > 0) {
+            const { error: patchErr } = await supabaseAdmin.from('winners').update(patch).eq('id', iw.id)
+            if (patchErr) console.error(`[trigger-winner-emails] Patch error for ${iw.id}:`, patchErr.message)
+          }
         }
       }
     }
 
-    // ── STEP 2: Find all winners still pending email notification ─────────────────
-    const { data: toNotify, error: fetchError } = await supabaseAdmin
+    let toNotifyQuery = supabaseAdmin
       .from('winners')
-      .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_status, winner_email_sent_at')
+      .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_status, winner_email_sent_at, created_at')
       .eq('payment_status', 'pending')
       .not('claim_token', 'is', null)
       .is('winner_email_sent_at', null)
+      .gte('created_at', lookbackIso)
+      .order('created_at', { ascending: false })
+      .limit(limit)
 
-    console.log(`[trigger-winner-emails] Step2: toNotify=${toNotify?.length ?? 0}, fetchError=${fetchError?.message}`)
+    if (winnerIds.length > 0) {
+      toNotifyQuery = toNotifyQuery.in('id', winnerIds)
+    }
+
+    const { data: toNotify, error: fetchError } = await toNotifyQuery
 
     if (fetchError) {
       return res.status(500).json({ error: 'Failed to fetch winners', details: fetchError.message })
     }
 
     if (!toNotify || toNotify.length === 0) {
-      // Also fetch ALL winners to show debug info
-      const { data: allWinners } = await supabaseAdmin
-        .from('winners')
-        .select('id, payment_status, claim_token, winner_email_sent_at, bidder_id')
-
-      console.log('[trigger-winner-emails] All winners in DB:', JSON.stringify(allWinners, null, 2))
-
       return res.json({
         success: true,
         message: 'No winners pending notification',
         sent: 0,
         failed: 0,
-        debug: {
-          allWinnersInDb: (allWinners || []).map(w => ({
-            id: w.id,
-            payment_status: w.payment_status,
-            has_claim_token: !!w.claim_token,
-            email_sent: !!w.winner_email_sent_at,
-            bidder_id: w.bidder_id
-          }))
+        scope: {
+          run_finalize: runFinalize,
+          run_backfill: runBackfill,
+          lookback_days: lookbackDays,
+          max_batch: env.adminManualWorkflowMaxBatch,
+          winner_ids_count: winnerIds.length
         }
       })
     }
@@ -1523,12 +1768,9 @@ router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
           .eq('id', w.bidder_id)
           .single()
 
-        console.log(`[trigger-winner-emails] Winner ${w.id}: bidder email=${(bidder as any)?.email}, has claim_token=${!!w.claim_token}`)
-
         if (!(bidder as any)?.email || !w.claim_token) {
           const reason = !(bidder as any)?.email ? 'bidder has no email address' : 'missing claim_token'
           errors.push(`Winner ${w.id}: ${reason}`)
-          console.warn(`[trigger-winner-emails] Skipping winner ${w.id}: ${reason}`)
           failed++
           continue
         }
@@ -1542,8 +1784,6 @@ router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
           size: w.size,
           isEscalation: false
         })
-
-        console.log(`[trigger-winner-emails] Email send result for winner ${w.id}: ${emailSent}`)
 
         if (emailSent) {
           const sentAt = new Date().toISOString()
@@ -1569,6 +1809,15 @@ router.post('/trigger-winner-emails', async (_req: Request, res: Response) => {
       sent,
       failed,
       total: toNotify.length,
+      scope: {
+        run_finalize: runFinalize,
+        run_backfill: runBackfill,
+        lookback_days: lookbackDays,
+        max_batch: env.adminManualWorkflowMaxBatch,
+        winner_ids_count: winnerIds.length,
+        finalized_auctions_count: finalizedAuctions.length
+      },
+      finalize_errors: finalizeErrors.length > 0 ? finalizeErrors : undefined,
       errors: errors.length > 0 ? errors : undefined
     })
   } catch (error: any) {

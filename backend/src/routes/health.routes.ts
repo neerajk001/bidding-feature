@@ -4,7 +4,24 @@ import { env } from '../config/env'
 
 const router = express.Router()
 
-router.get('/health', async (_req: Request, res: Response) => {
+// Lightweight liveness endpoint: no database calls.
+router.get('/healthz', (_req: Request, res: Response) => {
+  return res.status(200).json({
+    ok: true,
+    backend: 'running'
+  })
+})
+
+// Backward-compatible health endpoint kept DB-free to avoid probe-induced reads.
+router.get('/health', (_req: Request, res: Response) => {
+  return res.status(200).json({
+    ok: true,
+    backend: 'running'
+  })
+})
+
+// Manual diagnostic endpoint: verifies Supabase connectivity.
+router.get('/health-db', async (_req: Request, res: Response) => {
   const hasEnv = Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
 
   if (!hasEnv) {

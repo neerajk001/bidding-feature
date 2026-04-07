@@ -107,21 +107,26 @@ router.get('/auctions', async (req: Request, res: Response) => {
   try {
     const nowTs = Date.now()
     const includeEnded = req.query.includeEnded === 'true'
+    const includeMedia = req.query.include_media === 'true'
     const requestedView = String(req.query.view || 'card').toLowerCase()
     const view: 'card' | 'past' | 'home' = requestedView === 'past' || requestedView === 'home' ? requestedView : 'card'
     const limitCap = view === 'home' ? 20 : 120
     const limitDefault = view === 'home' ? 20 : 60
     const limit = Math.min(limitCap, Math.max(5, Number(req.query.limit || limitDefault)))
-    const cacheKey = `${includeEnded ? 'with-ended' : 'without-ended'}:${view}:${limit}`
+    const cacheKey = `${includeEnded ? 'with-ended' : 'without-ended'}:${view}:${limit}:${includeMedia ? 'media' : 'no-media'}`
     const cached = auctionsListCache.get(cacheKey)
     if (cached && cached.expiresAt > nowTs) {
       setRouteCacheHeaders(res, env.auctionListCacheSeconds)
       return res.json(cached.payload)
     }
 
+    const selectFields = includeMedia
+      ? 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price, banner_image, reel_url, gallery_images'
+      : 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price'
+
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
-      .select('id, title, status, registration_end_time, bidding_start_time, bidding_end_time, min_increment, base_price, banner_image, reel_url, gallery_images')
+      .select(selectFields)
       .neq('status', 'draft')
       .order('bidding_start_time', { ascending: true })
       .limit(limit)
@@ -148,61 +153,25 @@ router.get('/auctions', async (req: Request, res: Response) => {
           .select('id', { count: 'exact', head: true })
           .eq('auction_id', auction.id)
 
-        let winningAmount: number | null = null
-        let winnerName: string | null = null
-        let winnersCount = 0
-        let topWinningAmount: number | null = null
-
-        if (derivedStatus === 'ended' && view !== 'card') {
-          const { data: winnersRows } = await supabaseAdmin
-            .from('winners')
-            .select('winning_amount, bidder:bidder_id(name)')
-            .eq('auction_id', auction.id)
-
-          if (winnersRows && winnersRows.length > 0) {
-            winnersCount = winnersRows.length
-            let maxWinner: { amount: number; name: string | null } | null = null
-
-            for (const w of winnersRows) {
-              const name = Array.isArray(w?.bidder) ? (w.bidder[0] as any)?.name : (w?.bidder as any)?.name ?? null
-              const amount = Number(w.winning_amount) || 0
-              if (!maxWinner || amount > maxWinner.amount) {
-                maxWinner = {
-                  amount,
-                  name
-                }
-              }
-            }
-
-            topWinningAmount = maxWinner?.amount ?? null
-            winningAmount = topWinningAmount
-            winnerName = maxWinner?.name ?? null
-          }
-        }
-
-        const displayAmount = winningAmount ?? highestBid?.amount ?? null
-        const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? (highestBid.bidder[0] as any)?.name : (highestBid?.bidder as any)?.name) ?? null
-
-        return {
+        const row: any = {
           id: auction.id,
           title: auction.title,
           status: derivedStatus,
           registration_end_time: auction.registration_end_time,
           bidding_start_time: auction.bidding_start_time,
           bidding_end_time: auction.bidding_end_time,
-          min_increment: auction.min_increment,
           base_price: auction.base_price,
-          banner_image: sanitizeMediaUrl(auction.banner_image),
-          reel_url: sanitizeMediaUrl(auction.reel_url),
-          gallery_images: sanitizeMediaUrls(auction.gallery_images),
-          current_highest_bid: displayAmount,
-          highest_bidder_name: displayName,
-          total_bids: count ?? 0,
-          winner_name: winnerName,
-          winning_amount: winningAmount,
-          winners_count: winnersCount,
-          top_winning_amount: topWinningAmount
+          current_highest_bid: highestBid?.amount ?? null,
+          total_bids: count ?? 0
         }
+
+        if (includeMedia) {
+          row.banner_image = sanitizeMediaUrl(auction.banner_image)
+          row.reel_url = sanitizeMediaUrl(auction.reel_url)
+          row.gallery_images = sanitizeMediaUrls(auction.gallery_images)
+        }
+
+        return row
       })
     )
 

@@ -8,6 +8,9 @@ export type FinalizeResult = {
   errors: string[]
 }
 
+const FINALIZE_AUCTIONS_BATCH_LIMIT = 20
+const WINNER_NOTIFY_BATCH_LIMIT = 50
+
 export async function finalizeEndedAuctions(now: Date = new Date()): Promise<FinalizeResult> {
   const endedAuctionIds: string[] = []
   const errors: string[] = []
@@ -19,6 +22,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
     .eq('status', 'live')
     .lt('bidding_end_time', nowIso)
     .order('bidding_end_time', { ascending: true })
+    .limit(FINALIZE_AUCTIONS_BATCH_LIMIT)
 
   if (error) {
     errors.push(`Failed to load ended auctions: ${error.message}`)
@@ -36,21 +40,6 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
       for (const s of availableSizes) {
         const trimmed = String(s ?? '').trim()
         if (trimmed) sizeSet.add(trimmed)
-      }
-
-      const { data: bidSizes, error: bidSizesError } = await supabaseAdmin
-        .from('bids')
-        .select('size')
-        .eq('auction_id', auction.id)
-        .not('size', 'is', null)
-
-      if (bidSizesError) {
-        errors.push(`Failed to load bid sizes for ${auction.id}: ${bidSizesError.message}`)
-      } else {
-        for (const row of bidSizes || []) {
-          const trimmed = String((row as any).size ?? '').trim()
-          if (trimmed) sizeSet.add(trimmed)
-        }
       }
 
       const sizes = Array.from(sizeSet)
@@ -162,8 +151,19 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
         .eq('payment_status', 'pending')
         .not('claim_token', 'is', null)
         .is('winner_email_sent_at', null)
+        .order('id', { ascending: true })
+        .limit(WINNER_NOTIFY_BATCH_LIMIT)
 
       if (winnersToNotify && winnersToNotify.length > 0) {
+        const bidderIds = Array.from(new Set(winnersToNotify.map((w: any) => String(w.bidder_id || '')).filter(Boolean)))
+        const { data: biddersForNotify } = bidderIds.length > 0
+          ? await supabaseAdmin
+              .from('bidders')
+              .select('id, name, email')
+              .in('id', bidderIds)
+          : { data: [] as any[] }
+        const bidderMap = new Map<string, any>((biddersForNotify || []).map((b: any) => [String(b.id), b]))
+
         for (const w of winnersToNotify) {
           const claimAt = new Date().toISOString()
           const { data: claimedRow, error: claimErr } = await supabaseAdmin
@@ -185,7 +185,7 @@ export async function finalizeEndedAuctions(now: Date = new Date()): Promise<Fin
           }
 
           const cw = claimedRow as any
-          const { data: bidder } = await supabaseAdmin.from('bidders').select('name, email').eq('id', cw.bidder_id).single()
+          const bidder = bidderMap.get(String(cw.bidder_id)) || null
           const email = (bidder as any)?.email
           if (email && cw.claim_token) {
             const sent = await sendWinnerEmail({
