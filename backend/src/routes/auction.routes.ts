@@ -121,8 +121,8 @@ router.get('/auctions', async (req: Request, res: Response) => {
     }
 
     const selectFields = includeMedia
-      ? 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price, banner_image, reel_url, gallery_images'
-      : 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price'
+      ? 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price, min_increment, banner_image, reel_url, gallery_images'
+      : 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price, min_increment'
 
     const { data: auctions, error } = await supabaseAdmin
       .from('auctions')
@@ -161,6 +161,7 @@ router.get('/auctions', async (req: Request, res: Response) => {
           bidding_start_time: auction.bidding_start_time,
           bidding_end_time: auction.bidding_end_time,
           base_price: auction.base_price,
+          min_increment: auction.min_increment,
           current_highest_bid: highestBid?.amount ?? null,
           total_bids: count ?? 0
         }
