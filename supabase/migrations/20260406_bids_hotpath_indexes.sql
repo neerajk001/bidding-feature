@@ -11,3 +11,4 @@ create index if not exists idx_bids_auction_bidder_created_asc
   on public.bids using btree (auction_id, bidder_id, created_at asc) tablespace pg_default;
 
 commit;
+

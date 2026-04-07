@@ -1,7 +1,7 @@
 export interface FinalizeResult {
   endedAuctionIds: string[]
   errors: string[]
-}
+} // this are the types
 
 export interface SendWinnerEmailParams {
   to: string
