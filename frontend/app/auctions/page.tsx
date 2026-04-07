@@ -32,7 +32,7 @@ export default function AuctionsPage() {
       setError(null)
 
       try {
-        const res = await fetch('/api/auctions?view=card&limit=80')
+        const res = await fetch('/api/auctions?include_media=true&view=card&limit=80')
         const data = await res.json()
 
         if (!res.ok) {

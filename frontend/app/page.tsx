@@ -32,7 +32,7 @@ async function fetchAuctionsFromApi(): Promise<AuctionSummary[]> {
     console.warn('HomePage: BACKEND_URL / NEXT_PUBLIC_API_URL not set, auctions will be empty')
     return []
   }
-  const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true&view=home&limit=20`
+  const url = `${base.replace(/\/$/, '')}/api/auctions?includeEnded=true&include_media=true&view=home&limit=20`
   try {
     const res = await fetch(url, { next: { revalidate: 20 } })
     const data = (await res.json()) as { auctions?: AuctionSummary[] }

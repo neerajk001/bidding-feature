@@ -32,7 +32,7 @@ export default function PastAuctionsPage() {
       setError(null)
 
       try {
-        const res = await fetch('/api/auctions?includeEnded=true&view=past&limit=120')
+        const res = await fetch('/api/auctions?includeEnded=true&include_media=true&view=past&limit=120')
         const data = await res.json()
 
         if (!res.ok) {
