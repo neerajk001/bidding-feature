@@ -212,6 +212,29 @@ router.post('/winner/create-order', async (req: Request, res: Response) => {
     const amountPaise = Math.round(amountRupees * 100)
     let orderId = w.razorpay_order_id
 
+    if (orderId) {
+      try {
+        const existingOrder = await (razorpay.orders as any).fetch(orderId)
+        const existingAmount = Number(existingOrder?.amount)
+        const existingCurrency = String(existingOrder?.currency || '').toUpperCase()
+        const existingStatus = String(existingOrder?.status || '').toLowerCase()
+        const isReusable =
+          Number.isFinite(existingAmount) &&
+          existingAmount === amountPaise &&
+          existingCurrency === 'INR' &&
+          (existingStatus === 'created' || existingStatus === 'attempted')
+
+        // Recreate the order if an old one belongs to a different mode/account, amount, or is already paid.
+        if (!isReusable) {
+          orderId = null
+        }
+      } catch (existingOrderError) {
+        // Common when env keys changed (live/test switch) and DB still has an order from the other mode/account.
+        console.warn('[winner.create-order] existing order is not fetchable; creating a fresh order', existingOrderError)
+        orderId = null
+      }
+    }
+
     if (!orderId) {
       const receipt = `winner_${w.id.replace(/-/g, '_').slice(0, 24)}`
       const order = await (razorpay.orders as any).create({ amount: amountPaise, currency: 'INR', receipt })
