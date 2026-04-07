@@ -110,7 +110,7 @@ export default function LandingHero({ activeAuction, activeDetail, endedDetail, 
     // Let's stick to null (Live) and swap if needed. 
 
     // State for realtime bid updates
-    const [liveBidData, setLiveBidData] = useState<{ amount: number, total: number } | null>(null)
+    const [_liveBidData, setLiveBidData] = useState<{ amount: number, total: number } | null>(null)
     const [isLeaderTab, setIsLeaderTab] = useState(true)
     const isLeaderTabRef = useRef<boolean>(true)
     const syncChannelRef = useRef<BroadcastChannel | null>(null)
