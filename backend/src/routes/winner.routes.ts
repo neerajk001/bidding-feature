@@ -88,6 +88,7 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
         id, auction_id, winning_amount, payment_due_at, payment_status, size,
         payment_completed_at, payment_proof_note, razorpay_order_id, razorpay_payment_id,
         shipping_address, shipping_address_submitted_at,
+        dispatched_at, delhivery_awb, delhivery_tracking_url, delhivery_status,
         auction:auctions(title),
         bidder:bidders(name)
       `)
@@ -115,7 +116,11 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
         razorpay_order_id: w.razorpay_order_id,
         razorpay_payment_id: w.razorpay_payment_id,
         shipping_address: w.shipping_address,
-        shipping_address_submitted_at: w.shipping_address_submitted_at
+        shipping_address_submitted_at: w.shipping_address_submitted_at,
+        dispatched_at: w.dispatched_at,
+        delhivery_awb: w.delhivery_awb,
+        delhivery_tracking_url: w.delhivery_tracking_url,
+        delhivery_status: w.delhivery_status
       })
     }
 
@@ -129,7 +134,11 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
         payment_due_at: w.payment_due_at,
         size: w.size,
         shipping_address: w.shipping_address,
-        shipping_address_submitted_at: w.shipping_address_submitted_at
+        shipping_address_submitted_at: w.shipping_address_submitted_at,
+        dispatched_at: w.dispatched_at,
+        delhivery_awb: w.delhivery_awb,
+        delhivery_tracking_url: w.delhivery_tracking_url,
+        delhivery_status: w.delhivery_status
       })
     }
 
@@ -143,6 +152,10 @@ router.get('/winner/claim', async (req: Request, res: Response) => {
       bidder_name: w.bidder?.name,
       shipping_address: w.shipping_address,
       shipping_address_submitted_at: w.shipping_address_submitted_at,
+      dispatched_at: w.dispatched_at,
+      delhivery_awb: w.delhivery_awb,
+      delhivery_tracking_url: w.delhivery_tracking_url,
+      delhivery_status: w.delhivery_status,
       razorpay_key_id: razorpay ? env.razorpayKeyId : undefined
     })
   } catch (e) {

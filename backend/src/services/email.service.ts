@@ -211,3 +211,74 @@ export async function sendPaymentConfirmedEmail(to: string, winnerName: string, 
     return false
   }
 }
+
+export async function sendShipmentDispatchedEmail(params: {
+  to: string
+  winnerName: string
+  auctionTitle: string
+  awb?: string | null
+  trackingUrl?: string | null
+}): Promise<boolean> {
+  if (!resend) {
+    console.warn('Resend not configured, skipping shipment dispatch email')
+    return false
+  }
+
+  const fromEmail = getFromEmail()
+  if (process.env.NODE_ENV === 'production' && isResendSandboxSender(fromEmail)) {
+    console.error('[email] RESEND_FROM_EMAIL is using resend.dev in production. Use a verified domain sender.')
+    return false
+  }
+
+  const { to, winnerName, auctionTitle, awb, trackingUrl } = params
+  const safeWinnerName = escapeHtml(winnerName)
+  const safeAuctionTitle = escapeHtml(auctionTitle)
+  const safeAwb = awb ? escapeHtml(awb) : ''
+  const safeTrackingUrl = trackingUrl ? escapeHtml(trackingUrl) : ''
+
+  const textLines = [
+    `Hello ${winnerName},`,
+    '',
+    `Your shipment for ${auctionTitle} has been dispatched.`,
+    awb ? `AWB: ${awb}` : undefined,
+    trackingUrl ? `Track here: ${trackingUrl}` : undefined,
+    '',
+    'Indu Heritage Auctions'
+  ].filter(Boolean) as string[]
+
+  try {
+    console.log(`[email] Sending shipment dispatch email to: ${to}`)
+
+    const { data, error } = await resend.emails.send({
+      from: fromEmail,
+      to,
+      subject: `Shipment dispatched – ${auctionTitle}`,
+      replyTo: getReplyToEmail(),
+      text: textLines.join('\n'),
+      headers: {
+        'X-Auto-Response-Suppress': 'All'
+      },
+      html: `
+        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto;">
+          <h2 style="color: #2a1a12;">Your shipment is on the way</h2>
+          <p>Hello ${safeWinnerName},</p>
+          <p>Your shipment for <strong>${safeAuctionTitle}</strong> has been dispatched.</p>
+          ${awb ? `<p><strong>AWB:</strong> ${safeAwb}</p>` : ''}
+          ${trackingUrl ? `<p><a href="${safeTrackingUrl}" style="display: inline-block; padding: 10px 18px; background: #800000; color: #fff; text-decoration: none; border-radius: 8px;">Track Shipment</a></p>` : ''}
+          <p style="color: #999; font-size: 12px;">Indu Heritage Auctions • Transactional notice</p>
+        </div>
+      `
+    })
+
+    if (error) {
+      console.error(`[email] Resend API error sending shipment dispatch email to ${to}:`, JSON.stringify(error))
+      return false
+    }
+
+    console.log(`[email] Shipment dispatch email sent to ${to}, Resend ID: ${data?.id}`)
+    return true
+  } catch (e) {
+    console.error('[email] Shipment dispatch email threw an exception:', e)
+    return false
+  }
+}

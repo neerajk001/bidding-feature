@@ -46,6 +46,7 @@ exports.env = {
     resendReplyToEmail: process.env.RESEND_REPLY_TO_EMAIL || '',
     // Delhivery (optional)
     delhiveryEnabled: String(process.env.DELHIVERY_ENABLED || 'true').toLowerCase() === 'true',
+    delhiveryMockAwbWhenDisabled: String(process.env.DELHIVERY_MOCK_AWB_WHEN_DISABLED || 'false').toLowerCase() === 'true',
     delhiveryApiKey: process.env.DELHIVERY_API_KEY || '',
     delhiveryApiBaseUrl: process.env.DELHIVERY_API_BASE_URL || 'https://track.delhivery.com/api',
     delhiveryPickupLocation: process.env.DELHIVERY_PICKUP_LOCATION || 'Nine Hills Society, NIBM',
@@ -64,5 +65,8 @@ exports.env = {
     rateLimitAuctionLiveStatePerMinute: Number(process.env.RATE_LIMIT_AUCTION_LIVE_STATE_PER_MIN || 90),
     rateLimitAuctionDetailPerMinute: Number(process.env.RATE_LIMIT_AUCTION_DETAIL_PER_MIN || 45),
     rateLimitAuctionsListPerMinute: Number(process.env.RATE_LIMIT_AUCTIONS_LIST_PER_MIN || 20),
-    rateLimitGlobalPerMinute: Number(process.env.RATE_LIMIT_GLOBAL_PER_MIN || 120)
+    rateLimitGlobalPerMinute: Number(process.env.RATE_LIMIT_GLOBAL_PER_MIN || 120),
+    // Manual admin workflow guardrails
+    adminManualWorkflowsEnabled: String(process.env.ADMIN_MANUAL_WORKFLOWS_ENABLED || (process.env.NODE_ENV === 'production' ? 'false' : 'true')).toLowerCase() === 'true',
+    adminManualWorkflowMaxBatch: Math.max(5, Math.min(100, Number(process.env.ADMIN_MANUAL_WORKFLOW_MAX_BATCH || 25)))
 };

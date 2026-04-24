@@ -70,6 +70,7 @@ router.get('/winner/claim', async (req, res) => {
         id, auction_id, winning_amount, payment_due_at, payment_status, size,
         payment_completed_at, payment_proof_note, razorpay_order_id, razorpay_payment_id,
         shipping_address, shipping_address_submitted_at,
+        dispatched_at, delhivery_awb, delhivery_tracking_url, delhivery_status,
         auction:auctions(title),
         bidder:bidders(name)
       `)
@@ -94,7 +95,11 @@ router.get('/winner/claim', async (req, res) => {
                 razorpay_order_id: w.razorpay_order_id,
                 razorpay_payment_id: w.razorpay_payment_id,
                 shipping_address: w.shipping_address,
-                shipping_address_submitted_at: w.shipping_address_submitted_at
+                shipping_address_submitted_at: w.shipping_address_submitted_at,
+                dispatched_at: w.dispatched_at,
+                delhivery_awb: w.delhivery_awb,
+                delhivery_tracking_url: w.delhivery_tracking_url,
+                delhivery_status: w.delhivery_status
             });
         }
         if (expired) {
@@ -107,7 +112,11 @@ router.get('/winner/claim', async (req, res) => {
                 payment_due_at: w.payment_due_at,
                 size: w.size,
                 shipping_address: w.shipping_address,
-                shipping_address_submitted_at: w.shipping_address_submitted_at
+                shipping_address_submitted_at: w.shipping_address_submitted_at,
+                dispatched_at: w.dispatched_at,
+                delhivery_awb: w.delhivery_awb,
+                delhivery_tracking_url: w.delhivery_tracking_url,
+                delhivery_status: w.delhivery_status
             });
         }
         return res.json({
@@ -120,6 +129,10 @@ router.get('/winner/claim', async (req, res) => {
             bidder_name: w.bidder?.name,
             shipping_address: w.shipping_address,
             shipping_address_submitted_at: w.shipping_address_submitted_at,
+            dispatched_at: w.dispatched_at,
+            delhivery_awb: w.delhivery_awb,
+            delhivery_tracking_url: w.delhivery_tracking_url,
+            delhivery_status: w.delhivery_status,
             razorpay_key_id: services_1.razorpay ? env_1.env.razorpayKeyId : undefined
         });
     }
@@ -175,6 +188,27 @@ router.post('/winner/create-order', async (req, res) => {
         }
         const amountPaise = Math.round(amountRupees * 100);
         let orderId = w.razorpay_order_id;
+        if (orderId) {
+            try {
+                const existingOrder = await services_1.razorpay.orders.fetch(orderId);
+                const existingAmount = Number(existingOrder?.amount);
+                const existingCurrency = String(existingOrder?.currency || '').toUpperCase();
+                const existingStatus = String(existingOrder?.status || '').toLowerCase();
+                const isReusable = Number.isFinite(existingAmount) &&
+                    existingAmount === amountPaise &&
+                    existingCurrency === 'INR' &&
+                    (existingStatus === 'created' || existingStatus === 'attempted');
+                // Recreate the order if an old one belongs to a different mode/account, amount, or is already paid.
+                if (!isReusable) {
+                    orderId = null;
+                }
+            }
+            catch (existingOrderError) {
+                // Common when env keys changed (live/test switch) and DB still has an order from the other mode/account.
+                console.warn('[winner.create-order] existing order is not fetchable; creating a fresh order', existingOrderError);
+                orderId = null;
+            }
+        }
         if (!orderId) {
             const receipt = `winner_${w.id.replace(/-/g, '_').slice(0, 24)}`;
             const order = await services_1.razorpay.orders.create({ amount: amountPaise, currency: 'INR', receipt });

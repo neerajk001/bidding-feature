@@ -49,6 +49,10 @@ type ClaimData = {
   razorpay_key_id?: string
   shipping_address?: ShippingAddress | null
   shipping_address_submitted_at?: string | null
+  dispatched_at?: string | null
+  delhivery_awb?: string | null
+  delhivery_tracking_url?: string | null
+  delhivery_status?: string | null
   error?: string
 }
 
@@ -294,6 +298,27 @@ function ClaimContent() {
                 {data.razorpay_payment_id && <p>Payment ID: {data.razorpay_payment_id}</p>}
                 {data.razorpay_order_id && <p>Order ID: {data.razorpay_order_id}</p>}
                 {data.payment_proof_note && <p>Note: {data.payment_proof_note}</p>}
+              </div>
+            )}
+
+            {isCompleted && (data.dispatched_at || data.delhivery_tracking_url || data.delhivery_awb) && (
+              <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 space-y-1">
+                <p className="font-semibold">Shipment details</p>
+                {data.dispatched_at && <p>Dispatched at: {formatDateTime(data.dispatched_at)}</p>}
+                {data.delhivery_awb && <p>AWB: {data.delhivery_awb}</p>}
+                {data.delhivery_status && <p>Status: {data.delhivery_status}</p>}
+                {data.delhivery_tracking_url && (
+                  <p>
+                    <a
+                      href={data.delhivery_tracking_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-blue-700 hover:underline"
+                    >
+                      Track your shipment
+                    </a>
+                  </p>
+                )}
               </div>
             )}
           </div>

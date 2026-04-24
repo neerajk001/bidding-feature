@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const crypto_1 = require("crypto");
 const supabase_1 = require("../config/supabase");
 const env_1 = require("../config/env");
 const cache_1 = require("../middleware/cache");
@@ -33,6 +34,30 @@ function parseTimestamp(value) {
     const ts = new Date(value).getTime();
     return Number.isNaN(ts) ? Number.NaN : ts;
 }
+function isDataUri(value) {
+    return /^data:[^;]+;base64,/i.test(value);
+}
+function sanitizeMediaUrl(value) {
+    if (typeof value !== 'string')
+        return null;
+    const trimmed = value.trim();
+    if (!trimmed)
+        return null;
+    if (isDataUri(trimmed))
+        return null;
+    return trimmed;
+}
+function sanitizeMediaUrls(value) {
+    if (!Array.isArray(value))
+        return [];
+    const normalized = [];
+    for (const item of value) {
+        const cleaned = sanitizeMediaUrl(item);
+        if (cleaned)
+            normalized.push(cleaned);
+    }
+    return normalized;
+}
 function isWithinWindow(nowTs, start, end) {
     const startTs = parseTimestamp(start);
     const endTs = parseTimestamp(end);
@@ -51,22 +76,55 @@ function getAuctionPhase(nowTs, start, end) {
         return 'ended';
     return 'live';
 }
+function createLiveStateVersion(payload) {
+    const raw = JSON.stringify({
+        id: payload.id,
+        status: payload.status,
+        bidding_end_time: payload.bidding_end_time || null,
+        current_highest_bid: Number(payload.current_highest_bid || 0),
+        total_bids: Number(payload.total_bids || 0),
+        highest_bidder_name: payload.highest_bidder_name || null,
+        highest_bids_by_size: Array.isArray(payload.highest_bids_by_size) ? payload.highest_bids_by_size : null
+    });
+    return (0, crypto_1.createHash)('sha1').update(raw).digest('hex').slice(0, 16);
+}
+function getWeakEtag(version) {
+    return `W/\"${version}\"`;
+}
+function requestHasMatchingEtag(req, etag) {
+    const ifNoneMatch = String(req.headers['if-none-match'] || '').trim();
+    if (!ifNoneMatch)
+        return false;
+    if (ifNoneMatch === '*')
+        return true;
+    return ifNoneMatch.split(',').map((v) => v.trim()).includes(etag);
+}
 // Public: List auctions
 router.get('/auctions', async (req, res) => {
     try {
         const nowTs = Date.now();
         const includeEnded = req.query.includeEnded === 'true';
-        const cacheKey = includeEnded ? 'with-ended' : 'without-ended';
+        const includeMedia = req.query.include_media === 'true';
+        const requestedView = String(req.query.view || 'card').toLowerCase();
+        const view = requestedView === 'past' || requestedView === 'home' ? requestedView : 'card';
+        const limitCap = view === 'home' ? 20 : 120;
+        const limitDefault = view === 'home' ? 20 : 60;
+        const limit = Math.min(limitCap, Math.max(5, Number(req.query.limit || limitDefault)));
+        const cacheKey = `${includeEnded ? 'with-ended' : 'without-ended'}:${view}:${limit}:${includeMedia ? 'media' : 'no-media'}`;
         const cached = auctionsListCache.get(cacheKey);
         if (cached && cached.expiresAt > nowTs) {
             setRouteCacheHeaders(res, env_1.env.auctionListCacheSeconds);
             return res.json(cached.payload);
         }
+        const selectFields = includeMedia
+            ? 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price, min_increment, banner_image, reel_url, gallery_images'
+            : 'id, title, status, registration_end_time, bidding_start_time, bidding_end_time, base_price, min_increment';
         const { data: auctions, error } = await supabase_1.supabaseAdmin
             .from('auctions')
-            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, banner_image, min_increment, base_price, available_sizes')
+            .select(selectFields)
             .neq('status', 'draft')
-            .order('bidding_start_time', { ascending: true });
+            .order('bidding_start_time', { ascending: true })
+            .limit(limit);
         if (error) {
             console.error('Supabase error:', error);
             return res.status(500).json({ error: 'Failed to fetch auctions' });
@@ -85,44 +143,24 @@ router.get('/auctions', async (req, res) => {
                 .from('bids')
                 .select('id', { count: 'exact', head: true })
                 .eq('auction_id', auction.id);
-            let winnersList = [];
-            let winningAmount = null;
-            let winnerName = null;
-            let winnerDeclaredAt = null;
-            if (derivedStatus === 'ended') {
-                const { data: winnersRows } = await supabase_1.supabaseAdmin
-                    .from('winners')
-                    .select('size, winning_amount, declared_at, bidder:bidder_id(name)')
-                    .eq('auction_id', auction.id);
-                if (winnersRows && winnersRows.length > 0) {
-                    winnersList = winnersRows.map((w) => {
-                        const name = Array.isArray(w?.bidder) ? w.bidder[0]?.name : w?.bidder?.name ?? null;
-                        return {
-                            size: w.size ?? null,
-                            winning_amount: Number(w.winning_amount) ?? 0,
-                            winner_name: name,
-                            declared_at: w.declared_at ?? null
-                        };
-                    });
-                    const first = winnersList[0];
-                    winningAmount = first?.winning_amount ?? null;
-                    winnerName = first?.winner_name ?? null;
-                    winnerDeclaredAt = first?.declared_at ?? null;
-                }
-            }
-            const displayAmount = winningAmount ?? highestBid?.amount ?? null;
-            const displayName = winnerName ?? (Array.isArray(highestBid?.bidder) ? highestBid.bidder[0]?.name : highestBid?.bidder?.name) ?? null;
-            return {
-                ...auction,
+            const row = {
+                id: auction.id,
+                title: auction.title,
                 status: derivedStatus,
-                current_highest_bid: displayAmount,
-                highest_bidder_name: displayName,
-                total_bids: count ?? 0,
-                winner_name: winnerName,
-                winning_amount: winningAmount,
-                winner_declared_at: winnerDeclaredAt,
-                winners_by_size: winnersList
+                registration_end_time: auction.registration_end_time,
+                bidding_start_time: auction.bidding_start_time,
+                bidding_end_time: auction.bidding_end_time,
+                base_price: auction.base_price,
+                min_increment: auction.min_increment,
+                current_highest_bid: highestBid?.amount ?? null,
+                total_bids: count ?? 0
             };
+            if (includeMedia) {
+                row.banner_image = sanitizeMediaUrl(auction.banner_image);
+                row.reel_url = sanitizeMediaUrl(auction.reel_url);
+                row.gallery_images = sanitizeMediaUrls(auction.gallery_images);
+            }
+            return row;
         }));
         const filteredAuctions = includeEnded
             ? auctionsWithBids
@@ -245,6 +283,8 @@ router.get('/auction/product/:product_id', async (req, res) => {
             .maybeSingle();
         const payload = {
             ...auction,
+            banner_image: sanitizeMediaUrl(auction.banner_image),
+            reel_url: sanitizeMediaUrl(auction.reel_url),
             status: derivedStatus,
             current_highest_bid: highestBid?.amount ?? null,
             highest_bidder_name: Array.isArray(highestBid?.bidder) ? highestBid.bidder[0]?.name : highestBid?.bidder?.name ?? null
@@ -271,6 +311,15 @@ router.get('/auction/:id/live-state', async (req, res) => {
         const now = Date.now();
         const cached = liveStateCache.get(id);
         if (cached && cached.expiresAt > now) {
+            const snapshotVersion = String(cached.payload?.snapshot_version || '');
+            if (snapshotVersion) {
+                const etag = getWeakEtag(snapshotVersion);
+                res.setHeader('ETag', etag);
+                if (requestHasMatchingEtag(req, etag)) {
+                    setRouteCacheHeaders(res, liveStateCacheSeconds);
+                    return res.status(304).end();
+                }
+            }
             setRouteCacheHeaders(res, liveStateCacheSeconds);
             return res.json(cached.payload);
         }
@@ -290,7 +339,7 @@ router.get('/auction/:id/live-state', async (req, res) => {
             console.error('Live snapshot RPC error:', snapshotError);
             return res.status(500).json({ error: 'Failed to fetch live auction snapshot' });
         }
-        const payload = {
+        const basePayload = {
             id: auction.id,
             status: derivedStatus,
             bidding_end_time: auction.bidding_end_time,
@@ -301,6 +350,17 @@ router.get('/auction/:id/live-state', async (req, res) => {
                 ? snapshot.highest_bids_by_size
                 : null
         };
+        const snapshot_version = createLiveStateVersion(basePayload);
+        const payload = {
+            ...basePayload,
+            snapshot_version
+        };
+        const etag = getWeakEtag(snapshot_version);
+        res.setHeader('ETag', etag);
+        if (requestHasMatchingEtag(req, etag)) {
+            setRouteCacheHeaders(res, liveStateCacheSeconds);
+            return res.status(304).end();
+        }
         liveStateCache.set(id, { payload, expiresAt: now + liveStateCacheSeconds * 1000 });
         if (liveStateCache.size > 500) {
             for (const [key, entry] of liveStateCache.entries()) {
@@ -317,15 +377,15 @@ router.get('/auction/:id/live-state', async (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Public: Auction by ID (RPC)
-router.get('/auction/:id', async (req, res) => {
+// Public: Auction detail with media (for initial page load)
+router.get('/auction/:id/details', async (req, res) => {
     try {
         const nowTs = Date.now();
         const id = req.params.id;
         if (!id) {
             return res.status(400).json({ error: 'Auction ID is required' });
         }
-        const cacheKey = `auction:${id}`;
+        const cacheKey = `auction-details:${id}`;
         const cached = auctionDetailCache.get(cacheKey);
         if (cached && cached.expiresAt > nowTs) {
             const cachedPayload = cached.payload;
@@ -379,6 +439,98 @@ router.get('/auction/:id', async (req, res) => {
             }
         }
         // Display values
+        const displayAmount = winningAmount ?? Number(snapshot?.current_highest_bid ?? 0);
+        const displayName = winnerName ?? (snapshot?.highest_bidder_name ?? null);
+        const highest_bids_by_size = Array.isArray(snapshot?.highest_bids_by_size)
+            ? snapshot.highest_bids_by_size
+            : null;
+        const payload = {
+            ...auction,
+            banner_image: sanitizeMediaUrl(auction.banner_image),
+            reel_url: sanitizeMediaUrl(auction.reel_url),
+            gallery_images: sanitizeMediaUrls(auction.gallery_images),
+            status: derivedStatus,
+            current_highest_bid: displayAmount,
+            highest_bidder_name: displayName,
+            total_bids: Number(snapshot?.total_bids ?? 0),
+            winner_name: winnerName,
+            winning_amount: winningAmount,
+            winner_declared_at: winnerDeclaredAt,
+            winners_by_size: winnersList,
+            highest_bids_by_size
+        };
+        const ttl = derivedStatus === 'live'
+            ? Math.max(1, env_1.env.auctionDetailCacheLiveSeconds)
+            : Math.max(5, env_1.env.auctionDetailCacheIdleSeconds);
+        auctionDetailCache.set(cacheKey, { payload, expiresAt: nowTs + ttl * 1000 });
+        pruneExpiredCacheEntries(auctionDetailCache, nowTs, 1000);
+        setRouteCacheHeaders(res, ttl);
+        return res.json(payload);
+    }
+    catch (error) {
+        console.error('API error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Public: Lightweight auction payload (no media) for realtime-safe refreshes
+router.get('/auction/:id', async (req, res) => {
+    try {
+        const nowTs = Date.now();
+        const id = req.params.id;
+        if (!id) {
+            return res.status(400).json({ error: 'Auction ID is required' });
+        }
+        const cacheKey = `auction:${id}`;
+        const cached = auctionDetailCache.get(cacheKey);
+        if (cached && cached.expiresAt > nowTs) {
+            const cachedPayload = cached.payload;
+            const ttl = cachedPayload?.status === 'live'
+                ? Math.max(1, env_1.env.auctionDetailCacheLiveSeconds)
+                : Math.max(5, env_1.env.auctionDetailCacheIdleSeconds);
+            setRouteCacheHeaders(res, ttl);
+            return res.json(cached.payload);
+        }
+        const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
+            .from('auctions')
+            .select('id, title, product_id, status, registration_end_time, bidding_start_time, bidding_end_time, min_increment, base_price, available_sizes')
+            .eq('id', id)
+            .single();
+        if (auctionError || !auction) {
+            return res.status(404).json({ error: 'Auction not found' });
+        }
+        const derivedStatus = getAuctionPhase(Date.now(), auction.bidding_start_time, auction.bidding_end_time);
+        const { data: snapshot, error: snapshotError } = await supabase_1.supabaseAdmin
+            .rpc('get_auction_live_snapshot', { p_auction_id: id })
+            .single();
+        if (snapshotError) {
+            console.error('Auction snapshot RPC error:', snapshotError);
+            return res.status(500).json({ error: 'Failed to fetch auction snapshot' });
+        }
+        let winnersList = [];
+        let winningAmount = null;
+        let winnerName = null;
+        let winnerDeclaredAt = null;
+        if (derivedStatus === 'ended') {
+            const { data: winnersRows } = await supabase_1.supabaseAdmin
+                .from('winners')
+                .select('size, winning_amount, declared_at, bidder:bidder_id(name)')
+                .eq('auction_id', id);
+            if (winnersRows && winnersRows.length > 0) {
+                winnersList = winnersRows.map((w) => {
+                    const name = Array.isArray(w?.bidder) ? w.bidder[0]?.name : w?.bidder?.name ?? null;
+                    return {
+                        size: w.size ?? null,
+                        winning_amount: Number(w.winning_amount) ?? 0,
+                        winner_name: name,
+                        declared_at: w.declared_at ?? null
+                    };
+                });
+                const first = winnersList[0];
+                winningAmount = first?.winning_amount ?? null;
+                winnerName = first?.winner_name ?? null;
+                winnerDeclaredAt = first?.declared_at ?? null;
+            }
+        }
         const displayAmount = winningAmount ?? Number(snapshot?.current_highest_bid ?? 0);
         const displayName = winnerName ?? (snapshot?.highest_bidder_name ?? null);
         const highest_bids_by_size = Array.isArray(snapshot?.highest_bids_by_size)

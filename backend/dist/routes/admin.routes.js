@@ -18,6 +18,38 @@ const router = express_1.default.Router();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage() });
 const verifiedBuckets = new Set();
 const DEFAULT_REEL_MAX_MB = 80;
+const ADMIN_TRIGGER_MAX_LOOKBACK_DAYS = 365;
+function parseBooleanFlag(value, fallback = false) {
+    if (typeof value === 'boolean')
+        return value;
+    if (typeof value !== 'string')
+        return fallback;
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized))
+        return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized))
+        return false;
+    return fallback;
+}
+function parseBatchLimit(rawValue, defaultValue) {
+    const parsed = Number(rawValue);
+    const base = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultValue;
+    return Math.min(base, env_1.env.adminManualWorkflowMaxBatch);
+}
+function parseLookbackDays(rawValue, fallback = 30) {
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed <= 0)
+        return fallback;
+    return Math.min(Math.floor(parsed), ADMIN_TRIGGER_MAX_LOOKBACK_DAYS);
+}
+function enforceManualWorkflowAccess(res) {
+    if (process.env.NODE_ENV !== 'production')
+        return true;
+    if (env_1.env.adminManualWorkflowsEnabled)
+        return true;
+    res.status(403).json({ error: 'Manual admin workflows are disabled in production.' });
+    return false;
+}
 function parseTimestamp(value) {
     if (!value)
         return Number.NaN;
@@ -26,6 +58,19 @@ function parseTimestamp(value) {
 }
 function cleanText(value) {
     return String(value ?? '').trim();
+}
+function isDataUri(value) {
+    return /^data:[^;]+;base64,/i.test(value);
+}
+function sanitizeMediaUrl(value) {
+    if (typeof value !== 'string')
+        return null;
+    const trimmed = value.trim();
+    if (!trimmed)
+        return null;
+    if (isDataUri(trimmed))
+        return null;
+    return trimmed;
 }
 function normalizeShippingAddress(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -49,6 +94,11 @@ function normalizeShippingAddress(input) {
         }
     }
     return { address };
+}
+function buildMockAwb(seed) {
+    const base = String(seed || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(-8) || 'LOCAL';
+    const stamp = Date.now().toString().slice(-8);
+    return `MOCK${stamp}${base}`;
 }
 // Custom upload middleware for admin routes (handles any fieldname)
 function maybeUpload(req, res, next) {
@@ -100,17 +150,30 @@ async function ensureStorageBucket(bucket, maxReelMb) {
 // Protect all admin routes
 router.use(auth_1.requireAdmin);
 // GET /admin/auctions - List all auctions
-router.get('/auctions', async (_req, res) => {
+router.get('/auctions', async (req, res) => {
     try {
-        const { data: auctions, error } = await supabase_1.supabaseAdmin
+        const page = Math.max(1, Number(req.query.page || 1));
+        const limit = Math.min(50, Math.max(10, Number(req.query.limit || 20)));
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        const { data: auctions, error, count } = await supabase_1.supabaseAdmin
             .from('auctions')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('id, title, product_id, status, min_increment, base_price, registration_end_time, bidding_start_time, bidding_end_time, created_at', { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(from, to);
         if (error) {
             console.error('Supabase error:', error);
             return res.status(500).json({ error: 'Failed to fetch auctions' });
         }
-        return res.json({ auctions });
+        return res.json({
+            auctions: auctions || [],
+            pagination: {
+                page,
+                limit,
+                total: count ?? 0,
+                has_more: Array.isArray(auctions) ? auctions.length === limit : false
+            }
+        });
     }
     catch (error) {
         console.error('API error:', error);
@@ -174,13 +237,17 @@ router.post('/auctions', maybeUpload, async (req, res) => {
             if (passedGalleryUrls) {
                 if (Array.isArray(passedGalleryUrls)) {
                     passedGalleryUrls.forEach((url) => {
-                        if (typeof url === 'string' && url.trim() !== '') {
-                            galleryUrls.push(url);
+                        const cleaned = sanitizeMediaUrl(url);
+                        if (cleaned) {
+                            galleryUrls.push(cleaned);
                         }
                     });
                 }
                 else if (typeof passedGalleryUrls === 'string' && passedGalleryUrls.trim() !== '') {
-                    galleryUrls.push(passedGalleryUrls);
+                    const cleaned = sanitizeMediaUrl(passedGalleryUrls);
+                    if (cleaned) {
+                        galleryUrls.push(cleaned);
+                    }
                 }
             }
         }
@@ -189,10 +256,16 @@ router.post('/auctions', maybeUpload, async (req, res) => {
             const passedGalleryUrls = body.gallery_urls;
             if (passedGalleryUrls) {
                 if (Array.isArray(passedGalleryUrls)) {
-                    galleryUrls.push(...passedGalleryUrls);
+                    for (const url of passedGalleryUrls) {
+                        const cleaned = sanitizeMediaUrl(url);
+                        if (cleaned)
+                            galleryUrls.push(cleaned);
+                    }
                 }
                 else if (typeof passedGalleryUrls === 'string') {
-                    galleryUrls.push(passedGalleryUrls);
+                    const cleaned = sanitizeMediaUrl(passedGalleryUrls);
+                    if (cleaned)
+                        galleryUrls.push(cleaned);
                 }
             }
         }
@@ -283,7 +356,14 @@ router.post('/auctions', maybeUpload, async (req, res) => {
                 });
             }
         }
-        let reelPublicUrl = reel_url || null;
+        const normalizedBannerImage = sanitizeMediaUrl(banner_image);
+        if (typeof banner_image === 'string' && banner_image.trim() !== '' && !normalizedBannerImage) {
+            return res.status(400).json({ error: 'banner_image must be a public URL, not base64 data.' });
+        }
+        let reelPublicUrl = sanitizeMediaUrl(reel_url);
+        if (typeof reel_url === 'string' && reel_url.trim() !== '' && !reelPublicUrl) {
+            return res.status(400).json({ error: 'reel_url must be a public URL, not base64 data.' });
+        }
         if (reelFile) {
             if (!ALLOWED_REEL_TYPES.includes(reelFile.mimetype)) {
                 return res.status(400).json({ error: 'Reel must be MP4, WebM, or MOV' });
@@ -314,7 +394,7 @@ router.post('/auctions', maybeUpload, async (req, res) => {
             product_id,
             min_increment: minIncrementValue,
             base_price: basePriceValue,
-            banner_image: banner_image || null,
+            banner_image: normalizedBannerImage,
             reel_url: reelPublicUrl,
             gallery_images: galleryUrls.length > 0 ? galleryUrls : [],
             registration_end_time: registrationEndUTC,
@@ -336,126 +416,179 @@ router.post('/auctions', maybeUpload, async (req, res) => {
         return res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 });
-// GET /admin/auctions/:id - Get auction details
-router.get('/auctions/:id', async (req, res) => {
+function parsePageAndLimit(req, defaultLimit = 50, maxLimit = 200) {
+    const page = Math.max(1, Number(req.query.page || 1));
+    const limit = Math.min(maxLimit, Math.max(10, Number(req.query.limit || defaultLimit)));
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    return { page, limit, from, to };
+}
+// GET /admin/auction/:id - Get basic auction details only
+router.get('/auction/:id', async (req, res) => {
     try {
         const auctionId = req.params.id;
         const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
             .from('auctions')
-            .select('*')
+            .select('id, title, product_id, status, min_increment, registration_end_time, bidding_start_time, bidding_end_time, available_sizes')
             .eq('id', auctionId)
             .single();
         if (auctionError || !auction) {
             return res.status(404).json({ error: 'Auction not found' });
         }
-        const { data: bidders, error: biddersError } = await supabase_1.supabaseAdmin
-            .from('bidders')
-            .select('*')
-            .eq('auction_id', auctionId)
-            .order('created_at', { ascending: false });
-        if (biddersError) {
-            console.error('Error fetching bidders:', biddersError);
-        }
-        const { data: bids, error: bidsError } = await supabase_1.supabaseAdmin
-            .from('bids')
-            .select(`
-        id,
-        amount,
-        created_at,
-        bidder_id,
-        auction_id,
-        size,
-        bidders!fk_bids_bidder (
+        const [{ count: totalBids }, { count: totalBidders }, { count: totalWinners }, { data: highestBidRow }] = await Promise.all([
+            supabase_1.supabaseAdmin.from('bids').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+            supabase_1.supabaseAdmin.from('bidders').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+            supabase_1.supabaseAdmin.from('winners').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+            supabase_1.supabaseAdmin
+                .from('bids')
+                .select('amount')
+                .eq('auction_id', auctionId)
+                .order('amount', { ascending: false })
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle()
+        ]);
+        return res.json({
+            auction,
+            summary: {
+                total_bids: totalBids || 0,
+                total_bidders: totalBidders || 0,
+                total_winners: totalWinners || 0,
+                current_highest_bid: highestBidRow?.amount ?? null
+            }
+        });
+    }
+    catch (error) {
+        console.error('API error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// GET /admin/auction/:id/bids - Get paginated bids
+router.get('/auction/:id/bids', async (req, res) => {
+    try {
+        const auctionId = req.params.id;
+        const { page, limit, from, to } = parsePageAndLimit(req, 100, 200);
+        const [{ data: bids, error: bidsError, count }, { data: highestBidRow }] = await Promise.all([
+            supabase_1.supabaseAdmin
+                .from('bids')
+                .select(`
           id,
-          name,
-          phone,
-          email
-        )
-      `)
-            .eq('auction_id', auctionId)
-            .order('amount', { ascending: false });
+          amount,
+          created_at,
+          bidder_id,
+          size,
+          bidders!fk_bids_bidder (
+            name,
+            phone,
+            email
+          )
+        `, { count: 'exact' })
+                .eq('auction_id', auctionId)
+                .order('amount', { ascending: false })
+                .order('created_at', { ascending: true })
+                .range(from, to),
+            supabase_1.supabaseAdmin
+                .from('bids')
+                .select('amount')
+                .eq('auction_id', auctionId)
+                .order('amount', { ascending: false })
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle()
+        ]);
         if (bidsError) {
             console.error('Error fetching bids:', bidsError);
-            const { data: simpleBids } = await supabase_1.supabaseAdmin
-                .from('bids')
-                .select('*')
-                .eq('auction_id', auctionId)
-                .order('amount', { ascending: false });
-            const bidsWithBidderInfo = simpleBids?.map(bid => {
-                const bidder = bidders?.find(b => b.id === bid.bidder_id);
-                return {
-                    ...bid,
-                    bidders: bidder ? {
-                        id: bidder.id,
-                        name: bidder.name,
-                        phone: bidder.phone,
-                        email: bidder.email
-                    } : null
-                };
-            }) || [];
-            const currentHighestBid = simpleBids && simpleBids.length > 0
-                ? Math.max(...simpleBids.map(b => b.amount))
-                : null;
-            const biddersWithHighestBid = bidders?.map(bidder => {
-                const bidderBids = simpleBids?.filter(bid => bid.bidder_id === bidder.id) || [];
-                const highestBid = bidderBids.length > 0
-                    ? Math.max(...bidderBids.map(b => b.amount))
-                    : null;
-                return {
-                    ...bidder,
-                    highest_bid: highestBid
-                };
-            }) || [];
-            const { data: winnersRowsFallback } = await supabase_1.supabaseAdmin
-                .from('winners')
-                .select('id, auction_id, bidder_id, winning_amount, size, declared_at, bidder:bidder_id(name, phone, email)')
-                .eq('auction_id', auctionId);
-            const winners_by_size_fallback = (winnersRowsFallback || []).map((w) => {
-                const bidder = w.bidder;
-                const name = Array.isArray(bidder) ? bidder[0]?.name : bidder?.name ?? null;
-                const phone = Array.isArray(bidder) ? bidder[0]?.phone : bidder?.phone ?? null;
-                const email = Array.isArray(bidder) ? bidder[0]?.email : bidder?.email ?? null;
-                return {
-                    size: w.size ?? null,
-                    bidder_id: w.bidder_id,
-                    winning_amount: w.winning_amount,
-                    declared_at: w.declared_at,
-                    winner_name: name,
-                    winner_phone: phone,
-                    winner_email: email
-                };
-            });
-            return res.json({
-                auction,
-                bidders: biddersWithHighestBid,
-                bids: bidsWithBidderInfo,
-                current_highest_bid: currentHighestBid,
-                winners_by_size: winners_by_size_fallback
-            });
+            return res.status(500).json({ error: 'Failed to fetch bids' });
         }
-        const currentHighestBid = bids && bids.length > 0
-            ? Math.max(...bids.map((b) => b.amount))
-            : null;
-        const biddersWithHighestBid = bidders?.map(bidder => {
-            const bidderBids = bids?.filter(bid => bid.bidder_id === bidder.id) || [];
-            const highestBid = bidderBids.length > 0
-                ? Math.max(...bidderBids.map(b => b.amount))
-                : null;
-            return {
-                ...bidder,
-                highest_bid: highestBid
-            };
-        }) || [];
-        const { data: winnersRows } = await supabase_1.supabaseAdmin
+        return res.json({
+            bids: bids || [],
+            current_highest_bid: highestBidRow?.amount ?? null,
+            pagination: {
+                page,
+                limit,
+                total: count ?? 0,
+                has_more: from + (bids?.length || 0) < (count ?? 0)
+            }
+        });
+    }
+    catch (error) {
+        console.error('API error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// GET /admin/auction/:id/bidders - Get paginated bidders
+router.get('/auction/:id/bidders', async (req, res) => {
+    try {
+        const auctionId = req.params.id;
+        const { page, limit, from, to } = parsePageAndLimit(req, 100, 200);
+        const { data: bidders, error: biddersError, count } = await supabase_1.supabaseAdmin
+            .from('bidders')
+            .select('id, name, phone, email, created_at', { count: 'exact' })
+            .eq('auction_id', auctionId)
+            .order('created_at', { ascending: false })
+            .range(from, to);
+        if (biddersError) {
+            console.error('Error fetching bidders:', biddersError);
+            return res.status(500).json({ error: 'Failed to fetch bidders' });
+        }
+        const bidderIds = (bidders || []).map((bidder) => bidder.id);
+        const highestByBidder = new Map();
+        if (bidderIds.length > 0) {
+            const { data: bidsForPageBidders } = await supabase_1.supabaseAdmin
+                .from('bids')
+                .select('bidder_id, amount')
+                .eq('auction_id', auctionId)
+                .in('bidder_id', bidderIds);
+            for (const row of bidsForPageBidders || []) {
+                const bidderId = String(row.bidder_id || '');
+                const amount = Number(row.amount || 0);
+                const current = highestByBidder.get(bidderId);
+                if (current === undefined || amount > current) {
+                    highestByBidder.set(bidderId, amount);
+                }
+            }
+        }
+        const biddersWithHighestBid = (bidders || []).map((bidder) => ({
+            ...bidder,
+            highest_bid: highestByBidder.has(String(bidder.id)) ? highestByBidder.get(String(bidder.id)) ?? null : null
+        }));
+        return res.json({
+            bidders: biddersWithHighestBid,
+            pagination: {
+                page,
+                limit,
+                total: count ?? 0,
+                has_more: from + biddersWithHighestBid.length < (count ?? 0)
+            }
+        });
+    }
+    catch (error) {
+        console.error('API error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// GET /admin/auction/:id/winners - Get paginated winners
+router.get('/auction/:id/winners', async (req, res) => {
+    try {
+        const auctionId = req.params.id;
+        const { page, limit, from, to } = parsePageAndLimit(req, 50, 200);
+        const { data: winnersRows, error: winnersError, count } = await supabase_1.supabaseAdmin
             .from('winners')
-            .select('id, auction_id, bidder_id, winning_amount, size, declared_at, bidder:bidder_id(name, phone, email)')
-            .eq('auction_id', auctionId);
-        const winners_by_size = (winnersRows || []).map((w) => {
+            .select('id, auction_id, bidder_id, winning_amount, size, declared_at, bidder:bidder_id(name, phone, email)', { count: 'exact' })
+            .eq('auction_id', auctionId)
+            .order('declared_at', { ascending: false })
+            .range(from, to);
+        if (winnersError) {
+            console.error('Error fetching winners:', winnersError);
+            return res.status(500).json({ error: 'Failed to fetch winners' });
+        }
+        const winners = (winnersRows || []).map((w) => {
             const bidder = w.bidder;
             const name = Array.isArray(bidder) ? bidder[0]?.name : bidder?.name ?? null;
             const phone = Array.isArray(bidder) ? bidder[0]?.phone : bidder?.phone ?? null;
             const email = Array.isArray(bidder) ? bidder[0]?.email : bidder?.email ?? null;
             return {
+                id: w.id,
                 size: w.size ?? null,
                 bidder_id: w.bidder_id,
                 winning_amount: w.winning_amount,
@@ -466,11 +599,53 @@ router.get('/auctions/:id', async (req, res) => {
             };
         });
         return res.json({
+            winners,
+            pagination: {
+                page,
+                limit,
+                total: count ?? 0,
+                has_more: from + winners.length < (count ?? 0)
+            }
+        });
+    }
+    catch (error) {
+        console.error('API error:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Backward-compatible alias for older clients.
+router.get('/auctions/:id', async (req, res) => {
+    try {
+        const auctionId = req.params.id;
+        const { data: auction, error: auctionError } = await supabase_1.supabaseAdmin
+            .from('auctions')
+            .select('id, title, product_id, status, min_increment, registration_end_time, bidding_start_time, bidding_end_time, available_sizes')
+            .eq('id', auctionId)
+            .single();
+        if (auctionError || !auction) {
+            return res.status(404).json({ error: 'Auction not found' });
+        }
+        const [{ count: totalBids }, { count: totalBidders }, { count: totalWinners }, { data: highestBidRow }] = await Promise.all([
+            supabase_1.supabaseAdmin.from('bids').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+            supabase_1.supabaseAdmin.from('bidders').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+            supabase_1.supabaseAdmin.from('winners').select('id', { count: 'exact', head: true }).eq('auction_id', auctionId),
+            supabase_1.supabaseAdmin
+                .from('bids')
+                .select('amount')
+                .eq('auction_id', auctionId)
+                .order('amount', { ascending: false })
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .maybeSingle()
+        ]);
+        return res.json({
             auction,
-            bidders: biddersWithHighestBid,
-            bids: bids || [],
-            current_highest_bid: currentHighestBid,
-            winners_by_size
+            summary: {
+                total_bids: totalBids || 0,
+                total_bidders: totalBidders || 0,
+                total_winners: totalWinners || 0,
+                current_highest_bid: highestBidRow?.amount ?? null
+            }
         });
     }
     catch (error) {
@@ -640,9 +815,13 @@ router.delete('/auctions/:id', async (req, res) => {
     }
 });
 // GET /admin/bidders - List bidders
-router.get('/bidders', async (_req, res) => {
+router.get('/bidders', async (req, res) => {
     try {
-        const { data: bidders, error: biddersError } = await supabase_1.supabaseAdmin
+        const page = Math.max(1, Number(req.query.page || 1));
+        const limit = Math.min(50, Math.max(10, Number(req.query.limit || 20)));
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        const { data: bidders, error: biddersError, count } = await supabase_1.supabaseAdmin
             .from('bidders')
             .select(`
         id,
@@ -652,32 +831,49 @@ router.get('/bidders', async (_req, res) => {
         auction_id,
         created_at,
         auction:auctions(title, product_id, status)
-      `)
-            .order('created_at', { ascending: false });
+      `, { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(from, to);
         if (biddersError)
             throw biddersError;
-        const biddersWithStats = await Promise.all((bidders || []).map(async (bidder) => {
-            const { count: bidsCount } = await supabase_1.supabaseAdmin
+        const bidderIds = Array.from(new Set((bidders || []).map((b) => String(b.id || '')).filter(Boolean)));
+        const statsMap = new Map();
+        if (bidderIds.length > 0) {
+            const { data: bidRows } = await supabase_1.supabaseAdmin
                 .from('bids')
-                .select('id', { count: 'exact', head: true })
-                .eq('bidder_id', bidder.id);
-            const { data: highestBidData } = await supabase_1.supabaseAdmin
-                .from('bids')
-                .select('amount')
-                .eq('bidder_id', bidder.id)
-                .order('amount', { ascending: false })
-                .limit(1)
-                .single();
+                .select('bidder_id, amount')
+                .in('bidder_id', bidderIds);
+            for (const row of bidRows || []) {
+                const bidderId = String(row.bidder_id || '');
+                if (!bidderId)
+                    continue;
+                const amount = Number(row.amount || 0);
+                const current = statsMap.get(bidderId) || { bids_count: 0, highest_bid: null };
+                current.bids_count += 1;
+                if (current.highest_bid === null || amount > current.highest_bid) {
+                    current.highest_bid = amount;
+                }
+                statsMap.set(bidderId, current);
+            }
+        }
+        const biddersWithStats = (bidders || []).map((bidder) => {
+            const stats = statsMap.get(String(bidder.id)) || { bids_count: 0, highest_bid: null };
             return {
                 ...bidder,
                 registered_at: bidder.created_at,
-                bids_count: bidsCount || 0,
-                highest_bid: highestBidData?.amount || null
+                bids_count: stats.bids_count,
+                highest_bid: stats.highest_bid
             };
-        }));
+        });
         return res.json({
             success: true,
-            bidders: biddersWithStats
+            bidders: biddersWithStats,
+            pagination: {
+                page,
+                limit,
+                total: count ?? 0,
+                has_more: from + biddersWithStats.length < (count ?? 0)
+            }
         });
     }
     catch (error) {
@@ -777,9 +973,13 @@ router.post('/upload-url', async (req, res) => {
     }
 });
 // GET /admin/winners - List winners
-router.get('/winners', async (_req, res) => {
+router.get('/winners', async (req, res) => {
     try {
-        const { data: winners, error } = await supabase_1.supabaseAdmin
+        const page = Math.max(1, Number(req.query.page || 1));
+        const limit = Math.min(50, Math.max(10, Number(req.query.limit || 20)));
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        const { data: winners, error, count } = await supabase_1.supabaseAdmin
             .from('winners')
             .select(`
         id,
@@ -805,14 +1005,14 @@ router.get('/winners', async (_req, res) => {
         delhivery_tracking_url,
         delhivery_status,
         delhivery_error,
-        delhivery_raw_response,
         delhivery_last_tracking_update,
         shipment_triggered_at,
         escalation_done,
         bidder:bidder_id(name, phone, email),
         auction:auction_id(title, product_id, bidding_start_time, bidding_end_time)
-      `)
-            .order('created_at', { ascending: false });
+      `, { count: 'exact' })
+            .order('created_at', { ascending: false })
+            .range(from, to);
         if (error)
             throw error;
         // Normalize bidder/auction: Supabase may return relations as arrays or objects
@@ -827,7 +1027,13 @@ router.get('/winners', async (_req, res) => {
         });
         return res.json({
             success: true,
-            winners: normalizedWinners
+            winners: normalizedWinners,
+            pagination: {
+                page,
+                limit,
+                total: count ?? 0,
+                has_more: from + normalizedWinners.length < (count ?? 0)
+            }
         });
     }
     catch (error) {
@@ -914,8 +1120,11 @@ router.patch('/winners/:id', async (req, res) => {
                 });
             }
             if (!env_1.env.delhiveryEnabled) {
+                const mockAwb = env_1.env.delhiveryMockAwbWhenDisabled ? buildMockAwb(`${id}${orderId}`) : null;
                 updates.dispatched_at = new Date().toISOString();
                 updates.delhivery_order_id = orderId;
+                updates.delhivery_awb = mockAwb;
+                updates.delhivery_tracking_url = mockAwb ? `https://www.delhivery.com/track/package/${mockAwb}` : null;
                 updates.delhivery_status = 'created';
                 updates.delhivery_last_tracking_update = new Date().toISOString();
                 updates.delhivery_error = null;
@@ -923,6 +1132,8 @@ router.patch('/winners/:id', async (req, res) => {
                 updates.delhivery_raw_response = {
                     skipped: true,
                     reason: 'DELHIVERY_ENABLED is false',
+                    mock_awb_generated: Boolean(mockAwb),
+                    mock_awb: mockAwb,
                     timestamp: new Date().toISOString(),
                     orderId
                 };
@@ -1008,6 +1219,27 @@ router.patch('/winners/:id', async (req, res) => {
                 await (0, email_service_1.sendPaymentConfirmedEmail)(bidder.email, bidder?.name || 'Winner', auction?.title || 'Auction');
             }
         }
+        if (dispatchRequested && data?.delhivery_awb && data?.bidder_id) {
+            const { data: bidder } = await supabase_1.supabaseAdmin
+                .from('bidders')
+                .select('email, name')
+                .eq('id', data.bidder_id)
+                .single();
+            const { data: auction } = await supabase_1.supabaseAdmin
+                .from('auctions')
+                .select('title')
+                .eq('id', data.auction_id)
+                .single();
+            if (bidder?.email) {
+                await (0, email_service_1.sendShipmentDispatchedEmail)({
+                    to: bidder.email,
+                    winnerName: bidder?.name || 'Winner',
+                    auctionTitle: auction?.title || 'Auction',
+                    awb: data?.delhivery_awb || null,
+                    trackingUrl: data?.delhivery_tracking_url || null
+                });
+            }
+        }
         return res.json({ success: true, winner: data });
     }
     catch (error) {
@@ -1018,14 +1250,15 @@ router.patch('/winners/:id', async (req, res) => {
 // POST /admin/winners/retry-failed-shipments - Retry failed Delhivery shipment creations in bulk
 router.post('/winners/retry-failed-shipments', async (req, res) => {
     try {
+        if (!enforceManualWorkflowAccess(res))
+            return;
         const body = req.body || {};
         const winnerIds = Array.isArray(body.winner_ids)
             ? body.winner_ids.map((id) => String(id || '').trim()).filter(Boolean)
             : [];
-        const requestedLimit = Number(body.limit);
-        const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
-            ? Math.min(Math.floor(requestedLimit), 100)
-            : 25;
+        const limit = parseBatchLimit(body.limit, 25);
+        const lookbackDays = parseLookbackDays(body.lookback_days, 30);
+        const lookbackIso = new Date(Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)).toISOString();
         let query = supabase_1.supabaseAdmin
             .from('winners')
             .select(`
@@ -1041,6 +1274,7 @@ router.post('/winners/retry-failed-shipments', async (req, res) => {
             .eq('payment_status', 'completed')
             .is('delhivery_awb', null)
             .eq('delhivery_status', 'failed')
+            .gte('created_at', lookbackIso)
             .order('created_at', { ascending: false })
             .limit(limit);
         if (winnerIds.length > 0) {
@@ -1088,17 +1322,22 @@ router.post('/winners/retry-failed-shipments', async (req, res) => {
                 continue;
             }
             if (!env_1.env.delhiveryEnabled) {
+                const mockAwb = env_1.env.delhiveryMockAwbWhenDisabled ? buildMockAwb(`${winner.id}${orderId}`) : null;
                 await supabase_1.supabaseAdmin
                     .from('winners')
                     .update({
                     dispatched_at: new Date().toISOString(),
                     delhivery_order_id: orderId,
+                    delhivery_awb: mockAwb,
+                    delhivery_tracking_url: mockAwb ? `https://www.delhivery.com/track/package/${mockAwb}` : null,
                     delhivery_status: 'created',
                     delhivery_error: null,
                     delhivery_last_tracking_update: new Date().toISOString(),
                     delhivery_raw_response: {
                         skipped: true,
                         reason: 'DELHIVERY_ENABLED is false',
+                        mock_awb_generated: Boolean(mockAwb),
+                        mock_awb: mockAwb,
                         timestamp: new Date().toISOString(),
                         orderId
                     }
@@ -1181,6 +1420,10 @@ router.post('/winners/retry-failed-shipments', async (req, res) => {
         return res.json({
             success: failed === 0,
             message: `Processed ${results.length} failed shipment retries`,
+            scope: {
+                lookback_days: lookbackDays,
+                max_batch: env_1.env.adminManualWorkflowMaxBatch
+            },
             total: results.length,
             retried,
             failed,
@@ -1257,69 +1500,90 @@ router.post('/winners/:id/resend-email', async (req, res) => {
     }
 });
 // POST /admin/trigger-winner-emails - Manually trigger winner email notifications
-router.post('/trigger-winner-emails', async (_req, res) => {
+router.post('/trigger-winner-emails', async (req, res) => {
     try {
-        const now = new Date().toISOString();
-        // Finalize ended auctions to ensure winners exist
-        await (0, auction_service_1.finalizeEndedAuctions)();
-        // ── STEP 1: Backfill winners missing claim_token / payment_status ────────────
-        // This covers winners created by the old PUT /admin/auctions/:id route that
-        // didn't set those fields, and any existing winners in the DB before this fix.
-        const { data: incompleteWinners, error: incompleteErr } = await supabase_1.supabaseAdmin
-            .from('winners')
-            .select('id, payment_status, claim_token, payment_due_at')
-            .or('claim_token.is.null,payment_status.is.null');
-        console.log(`[trigger-winner-emails] Step1: incompleteWinners=${incompleteWinners?.length ?? 0}, err=${incompleteErr?.message}`);
-        if (incompleteWinners && incompleteWinners.length > 0) {
-            for (const iw of incompleteWinners) {
-                const patch = {};
-                if (!iw.claim_token) {
-                    patch.claim_token = crypto_1.default.randomUUID();
-                }
-                if (!iw.payment_status) {
-                    patch.payment_status = 'pending';
-                }
-                if (!iw.payment_due_at) {
-                    patch.payment_due_at = null;
-                }
-                if (Object.keys(patch).length > 0) {
-                    console.log(`[trigger-winner-emails] Patching winner ${iw.id} with:`, patch);
-                    const { error: patchErr } = await supabase_1.supabaseAdmin.from('winners').update(patch).eq('id', iw.id);
-                    if (patchErr)
-                        console.error(`[trigger-winner-emails] Patch error for ${iw.id}:`, patchErr.message);
+        if (!enforceManualWorkflowAccess(res))
+            return;
+        const body = req.body || {};
+        const runFinalize = parseBooleanFlag(body.run_finalize, false);
+        const runBackfill = parseBooleanFlag(body.run_backfill, false);
+        const limit = parseBatchLimit(body.limit, 25);
+        const lookbackDays = parseLookbackDays(body.lookback_days, 30);
+        const lookbackIso = new Date(Date.now() - (lookbackDays * 24 * 60 * 60 * 1000)).toISOString();
+        const winnerIds = Array.isArray(body.winner_ids)
+            ? body.winner_ids.map((id) => String(id || '').trim()).filter(Boolean).slice(0, env_1.env.adminManualWorkflowMaxBatch)
+            : [];
+        let finalizedAuctions = [];
+        let finalizeErrors = [];
+        if (runFinalize) {
+            const finalizeResult = await (0, auction_service_1.finalizeEndedAuctions)();
+            finalizedAuctions = finalizeResult.endedAuctionIds;
+            finalizeErrors = finalizeResult.errors;
+        }
+        // Optional targeted backfill for legacy rows; always bounded by lookback+limit.
+        if (runBackfill) {
+            let incompleteQuery = supabase_1.supabaseAdmin
+                .from('winners')
+                .select('id, payment_status, claim_token, payment_due_at, created_at')
+                .or('claim_token.is.null,payment_status.is.null')
+                .gte('created_at', lookbackIso)
+                .order('created_at', { ascending: false })
+                .limit(limit);
+            if (winnerIds.length > 0) {
+                incompleteQuery = incompleteQuery.in('id', winnerIds);
+            }
+            const { data: incompleteWinners, error: incompleteErr } = await incompleteQuery;
+            if (incompleteErr) {
+                return res.status(500).json({ error: 'Failed to backfill winners', details: incompleteErr.message });
+            }
+            if (incompleteWinners && incompleteWinners.length > 0) {
+                for (const iw of incompleteWinners) {
+                    const patch = {};
+                    if (!iw.claim_token) {
+                        patch.claim_token = crypto_1.default.randomUUID();
+                    }
+                    if (!iw.payment_status) {
+                        patch.payment_status = 'pending';
+                    }
+                    if (!iw.payment_due_at) {
+                        patch.payment_due_at = null;
+                    }
+                    if (Object.keys(patch).length > 0) {
+                        const { error: patchErr } = await supabase_1.supabaseAdmin.from('winners').update(patch).eq('id', iw.id);
+                        if (patchErr)
+                            console.error(`[trigger-winner-emails] Patch error for ${iw.id}:`, patchErr.message);
+                    }
                 }
             }
         }
-        // ── STEP 2: Find all winners still pending email notification ─────────────────
-        const { data: toNotify, error: fetchError } = await supabase_1.supabaseAdmin
+        let toNotifyQuery = supabase_1.supabaseAdmin
             .from('winners')
-            .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_status, winner_email_sent_at')
+            .select('id, auction_id, bidder_id, winning_amount, claim_token, size, payment_status, winner_email_sent_at, created_at')
             .eq('payment_status', 'pending')
             .not('claim_token', 'is', null)
-            .is('winner_email_sent_at', null);
-        console.log(`[trigger-winner-emails] Step2: toNotify=${toNotify?.length ?? 0}, fetchError=${fetchError?.message}`);
+            .is('winner_email_sent_at', null)
+            .gte('created_at', lookbackIso)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+        if (winnerIds.length > 0) {
+            toNotifyQuery = toNotifyQuery.in('id', winnerIds);
+        }
+        const { data: toNotify, error: fetchError } = await toNotifyQuery;
         if (fetchError) {
             return res.status(500).json({ error: 'Failed to fetch winners', details: fetchError.message });
         }
         if (!toNotify || toNotify.length === 0) {
-            // Also fetch ALL winners to show debug info
-            const { data: allWinners } = await supabase_1.supabaseAdmin
-                .from('winners')
-                .select('id, payment_status, claim_token, winner_email_sent_at, bidder_id');
-            console.log('[trigger-winner-emails] All winners in DB:', JSON.stringify(allWinners, null, 2));
             return res.json({
                 success: true,
                 message: 'No winners pending notification',
                 sent: 0,
                 failed: 0,
-                debug: {
-                    allWinnersInDb: (allWinners || []).map(w => ({
-                        id: w.id,
-                        payment_status: w.payment_status,
-                        has_claim_token: !!w.claim_token,
-                        email_sent: !!w.winner_email_sent_at,
-                        bidder_id: w.bidder_id
-                    }))
+                scope: {
+                    run_finalize: runFinalize,
+                    run_backfill: runBackfill,
+                    lookback_days: lookbackDays,
+                    max_batch: env_1.env.adminManualWorkflowMaxBatch,
+                    winner_ids_count: winnerIds.length
                 }
             });
         }
@@ -1338,11 +1602,9 @@ router.post('/trigger-winner-emails', async (_req, res) => {
                     .select('name, email')
                     .eq('id', w.bidder_id)
                     .single();
-                console.log(`[trigger-winner-emails] Winner ${w.id}: bidder email=${bidder?.email}, has claim_token=${!!w.claim_token}`);
                 if (!bidder?.email || !w.claim_token) {
                     const reason = !bidder?.email ? 'bidder has no email address' : 'missing claim_token';
                     errors.push(`Winner ${w.id}: ${reason}`);
-                    console.warn(`[trigger-winner-emails] Skipping winner ${w.id}: ${reason}`);
                     failed++;
                     continue;
                 }
@@ -1355,7 +1617,6 @@ router.post('/trigger-winner-emails', async (_req, res) => {
                     size: w.size,
                     isEscalation: false
                 });
-                console.log(`[trigger-winner-emails] Email send result for winner ${w.id}: ${emailSent}`);
                 if (emailSent) {
                     const sentAt = new Date().toISOString();
                     await supabase_1.supabaseAdmin
@@ -1381,6 +1642,15 @@ router.post('/trigger-winner-emails', async (_req, res) => {
             sent,
             failed,
             total: toNotify.length,
+            scope: {
+                run_finalize: runFinalize,
+                run_backfill: runBackfill,
+                lookback_days: lookbackDays,
+                max_batch: env_1.env.adminManualWorkflowMaxBatch,
+                winner_ids_count: winnerIds.length,
+                finalized_auctions_count: finalizedAuctions.length
+            },
+            finalize_errors: finalizeErrors.length > 0 ? finalizeErrors : undefined,
             errors: errors.length > 0 ? errors : undefined
         });
     }

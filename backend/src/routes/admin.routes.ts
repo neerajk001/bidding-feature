@@ -3,7 +3,7 @@ import multer from 'multer'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase'
 import { requireAdmin } from '../middleware/auth'
-import { sendPaymentConfirmedEmail, sendWinnerEmail } from '../services/email.service'
+import { sendPaymentConfirmedEmail, sendShipmentDispatchedEmail, sendWinnerEmail } from '../services/email.service'
 import { getLastWinnerEmailError } from '../services/email.service'
 import { finalizeEndedAuctions } from '../services/auction.service'
 import { buildPendingWinnerOffer, buildWinnerNotificationUpdate, isWinnerPaymentExpired } from '../services/winner-offer.service'
@@ -102,6 +102,12 @@ function normalizeShippingAddress(input: unknown): { address?: ShippingAddress; 
   }
 
   return { address }
+}
+
+function buildMockAwb(seed: string): string {
+  const base = String(seed || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(-8) || 'LOCAL'
+  const stamp = Date.now().toString().slice(-8)
+  return `MOCK${stamp}${base}`
 }
 
 // Custom upload middleware for admin routes (handles any fieldname)
@@ -1253,8 +1259,11 @@ router.patch('/winners/:id', async (req: Request, res: Response) => {
       }
 
       if (!env.delhiveryEnabled) {
+        const mockAwb = env.delhiveryMockAwbWhenDisabled ? buildMockAwb(`${id}${orderId}`) : null
         updates.dispatched_at = new Date().toISOString()
         updates.delhivery_order_id = orderId
+        updates.delhivery_awb = mockAwb
+        updates.delhivery_tracking_url = mockAwb ? `https://www.delhivery.com/track/package/${mockAwb}` : null
         updates.delhivery_status = 'created'
         updates.delhivery_last_tracking_update = new Date().toISOString()
         updates.delhivery_error = null
@@ -1262,6 +1271,8 @@ router.patch('/winners/:id', async (req: Request, res: Response) => {
         updates.delhivery_raw_response = {
           skipped: true,
           reason: 'DELHIVERY_ENABLED is false',
+          mock_awb_generated: Boolean(mockAwb),
+          mock_awb: mockAwb,
           timestamp: new Date().toISOString(),
           orderId
         }
@@ -1361,6 +1372,30 @@ router.patch('/winners/:id', async (req: Request, res: Response) => {
       }
     }
 
+    if (dispatchRequested && data?.delhivery_awb && data?.bidder_id) {
+      const { data: bidder } = await supabaseAdmin
+        .from('bidders')
+        .select('email, name')
+        .eq('id', data.bidder_id)
+        .single()
+
+      const { data: auction } = await supabaseAdmin
+        .from('auctions')
+        .select('title')
+        .eq('id', data.auction_id)
+        .single()
+
+      if ((bidder as any)?.email) {
+        await sendShipmentDispatchedEmail({
+          to: (bidder as any).email,
+          winnerName: (bidder as any)?.name || 'Winner',
+          auctionTitle: (auction as any)?.title || 'Auction',
+          awb: (data as any)?.delhivery_awb || null,
+          trackingUrl: (data as any)?.delhivery_tracking_url || null
+        })
+      }
+    }
+
     return res.json({ success: true, winner: data })
   } catch (error: any) {
     console.error('Patch winner error:', error)
@@ -1452,17 +1487,22 @@ router.post('/winners/retry-failed-shipments', async (req: Request, res: Respons
       }
 
       if (!env.delhiveryEnabled) {
+        const mockAwb = env.delhiveryMockAwbWhenDisabled ? buildMockAwb(`${winner.id}${orderId}`) : null
         await supabaseAdmin
           .from('winners')
           .update({
             dispatched_at: new Date().toISOString(),
             delhivery_order_id: orderId,
+            delhivery_awb: mockAwb,
+            delhivery_tracking_url: mockAwb ? `https://www.delhivery.com/track/package/${mockAwb}` : null,
             delhivery_status: 'created',
             delhivery_error: null,
             delhivery_last_tracking_update: new Date().toISOString(),
             delhivery_raw_response: {
               skipped: true,
               reason: 'DELHIVERY_ENABLED is false',
+              mock_awb_generated: Boolean(mockAwb),
+              mock_awb: mockAwb,
               timestamp: new Date().toISOString(),
               orderId
             }

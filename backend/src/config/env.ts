@@ -53,6 +53,8 @@ export const env = {
   
   // Delhivery (optional)
   delhiveryEnabled: String(process.env.DELHIVERY_ENABLED || 'true').toLowerCase() === 'true',
+  delhiveryMockAwbWhenDisabled:
+    String(process.env.DELHIVERY_MOCK_AWB_WHEN_DISABLED || 'false').toLowerCase() === 'true',
   delhiveryApiKey: process.env.DELHIVERY_API_KEY || '',
   delhiveryApiBaseUrl: process.env.DELHIVERY_API_BASE_URL || 'https://track.delhivery.com/api',
   delhiveryPickupLocation: process.env.DELHIVERY_PICKUP_LOCATION || 'Nine Hills Society, NIBM',

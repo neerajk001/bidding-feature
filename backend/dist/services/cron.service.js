@@ -13,6 +13,24 @@ const supabase_1 = require("../config/supabase");
 const auction_service_1 = require("./auction.service");
 const email_service_1 = require("./email.service");
 const winner_offer_service_1 = require("./winner-offer.service");
+const CRON_BATCH_LIMIT = 20;
+const CRON_PAYLOAD_BUDGET_BYTES = 50 * 1024;
+function estimatePayloadBytes(value) {
+    try {
+        return Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+    }
+    catch {
+        return 0;
+    }
+}
+function consumePayloadBudget(remainingBytes, chunk, label) {
+    const chunkBytes = estimatePayloadBytes(chunk);
+    if (chunkBytes > remainingBytes) {
+        console.warn(`[CRON] Payload budget exceeded at ${label}: chunk=${chunkBytes}B, remaining=${remainingBytes}B`);
+        return { ok: false, remaining: remainingBytes };
+    }
+    return { ok: true, remaining: remainingBytes - chunkBytes };
+}
 let activeRun = null;
 let activeFinalizationRun = null;
 function initializeCronJobs() {
@@ -67,15 +85,57 @@ async function runWinnerPaymentCheck(trigger = 'manual') {
 }
 async function checkWinnerPayments(trigger) {
     console.log(`[CRON] Running winner payment check (${trigger})...`);
-    await runAuctionFinalization(`winner-payment-check:${trigger}`);
     const now = new Date().toISOString();
     let notified = 0;
+    let remainingPayloadBudget = CRON_PAYLOAD_BUDGET_BYTES;
     const { data: toNotify } = await supabase_1.supabaseAdmin
         .from('winners')
         .select('id, auction_id, bidder_id, winning_amount, claim_token, size')
         .eq('payment_status', 'pending')
         .not('claim_token', 'is', null)
-        .is('winner_email_sent_at', null);
+        .is('winner_email_sent_at', null)
+        .order('id', { ascending: true })
+        .limit(CRON_BATCH_LIMIT);
+    {
+        const budgetCheck = consumePayloadBudget(remainingPayloadBudget, toNotify || [], 'winners.toNotify');
+        if (!budgetCheck.ok) {
+            console.log(`[CRON] Winner payment check aborted (${trigger}) due to payload budget`);
+            return { notified, marked_forfeited: 0, escalated: 0 };
+        }
+        remainingPayloadBudget = budgetCheck.remaining;
+    }
+    const notifyAuctionIds = Array.from(new Set((toNotify || []).map((w) => String(w.auction_id || '')).filter(Boolean)));
+    const notifyBidderIds = Array.from(new Set((toNotify || []).map((w) => String(w.bidder_id || '')).filter(Boolean)));
+    const [{ data: notifyAuctions }, { data: notifyBidders }] = await Promise.all([
+        notifyAuctionIds.length > 0
+            ? supabase_1.supabaseAdmin
+                .from('auctions')
+                .select('id, title')
+                .in('id', notifyAuctionIds)
+            : Promise.resolve({ data: [] }),
+        notifyBidderIds.length > 0
+            ? supabase_1.supabaseAdmin
+                .from('bidders')
+                .select('id, name, email')
+                .in('id', notifyBidderIds)
+            : Promise.resolve({ data: [] })
+    ]);
+    {
+        const auctionsBudget = consumePayloadBudget(remainingPayloadBudget, notifyAuctions || [], 'auctions.notifyAuctions');
+        if (!auctionsBudget.ok) {
+            console.log(`[CRON] Winner payment check aborted (${trigger}) due to payload budget`);
+            return { notified, marked_forfeited: 0, escalated: 0 };
+        }
+        remainingPayloadBudget = auctionsBudget.remaining;
+        const biddersBudget = consumePayloadBudget(remainingPayloadBudget, notifyBidders || [], 'bidders.notifyBidders');
+        if (!biddersBudget.ok) {
+            console.log(`[CRON] Winner payment check aborted (${trigger}) due to payload budget`);
+            return { notified, marked_forfeited: 0, escalated: 0 };
+        }
+        remainingPayloadBudget = biddersBudget.remaining;
+    }
+    const notifyAuctionMap = new Map((notifyAuctions || []).map((a) => [String(a.id), a]));
+    const notifyBidderMap = new Map((notifyBidders || []).map((b) => [String(b.id), b]));
     if (toNotify && toNotify.length > 0) {
         console.log(`[CRON] Found ${toNotify.length} winner(s) to notify`);
         for (const w of toNotify) {
@@ -99,8 +159,8 @@ async function checkWinnerPayments(trigger) {
                 continue;
             }
             const cw = currentWinner;
-            const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', cw.auction_id).single();
-            const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', cw.bidder_id).single();
+            const auction = notifyAuctionMap.get(String(cw.auction_id)) || null;
+            const bidder = notifyBidderMap.get(String(cw.bidder_id)) || null;
             if (bidder?.email && cw.claim_token) {
                 const sent = await (0, email_service_1.sendWinnerEmail)({
                     to: bidder.email,
@@ -146,7 +206,17 @@ async function checkWinnerPayments(trigger) {
         .select('id, auction_id, bidder_id, size, winning_amount, forfeited_bidder_ids')
         .eq('payment_status', 'pending')
         .not('payment_due_at', 'is', null)
-        .lt('payment_due_at', now);
+        .lt('payment_due_at', now)
+        .order('payment_due_at', { ascending: true })
+        .limit(CRON_BATCH_LIMIT);
+    {
+        const budgetCheck = consumePayloadBudget(remainingPayloadBudget, overdue || [], 'winners.overdue');
+        if (!budgetCheck.ok) {
+            console.log(`[CRON] Winner payment check aborted (${trigger}) due to payload budget`);
+            return { notified, marked_forfeited: 0, escalated: 0 };
+        }
+        remainingPayloadBudget = budgetCheck.remaining;
+    }
     if (!overdue || overdue.length === 0) {
         console.log(`[CRON] Winner payment check completed (${trigger})`);
         return { notified, marked_forfeited: 0, escalated: 0 };
@@ -154,6 +224,23 @@ async function checkWinnerPayments(trigger) {
     console.log(`[CRON] Found ${overdue.length} overdue payment(s)`);
     let marked = 0;
     let escalated = 0;
+    const pendingEscalationEmails = [];
+    const overdueAuctionIds = Array.from(new Set((overdue || []).map((w) => String(w.auction_id || '')).filter(Boolean)));
+    const { data: overdueAuctions } = overdueAuctionIds.length > 0
+        ? await supabase_1.supabaseAdmin
+            .from('auctions')
+            .select('id, title')
+            .in('id', overdueAuctionIds)
+        : { data: [] };
+    {
+        const budgetCheck = consumePayloadBudget(remainingPayloadBudget, overdueAuctions || [], 'auctions.overdueAuctions');
+        if (!budgetCheck.ok) {
+            console.log(`[CRON] Winner payment check aborted (${trigger}) due to payload budget`);
+            return { notified, marked_forfeited: marked, escalated };
+        }
+        remainingPayloadBudget = budgetCheck.remaining;
+    }
+    const overdueAuctionMap = new Map((overdueAuctions || []).map((a) => [String(a.id), a]));
     for (const w of overdue) {
         const alreadyForfeited = w.forfeited_bidder_ids ?? [];
         const nowForfeited = [...alreadyForfeited, w.bidder_id];
@@ -226,34 +313,60 @@ async function checkWinnerPayments(trigger) {
         }
         escalated++;
         const ew = escalatedRow;
-        const { data: auction } = await supabase_1.supabaseAdmin.from('auctions').select('title').eq('id', w.auction_id).single();
-        const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', ew.bidder_id).single();
-        if (bidder?.email) {
-            const sent = await (0, email_service_1.sendWinnerEmail)({
-                to: bidder.email,
-                winnerName: bidder?.name || 'Winner',
-                auctionTitle: auction?.title || 'Auction',
-                winningAmount: Number(ew.winning_amount),
-                claimToken: ew.claim_token,
-                size: ew.size,
-                isEscalation: true
-            });
-            if (sent) {
-                const sentAt = new Date().toISOString();
-                const { error: markErr } = await supabase_1.supabaseAdmin
-                    .from('winners')
-                    .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)(sentAt))
-                    .eq('id', w.id)
-                    .eq('bidder_id', ew.bidder_id)
-                    .eq('claim_token', ew.claim_token);
-                if (markErr) {
-                    console.error(`[CRON] Escalation email sent but failed to mark notification state for ${w.id}:`, markErr.message);
-                }
-                else {
-                    notified++;
-                    console.log(`[CRON] Escalated to next bidder for winner ${w.id}${w.size ? ` (Size: ${w.size})` : ''}`);
-                }
-            }
+        pendingEscalationEmails.push({
+            winnerId: String(w.id),
+            auctionId: String(w.auction_id),
+            bidderId: String(ew.bidder_id),
+            winningAmount: Number(ew.winning_amount),
+            claimToken: String(ew.claim_token),
+            size: ew.size ?? null
+        });
+    }
+    const escalationBidderIds = Array.from(new Set(pendingEscalationEmails.map((item) => item.bidderId).filter(Boolean)));
+    const { data: escalationBidders } = escalationBidderIds.length > 0
+        ? await supabase_1.supabaseAdmin
+            .from('bidders')
+            .select('id, name, email')
+            .in('id', escalationBidderIds)
+        : { data: [] };
+    {
+        const budgetCheck = consumePayloadBudget(remainingPayloadBudget, escalationBidders || [], 'bidders.escalationBidders');
+        if (!budgetCheck.ok) {
+            console.log(`[CRON] Winner payment check aborted (${trigger}) due to payload budget`);
+            return { notified, marked_forfeited: marked, escalated };
+        }
+        remainingPayloadBudget = budgetCheck.remaining;
+    }
+    const escalationBidderMap = new Map((escalationBidders || []).map((b) => [String(b.id), b]));
+    for (const escalation of pendingEscalationEmails) {
+        const bidder = escalationBidderMap.get(escalation.bidderId);
+        if (!bidder?.email)
+            continue;
+        const auction = overdueAuctionMap.get(escalation.auctionId);
+        const sent = await (0, email_service_1.sendWinnerEmail)({
+            to: bidder.email,
+            winnerName: bidder?.name || 'Winner',
+            auctionTitle: auction?.title || 'Auction',
+            winningAmount: escalation.winningAmount,
+            claimToken: escalation.claimToken,
+            size: escalation.size,
+            isEscalation: true
+        });
+        if (!sent)
+            continue;
+        const sentAt = new Date().toISOString();
+        const { error: markErr } = await supabase_1.supabaseAdmin
+            .from('winners')
+            .update((0, winner_offer_service_1.buildWinnerNotificationUpdate)(sentAt))
+            .eq('id', escalation.winnerId)
+            .eq('bidder_id', escalation.bidderId)
+            .eq('claim_token', escalation.claimToken);
+        if (markErr) {
+            console.error(`[CRON] Escalation email sent but failed to mark notification state for ${escalation.winnerId}:`, markErr.message);
+        }
+        else {
+            notified++;
+            console.log(`[CRON] Escalated to next bidder for winner ${escalation.winnerId}${escalation.size ? ` (Size: ${escalation.size})` : ''}`);
         }
     }
     console.log(`[CRON] Marked ${marked} forfeited, escalated ${escalated}`);

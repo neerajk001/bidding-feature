@@ -8,6 +8,8 @@ const crypto_1 = __importDefault(require("crypto"));
 const supabase_1 = require("../config/supabase");
 const email_service_1 = require("./email.service");
 const winner_offer_service_1 = require("./winner-offer.service");
+const FINALIZE_AUCTIONS_BATCH_LIMIT = 20;
+const WINNER_NOTIFY_BATCH_LIMIT = 50;
 async function finalizeEndedAuctions(now = new Date()) {
     const endedAuctionIds = [];
     const errors = [];
@@ -17,7 +19,8 @@ async function finalizeEndedAuctions(now = new Date()) {
         .select('id, title, bidding_end_time, available_sizes')
         .eq('status', 'live')
         .lt('bidding_end_time', nowIso)
-        .order('bidding_end_time', { ascending: true });
+        .order('bidding_end_time', { ascending: true })
+        .limit(FINALIZE_AUCTIONS_BATCH_LIMIT);
     if (error) {
         errors.push(`Failed to load ended auctions: ${error.message}`);
         return { endedAuctionIds, errors };
@@ -33,21 +36,6 @@ async function finalizeEndedAuctions(now = new Date()) {
                 const trimmed = String(s ?? '').trim();
                 if (trimmed)
                     sizeSet.add(trimmed);
-            }
-            const { data: bidSizes, error: bidSizesError } = await supabase_1.supabaseAdmin
-                .from('bids')
-                .select('size')
-                .eq('auction_id', auction.id)
-                .not('size', 'is', null);
-            if (bidSizesError) {
-                errors.push(`Failed to load bid sizes for ${auction.id}: ${bidSizesError.message}`);
-            }
-            else {
-                for (const row of bidSizes || []) {
-                    const trimmed = String(row.size ?? '').trim();
-                    if (trimmed)
-                        sizeSet.add(trimmed);
-                }
             }
             const sizes = Array.from(sizeSet);
             if (sizes.length > 0) {
@@ -142,8 +130,18 @@ async function finalizeEndedAuctions(now = new Date()) {
                 .eq('auction_id', auction.id)
                 .eq('payment_status', 'pending')
                 .not('claim_token', 'is', null)
-                .is('winner_email_sent_at', null);
+                .is('winner_email_sent_at', null)
+                .order('id', { ascending: true })
+                .limit(WINNER_NOTIFY_BATCH_LIMIT);
             if (winnersToNotify && winnersToNotify.length > 0) {
+                const bidderIds = Array.from(new Set(winnersToNotify.map((w) => String(w.bidder_id || '')).filter(Boolean)));
+                const { data: biddersForNotify } = bidderIds.length > 0
+                    ? await supabase_1.supabaseAdmin
+                        .from('bidders')
+                        .select('id, name, email')
+                        .in('id', bidderIds)
+                    : { data: [] };
+                const bidderMap = new Map((biddersForNotify || []).map((b) => [String(b.id), b]));
                 for (const w of winnersToNotify) {
                     const claimAt = new Date().toISOString();
                     const { data: claimedRow, error: claimErr } = await supabase_1.supabaseAdmin
@@ -162,7 +160,7 @@ async function finalizeEndedAuctions(now = new Date()) {
                         continue;
                     }
                     const cw = claimedRow;
-                    const { data: bidder } = await supabase_1.supabaseAdmin.from('bidders').select('name, email').eq('id', cw.bidder_id).single();
+                    const bidder = bidderMap.get(String(cw.bidder_id)) || null;
                     const email = bidder?.email;
                     if (email && cw.claim_token) {
                         const sent = await (0, email_service_1.sendWinnerEmail)({
